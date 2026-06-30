@@ -15,6 +15,8 @@ const location = useLocationStore();
 const activeSlide = ref(0);
 const activeFilter = ref('综合排序');
 const filters = ['综合排序', '距离最近', '评分最高', '预计更快', '免配送费'];
+const statusBarHeight = uni.getSystemInfoSync().statusBarHeight ?? 20;
+const safeTopStyle = computed(() => ({ paddingTop: `${statusBarHeight + 14}px` }));
 let carouselTimer: ReturnType<typeof setInterval> | undefined;
 
 const heroSlides = [
@@ -77,7 +79,7 @@ onUnload(stopCarousel);
 
 <template>
   <view class="home-page">
-    <main class="app-main">
+    <main class="app-main" :style="safeTopStyle">
       <header class="topbar">
         <button class="location-button" @tap="location.locate">
           <AppIcon name="location" :size="17" />

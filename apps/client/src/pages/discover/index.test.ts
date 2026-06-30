@@ -11,5 +11,7 @@ describe('discover page', () => {
     expect(source).toContain('data.categories');
     expect(source).toContain('<StoreCard');
     expect(source).toContain('class="safe-top"');
+    expect(source).toContain('uni.getSystemInfoSync().statusBarHeight');
+    expect(source).toContain(':style="safeTopStyle"');
   });
 });

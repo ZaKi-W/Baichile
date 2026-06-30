@@ -11,6 +11,8 @@ describe('home page sections', () => {
     expect(source).toContain('class="category-grid"');
     expect(source).toContain('class="filter-row"');
     expect(source).toContain('class="route-note"');
+    expect(source).toContain('uni.getSystemInfoSync().statusBarHeight');
+    expect(source).toContain(':style="safeTopStyle"');
     expect(source).toContain('onUnload(stopCarousel)');
     expect(source).toContain('data.categories.slice(0, 8)');
     expect(source).toContain(':index="index"');

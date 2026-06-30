@@ -10,6 +10,8 @@ import { catalogService } from '../../services/catalog';
 const data = ref<HomeResponse>();
 const loading = ref(true);
 const error = ref('');
+const statusBarHeight = uni.getSystemInfoSync().statusBarHeight ?? 20;
+const safeTopStyle = computed(() => ({ height: `${statusBarHeight + 14}px` }));
 const featuredStores = computed(() => data.value?.featured.length ? data.value.featured : data.value?.stores.slice(0, 5) ?? []);
 
 async function load() {
@@ -30,7 +32,7 @@ onLoad(load);
 
 <template>
   <view class="discover-page">
-    <view class="safe-top" />
+    <view class="safe-top" :style="safeTopStyle" />
     <main class="discover-main">
       <header class="discover-header">
         <view>
