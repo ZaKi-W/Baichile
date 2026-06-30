@@ -35,8 +35,8 @@ function confirm() {
 </script>
 
 <template>
-  <view v-if="item" class="mask" @tap.self="$emit('close')">
-    <view class="sheet">
+  <view v-if="item" class="mask" @tap="$emit('close')">
+    <view class="sheet" @tap.stop>
       <text class="title">{{ item.name }}</text>
       <view v-for="group in item.specGroups" :key="group.id" class="group">
         <text>{{ group.name }} <text class="muted">{{ group.required ? '必选' : '可选' }}</text></text>
@@ -66,4 +66,3 @@ function confirm() {
 .quantity { display: flex; align-items: center; gap: 12rpx; }
 .confirm { flex: 1; }
 </style>
-
