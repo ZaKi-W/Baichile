@@ -15,6 +15,10 @@ describe('home page sections', () => {
     expect(source).toContain(':style="safeTopStyle"');
     expect(source).not.toContain('class="profile-button"');
     expect(source).not.toContain('const openProfile');
+    expect(source).not.toContain('class="hero-action"');
+    expect(source).not.toContain('function runHeroAction');
+    expect(source).not.toContain('排序 ⇅');
+    expect(source).toContain('.filter-chip { flex: 0 0 auto; min-height: 64rpx; display: inline-flex; align-items: center; justify-content: center;');
     expect(source).toContain('onUnload(stopCarousel)');
     expect(source).toContain('data.categories.slice(0, 8)');
     expect(source).toContain(':index="index"');

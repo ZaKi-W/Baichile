@@ -20,9 +20,9 @@ const safeTopStyle = computed(() => ({ paddingTop: `${statusBarHeight + 14}px` }
 let carouselTimer: ReturnType<typeof setInterval> | undefined;
 
 const heroSlides = [
-  { eyebrow: '✦ 本周主题餐单', title: '认真吃饭，\n不必将就。', description: '精选附近口碑店，把今天这一顿吃明白。', action: '去看看', food: '🍛', counter: '新店上架', tone: 'new' },
-  { eyebrow: '🔥 热门商家榜', title: '附近人都在\n点这些。', description: '高评分、近距离，下单更不容易踩雷。', action: '查看榜单', food: '🍔', counter: '热门榜', tone: 'hot' },
-  { eyebrow: '🛵 虚拟派送演示', title: '点完以后，\n看它一路送来。', description: '订单完成后将展示模拟骑手路线与送达进度。', action: '体验流程', food: '🛵', counter: '实时演示', tone: 'virtual' },
+  { eyebrow: '✦ 本周主题餐单', title: '认真吃饭，\n不必将就。', description: '精选附近口碑店，把今天这一顿吃明白。', food: '🍛', counter: '新店上架', tone: 'new' },
+  { eyebrow: '🔥 热门商家榜', title: '附近人都在\n点这些。', description: '高评分、近距离，下单更不容易踩雷。', food: '🍔', counter: '热门榜', tone: 'hot' },
+  { eyebrow: '🛵 虚拟派送演示', title: '点完以后，\n看它一路送来。', description: '订单完成后将展示模拟骑手路线与送达进度。', food: '🛵', counter: '实时演示', tone: 'virtual' },
 ];
 
 const sortedStores = computed(() => {
@@ -53,11 +53,6 @@ const openAllCategories = () => {
   if (first) openCategory(first.id, first.name);
 };
 const scan = () => uni.scanCode?.({ success: () => undefined });
-function runHeroAction(index: number) {
-  if (index === 0) openAllCategories();
-  else if (index === 1) uni.switchTab({ url: '/pages/discover/index' });
-  else uni.switchTab({ url: '/pages/orders/index' });
-}
 function showSlide(index: number) {
   activeSlide.value = (index + heroSlides.length) % heroSlides.length;
 }
@@ -109,7 +104,6 @@ onUnload(stopCarousel);
                 <text class="hero-title">{{ slide.title }}</text>
                 <text class="hero-desc">{{ slide.description }}</text>
               </view>
-              <button class="hero-action" @tap="runHeroAction(index)">{{ slide.action }} →</button>
             </view>
             <view class="hero-visual">
               <text class="hero-food">{{ slide.food }}</text>
@@ -160,7 +154,6 @@ onUnload(stopCarousel);
               <text class="section-title">附近推荐</text>
               <text class="recommendation-badge">真实口碑</text>
             </view>
-            <text class="section-link">排序 ⇅</text>
           </view>
           <scroll-view class="filter-row" scroll-x :show-scrollbar="false">
             <view class="filter-content">
@@ -217,7 +210,6 @@ button::after { border: 0; }
 .hero-eyebrow { display: inline-flex; width: fit-content; padding: 10rpx 16rpx; border-radius: 999rpx; color: rgba(255, 255, 255, .9); background: rgba(255, 255, 255, .14); font-size: 20rpx; font-weight: 800; }
 .hero-title { display: block; margin: 16rpx 0 8rpx; white-space: pre-line; color: #fff; font-size: 54rpx; font-weight: 900; letter-spacing: -4rpx; line-height: 1; }
 .hero-desc { display: block; color: rgba(255, 255, 255, .68); font-size: 24rpx; font-weight: 600; line-height: 1.45; }
-.hero-action { width: fit-content; height: 60rpx; padding: 0 22rpx; border-radius: 999rpx; color: #161616; background: #fff; font-size: 22rpx; font-weight: 800; }
 .hero-visual { position: relative; z-index: 2; align-self: end; width: 260rpx; height: 274rpx; display: flex; align-items: center; justify-content: center; border: 1rpx solid rgba(255, 255, 255, .18); border-radius: 80rpx 80rpx 40rpx 40rpx; transform: rotate(-7deg) translateY(16rpx); background: linear-gradient(140deg, rgba(255, 255, 255, .24), rgba(255, 255, 255, .06)); box-shadow: inset 0 2rpx rgba(255, 255, 255, .16), 0 36rpx 60rpx rgba(0, 0, 0, .15); }
 .hero-food { font-size: 134rpx; filter: drop-shadow(0 18rpx 16rpx rgba(0, 0, 0, .22)); transform: rotate(7deg); }
 .hero-counter { position: absolute; right: 20rpx; bottom: 18rpx; min-width: 110rpx; padding: 12rpx 16rpx; border-radius: 22rpx; color: #141414; background: #dff75a; font-size: 20rpx; font-weight: 900; text-align: center; transform: rotate(7deg); }
@@ -242,7 +234,7 @@ button::after { border: 0; }
 .recommendation-badge { padding: 10rpx 16rpx 8rpx; color: #75400c; border-radius: 16rpx; background: #fff0c3; font-size: 20rpx; font-weight: 900; }
 .filter-row { width: calc(100% + 64rpx); margin-left: -32rpx; margin-bottom: 24rpx; white-space: nowrap; }
 .filter-content { display: inline-flex; gap: 16rpx; padding: 0 32rpx 4rpx; }
-.filter-chip { flex: 0 0 auto; min-height: 64rpx; padding: 0 24rpx; border-radius: 999rpx; color: #73736f; background: #fff; box-shadow: inset 0 0 0 1rpx rgba(20, 20, 20, .08); font-size: 24rpx; font-weight: 700; }
+.filter-chip { flex: 0 0 auto; min-height: 64rpx; display: inline-flex; align-items: center; justify-content: center; padding: 0 24rpx; border-radius: 999rpx; color: #73736f; background: #fff; box-shadow: inset 0 0 0 1rpx rgba(20, 20, 20, .08); font-size: 24rpx; font-weight: 700; line-height: 1; }
 .filter-chip.active { color: #fff; background: #141414; box-shadow: none; }
 .store-list { display: grid; gap: 24rpx; }
 .route-note { display: flex; align-items: center; gap: 14rpx; margin-top: 24rpx; padding: 18rpx 22rpx; border: 1rpx solid rgba(20, 20, 20, .05); border-radius: 30rpx; color: #63635f; background: rgba(255, 255, 255, .62); font-size: 22rpx; font-weight: 600; line-height: 1.35; }
