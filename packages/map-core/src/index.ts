@@ -16,6 +16,11 @@ export interface VirtualRoute {
   label: '虚拟配送路线';
 }
 
+export function formatAdministrativeArea(province: string, city: string, district: string): string {
+  const parts = province === city ? [city, district] : [province, city, district];
+  return parts.filter(Boolean).filter((part, index, all) => all.indexOf(part) === index).join(' · ');
+}
+
 export type DeliveryStatus =
   | 'created'
   | 'merchant_accepted'
@@ -72,4 +77,3 @@ export function calculateDeliverySnapshot(nowMs: number, startedAtMs: number, du
     : statusStops.find(([upperBound]) => progress <= upperBound)?.[1] ?? 'delivering';
   return { progress, status, remainingMs: Math.max(0, startedAtMs + durationMs - nowMs) } as const;
 }
-

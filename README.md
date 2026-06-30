@@ -51,6 +51,7 @@ apps/client/dist/build/mp-weixin
 
 1. 注册腾讯位置服务并创建适用于微信小程序的 Key。
 2. 将 Key 配置为 `VITE_TENCENT_MAP_KEY`。
+   - 推荐同时在 API 环境配置 `TENCENT_MAP_KEY`，客户端通过 `/v1/map/reverse-geocode` 获取市/区县信息，避免暴露服务端 Key。
 3. 在微信小程序后台添加地图服务所需域名。
 4. 接入前配送页会明确显示“开发预览 · 预设 GCJ-02 路线”，不会伪装成真实地图。
 
@@ -79,4 +80,3 @@ pnpm build:mp-weixin
 - 未配置微信、腾讯地图和 COS 凭证；相关 adapter 与配置入口已预留。
 - 视觉仅完成必要布局，等待 HTML 设计稿后再统一实现。
 - App 原生地图、登录与分享仍需在 HBuilderX/真机和正式凭证环境中联调。
-

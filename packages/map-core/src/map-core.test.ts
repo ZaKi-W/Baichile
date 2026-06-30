@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDeliverySnapshot, interpolateAlongPolyline } from './index';
+import { calculateDeliverySnapshot, formatAdministrativeArea, interpolateAlongPolyline } from './index';
 
 const line = [
   { lat: 31, lng: 121, coordSystem: 'gcj02' as const },
@@ -27,3 +27,12 @@ describe('delivery snapshots', () => {
   });
 });
 
+describe('administrative area labels', () => {
+  it('shows city and district without repeating municipality names', () => {
+    expect(formatAdministrativeArea('上海市', '上海市', '浦东新区')).toBe('上海市 · 浦东新区');
+  });
+
+  it('shows province, city and county for non-municipalities', () => {
+    expect(formatAdministrativeArea('浙江省', '杭州市', '余杭区')).toBe('浙江省 · 杭州市 · 余杭区');
+  });
+});

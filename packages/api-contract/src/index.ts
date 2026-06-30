@@ -97,6 +97,15 @@ export interface GuestSession {
   refreshToken: string;
 }
 
+export interface AdministrativeArea {
+  province: string;
+  city: string;
+  district: string;
+  adcode: string;
+  cityCode: string;
+  districtCode: string;
+}
+
 export interface ApiError {
   code: 'BAD_REQUEST' | 'NOT_FOUND' | 'PRICE_CHANGED' | 'UNAUTHORIZED' | 'CONFIG_MISSING';
   message: string;

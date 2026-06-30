@@ -1,17 +1,22 @@
 import { defineStore } from 'pinia';
 import type { GeoPoint } from '@baichile/map-core';
+import { formatAdministrativeArea } from '@baichile/map-core';
+import type { AdministrativeArea } from '@baichile/api-contract';
+import { reverseGeocode } from '../services/location';
 
 const LOCATION_KEY = 'baichile:last-location';
+const AREA_KEY = 'baichile:last-area';
 
 export const useLocationStore = defineStore('location', {
   state: () => ({
     point: (uni.getStorageSync(LOCATION_KEY) || null) as GeoPoint | null,
+    area: (uni.getStorageSync(AREA_KEY) || null) as AdministrativeArea | null,
     status: 'idle' as 'idle' | 'locating' | 'ready' | 'denied' | 'error',
   }),
   getters: {
-    label: (state) => state.point
-      ? `当前位置 ${state.point.lat.toFixed(3)}, ${state.point.lng.toFixed(3)}`
-      : '点击获取当前位置',
+    label: (state) => state.area
+      ? formatAdministrativeArea(state.area.province, state.area.city, state.area.district)
+      : state.point ? '已定位，正在确认市区' : '点击获取当前位置',
   },
   actions: {
     async locate() {
@@ -24,8 +29,10 @@ export const useLocationStore = defineStore('location', {
           highAccuracyExpireTime: 5000,
         });
         this.point = { lat: result.latitude, lng: result.longitude, coordSystem: 'gcj02' };
+        this.area = await reverseGeocode(result.latitude, result.longitude);
         this.status = 'ready';
         uni.setStorageSync(LOCATION_KEY, this.point);
+        uni.setStorageSync(AREA_KEY, this.area);
         uni.showToast({ title: '定位成功', icon: 'success' });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -44,9 +51,10 @@ export const useLocationStore = defineStore('location', {
     },
     clear() {
       this.point = null;
+      this.area = null;
       this.status = 'idle';
       uni.removeStorageSync(LOCATION_KEY);
+      uni.removeStorageSync(AREA_KEY);
     },
   },
 });
-

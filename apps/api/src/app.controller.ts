@@ -3,6 +3,7 @@ import type { QuoteRequest } from '@baichile/api-contract';
 import { AuthService } from './auth.service';
 import { CatalogService } from './catalog.service';
 import { OrderService } from './order.service';
+import { MapService } from './map.service';
 
 @Controller('v1')
 export class AppController {
@@ -10,6 +11,7 @@ export class AppController {
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(CatalogService) private readonly catalog: CatalogService,
     @Inject(OrderService) private readonly orders: OrderService,
+    @Inject(MapService) private readonly map: MapService,
   ) {}
 
   @Get('health')
@@ -40,6 +42,11 @@ export class AppController {
 
   @Get('catalog/search')
   search(@Query('q') query = '') { return this.catalog.list(undefined, query); }
+
+  @Get('map/reverse-geocode')
+  reverseGeocode(@Query('lat') lat: string, @Query('lng') lng: string) {
+    return this.map.reverseGeocode(Number(lat), Number(lng));
+  }
 
   @Post('orders/quote')
   quote(@Body() body: QuoteRequest) { return this.orders.quote(body); }
