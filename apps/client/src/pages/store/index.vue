@@ -35,9 +35,9 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
       <view class="food-info"><text class="food-name">{{ item.name }}</text><text class="muted">{{ item.subtitle }}</text><text class="price">¥{{ (item.basePriceCents / 100).toFixed(2) }} 起</text></view>
       <button size="mini" class="add" @tap="selected = item"><AppIcon name="plus" :size="15" /></button>
     </view>
-    <view class="cart-bar" :class="{ disabled: !canCheckout }">
-      <view class="cart-summary" @tap="openCart"><AppIcon name="cart" :size="24" /><text>{{ cart.count }} 件 · ¥{{ (cart.totalCents / 100).toFixed(2) }}</text></view>
-      <button class="primary-button" :disabled="!canCheckout" @tap="checkout">去结算</button>
+    <view class="cart-bar" :class="{ disabled: !canCheckout }" @tap="openCart">
+      <view class="cart-summary"><AppIcon name="cart" :size="24" /><text>{{ cart.count }} 件 · ¥{{ (cart.totalCents / 100).toFixed(2) }}</text></view>
+      <button class="primary-button" :disabled="!canCheckout" @tap.stop="checkout">去结算</button>
     </view>
     <SkuSheet :item="selected" @close="selected = null" @confirm="add" />
     <CartSheet :visible="isCartOpen" :lines="cart.lines" @close="isCartOpen = false" />

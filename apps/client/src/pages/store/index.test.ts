@@ -8,8 +8,8 @@ describe('store page cart interaction', () => {
     expect(source).toContain("import CartSheet from '../../components/CartSheet.vue'");
     expect(source).toContain('const isCartOpen = ref(false)');
     expect(source).toContain('if (canCheckout.value) isCartOpen.value = true');
-    expect(source).toContain('class="cart-summary" @tap="openCart"');
-    expect(source).toContain('@tap="checkout"');
+    expect(source).toContain('class="cart-bar" :class="{ disabled: !canCheckout }" @tap="openCart"');
+    expect(source).toContain('@tap.stop="checkout"');
     expect(source).toContain(':visible="isCartOpen"');
     expect(source).toContain(':lines="cart.lines"');
     expect(source).toContain('@close="isCartOpen = false"');
