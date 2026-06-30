@@ -1,5 +1,5 @@
 export type IconKey =
-  | 'home' | 'orders' | 'profile' | 'search' | 'location' | 'back' | 'close'
+  | 'home' | 'discover' | 'orders' | 'profile' | 'search' | 'location' | 'back' | 'close'
   | 'cart' | 'plus' | 'minus' | 'rider' | 'route' | 'clock' | 'success'
   | 'empty' | 'error' | 'bbq' | 'friedChicken' | 'burger' | 'noodles'
   | 'rice' | 'milkTea' | 'dessert' | 'lateNight';
@@ -12,6 +12,7 @@ export interface IconDefinition {
 
 export const ICON_REGISTRY: Record<IconKey, IconDefinition> = {
   home: { emoji: '🏠', label: '首页' },
+  discover: { emoji: '◌', label: '发现' },
   orders: { emoji: '📋', label: '订单' },
   profile: { emoji: '👤', label: '我的' },
   search: { emoji: '🔎', label: '搜索' },
@@ -36,4 +37,3 @@ export const ICON_REGISTRY: Record<IconKey, IconDefinition> = {
   dessert: { emoji: '🍰', label: '甜品' },
   lateNight: { emoji: '🌙', label: '夜宵' },
 };
-

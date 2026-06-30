@@ -1,6 +1,7 @@
 {
   "pages": [
-    { "path": "pages/home/index", "style": { "navigationBarTitleText": "白吃了" } },
+    { "path": "pages/home/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/discover/index", "style": { "navigationStyle": "custom" } },
     { "path": "pages/search/index", "style": { "navigationBarTitleText": "搜索" } },
     { "path": "pages/category/index", "style": { "navigationBarTitleText": "分类" } },
     { "path": "pages/store/index", "style": { "navigationBarTitleText": "店铺" } },
@@ -16,6 +17,7 @@
     "selectedColor": "#ff7a45",
     "list": [
       { "pagePath": "pages/home/index", "text": "首页" },
+      { "pagePath": "pages/discover/index", "text": "发现" },
       { "pagePath": "pages/orders/index", "text": "订单" },
       { "pagePath": "pages/profile/index", "text": "我的" }
     ]
@@ -26,4 +28,3 @@
     "backgroundColor": "#f6f6f6"
   }
 }
-
