@@ -14,8 +14,16 @@ export const mockStores: StoreDetail[] = names.map((name, index) => {
   const category = mockCategories[index % mockCategories.length];
   return {
     id, name, categoryId: category.id, description: '虚拟店铺 · 不会真实配送',
-    tags: ['夜航推荐', '虚拟配送'], deliveryFeeCents: 200, packingFeeCents: 100,
-    minimumOrderCents: 1000, virtualDeliveryMinutes: 1, systemHeat: 98 - index * 2, sourceType: 'original',
+    tags: ['夜航推荐', '虚拟配送'],
+    deliveryFeeCents: index % 4 === 0 ? 0 : 100 + (index % 3) * 100,
+    packingFeeCents: 100,
+    minimumOrderCents: 1000 + (index % 4) * 300,
+    virtualDeliveryMinutes: 25 + (index % 6) * 4,
+    monthlySales: 186 + (index * 173) % 1200,
+    distanceKm: 0.8 + (index % 8) * 0.6,
+    rating: 4.3 + (index % 7) * 0.1,
+    systemHeat: 98 - index * 2,
+    sourceType: 'original',
     menu: dishes.map((dish, itemIndex) => ({
       id: `${id}-item-${itemIndex + 1}`, storeId: id, categoryId: category.id,
       name: `${name}${dish}`, subtitle: '原创虚拟菜单', basePriceCents: 1200 + itemIndex * 120,
@@ -36,4 +44,3 @@ export const mockStores: StoreDetail[] = names.map((name, index) => {
     })),
   };
 });
-

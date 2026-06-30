@@ -54,13 +54,15 @@ export const stores: StoreDetail[] = storeNames.map((name, storeIndex) => {
     categoryId: category.id,
     description: '虚拟店铺 · 原创菜单 · 不会真实配送',
     tags: ['夜航推荐', '虚拟配送'],
-    deliveryFeeCents: 200,
+    deliveryFeeCents: storeIndex % 4 === 0 ? 0 : 100 + (storeIndex % 3) * 100,
     packingFeeCents: 100,
-    minimumOrderCents: 1000,
-    virtualDeliveryMinutes: 1,
+    minimumOrderCents: 1000 + (storeIndex % 4) * 300,
+    virtualDeliveryMinutes: 25 + (storeIndex % 6) * 4,
+    monthlySales: 186 + (storeIndex * 173) % 1200,
+    distanceKm: 0.8 + (storeIndex % 8) * 0.6,
+    rating: 4.3 + (storeIndex % 7) * 0.1,
     systemHeat: 98 - storeIndex * 2,
     sourceType: 'original',
     menu,
   };
 });
-

@@ -32,6 +32,9 @@ export interface StoreSummary {
   packingFeeCents: number;
   minimumOrderCents: number;
   virtualDeliveryMinutes: number;
+  monthlySales: number;
+  distanceKm: number;
+  rating: number;
   systemHeat: number;
   sourceType: SourceType;
 }
