@@ -1,0 +1,62 @@
+import { Body, Controller, Get, Headers, Inject, Param, Post, Query } from '@nestjs/common';
+import type { QuoteRequest } from '@baichile/api-contract';
+import { AuthService } from './auth.service';
+import { CatalogService } from './catalog.service';
+import { OrderService } from './order.service';
+
+@Controller('v1')
+export class AppController {
+  constructor(
+    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(CatalogService) private readonly catalog: CatalogService,
+    @Inject(OrderService) private readonly orders: OrderService,
+  ) {}
+
+  @Get('health')
+  health() { return { status: 'ok', service: 'baichile-api' }; }
+
+  @Post('auth/guest')
+  guest() { return this.auth.createGuest(); }
+
+  @Post('auth/wechat-mini')
+  wechat(@Body() body: { visitorId?: string }) { return this.auth.mockWechat(body?.visitorId); }
+
+  @Post('auth/merge-visitor')
+  merge(@Body() body: { visitorId: string; accountId: string }) {
+    return this.orders.merge(body.visitorId, body.accountId);
+  }
+
+  @Get('catalog/home')
+  home() { return this.catalog.home(); }
+
+  @Get('catalog/categories')
+  categories() { return this.catalog.home().categories; }
+
+  @Get('catalog/stores')
+  stores(@Query('categoryId') categoryId?: string) { return this.catalog.list(categoryId); }
+
+  @Get('catalog/stores/:storeId')
+  store(@Param('storeId') storeId: string) { return this.catalog.find(storeId); }
+
+  @Get('catalog/search')
+  search(@Query('q') query = '') { return this.catalog.list(undefined, query); }
+
+  @Post('orders/quote')
+  quote(@Body() body: QuoteRequest) { return this.orders.quote(body); }
+
+  @Post('orders/virtual')
+  createOrder(@Body() body: QuoteRequest, @Headers('x-visitor-id') visitorId?: string) {
+    return this.orders.create(body, visitorId);
+  }
+
+  @Get('orders/me')
+  myOrders(@Headers('x-visitor-id') visitorId?: string, @Headers('x-account-id') accountId?: string) {
+    return this.orders.list(visitorId, accountId);
+  }
+
+  @Get('orders/:orderId')
+  order(@Param('orderId') orderId: string) { return this.orders.find(orderId); }
+
+  @Post('analytics/events')
+  analytics(@Body() body: unknown) { return { accepted: true, receivedAt: new Date().toISOString(), body }; }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@baichile/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run ../../apps/api/test"
+  },
+  "dependencies": {
+    "@baichile/api-contract": "workspace:*",
+    "@baichile/domain": "workspace:*",
+    "@baichile/map-core": "workspace:*",
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-fastify": "^11.1.0",
+    "@nestjs/typeorm": "^11.0.0",
+    "fastify": "5.8.5",
+    "pg": "^8.16.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typeorm": "^0.3.25",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.7",
+    "@nestjs/testing": "^11.1.0",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3"
+  }
+}

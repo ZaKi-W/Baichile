@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@baichile/api-contract": ["packages/api-contract/src/index.ts"],
+      "@baichile/domain": ["packages/domain/src/index.ts"],
+      "@baichile/icon-registry": ["packages/icon-registry/src/index.ts"],
+      "@baichile/map-core": ["packages/map-core/src/index.ts"],
+      "@baichile/catalog-schema": ["packages/catalog-schema/src/index.ts"],
+      "@baichile/ui-tokens": ["packages/ui-tokens/src/index.ts"]
+    }
+  }
+}
+

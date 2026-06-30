@@ -1,0 +1,21 @@
+{
+  "name": "baichile",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "build:h5": "pnpm --filter @baichile/client build:h5",
+    "build:mp-weixin": "pnpm --filter @baichile/client build:mp-weixin",
+    "dev": "pnpm --parallel --filter @baichile/api --filter @baichile/client dev",
+    "dev:api": "pnpm --filter @baichile/api dev",
+    "dev:h5": "pnpm --filter @baichile/client dev:h5",
+    "test": "vitest run",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

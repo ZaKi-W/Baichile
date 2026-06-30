@@ -1,0 +1,29 @@
+{
+  "pages": [
+    { "path": "pages/home/index", "style": { "navigationBarTitleText": "白吃了" } },
+    { "path": "pages/search/index", "style": { "navigationBarTitleText": "搜索" } },
+    { "path": "pages/category/index", "style": { "navigationBarTitleText": "分类" } },
+    { "path": "pages/store/index", "style": { "navigationBarTitleText": "店铺" } },
+    { "path": "pages/checkout/index", "style": { "navigationBarTitleText": "确认虚拟订单" } },
+    { "path": "pages/delivery/index", "style": { "navigationBarTitleText": "虚拟派送" } },
+    { "path": "pages/complete/index", "style": { "navigationBarTitleText": "虚拟订单完成" } },
+    { "path": "pages/orders/index", "style": { "navigationBarTitleText": "订单" } },
+    { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } }
+  ],
+  "tabBar": {
+    "custom": true,
+    "color": "#777777",
+    "selectedColor": "#ff7a45",
+    "list": [
+      { "pagePath": "pages/home/index", "text": "首页" },
+      { "pagePath": "pages/orders/index", "text": "订单" },
+      { "pagePath": "pages/profile/index", "text": "我的" }
+    ]
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f6f6f6"
+  }
+}
+

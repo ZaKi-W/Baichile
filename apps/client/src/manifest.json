@@ -1,0 +1,25 @@
+{
+  "name": "白吃了",
+  "appid": "__UNI__BAICHILE",
+  "description": "虚拟外卖互动产品",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "",
+    "setting": {
+      "urlCheck": false,
+      "es6": true
+    },
+    "usingComponents": true
+  },
+  "h5": {
+    "router": {
+      "mode": "hash"
+    }
+  },
+  "app-plus": {
+    "usingComponents": true
+  }
+}
+

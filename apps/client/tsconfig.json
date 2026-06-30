@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["@dcloudio/types", "vite/client"],
+    "jsx": "preserve",
+    "allowJs": true,
+    "declaration": false
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue"]
+}
