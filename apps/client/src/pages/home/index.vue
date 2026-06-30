@@ -46,7 +46,6 @@ async function load() {
   }
 }
 const openSearch = () => uni.navigateTo({ url: '/pages/search/index' });
-const openProfile = () => uni.switchTab({ url: '/pages/profile/index' });
 const openCategory = (id: string, name: string) => uni.navigateTo({ url: `/pages/category/index?id=${id}&name=${encodeURIComponent(name)}` });
 const openStore = (id: string) => uni.navigateTo({ url: `/pages/store/index?id=${id}` });
 const openAllCategories = () => {
@@ -86,7 +85,6 @@ onUnload(stopCarousel);
           <text class="location-name">{{ location.status === 'locating' ? '定位中…' : location.label }}</text>
           <text class="chevron">⌄</text>
         </button>
-        <button class="profile-button" @tap="openProfile"><AppIcon name="profile" :size="19" /></button>
       </header>
 
       <view class="search-wrap">
@@ -204,7 +202,6 @@ button::after { border: 0; }
 .location-button { min-width: 0; max-width: 570rpx; display: flex; align-items: center; gap: 14rpx; }
 .location-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 32rpx; font-weight: 800; letter-spacing: -1rpx; }
 .chevron { color: #7b7b78; font-size: 26rpx; transform: translateY(2rpx); }
-.profile-button { width: 76rpx; height: 76rpx; display: flex; align-items: center; justify-content: center; border-radius: 28rpx; background: #fff; box-shadow: 0 2rpx 0 rgba(0, 0, 0, .03), inset 0 0 0 1rpx rgba(20, 20, 20, .08); }
 .search-wrap { position: relative; margin-bottom: 34rpx; }
 .search { height: 104rpx; display: flex; align-items: center; gap: 18rpx; padding: 0 96rpx 0 32rpx; border: 1rpx solid rgba(20, 20, 20, .08); border-radius: 36rpx; color: #9b9b98; background: rgba(255, 255, 255, .9); box-shadow: 0 18rpx 50rpx rgba(20, 20, 20, .04); box-sizing: border-box; font-size: 28rpx; font-weight: 600; }
 .search-scan { position: absolute; top: 14rpx; right: 14rpx; width: 76rpx; height: 76rpx; display: flex; align-items: center; justify-content: center; border-radius: 26rpx; background: #f1f1ee; font-size: 34rpx; }

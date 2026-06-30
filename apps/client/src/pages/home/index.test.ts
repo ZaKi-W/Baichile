@@ -13,6 +13,8 @@ describe('home page sections', () => {
     expect(source).toContain('class="route-note"');
     expect(source).toContain('uni.getSystemInfoSync().statusBarHeight');
     expect(source).toContain(':style="safeTopStyle"');
+    expect(source).not.toContain('class="profile-button"');
+    expect(source).not.toContain('const openProfile');
     expect(source).toContain('onUnload(stopCarousel)');
     expect(source).toContain('data.categories.slice(0, 8)');
     expect(source).toContain(':index="index"');
