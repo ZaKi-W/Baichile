@@ -12,8 +12,32 @@ const store = ref<StoreDetail>();
 const selected = ref<MenuItem | null>(null);
 const isCartOpen = ref(false);
 const cart = useCartStore();
+const categoryNames: Record<string, string> = {
+  bbq: '招牌烧烤',
+  fried: '人气炸物',
+  burger: '经典汉堡',
+  noodles: '招牌粉面',
+  rice: '暖心盖饭',
+  tea: '清爽饮品',
+  dessert: '甜品小食',
+  night: '深夜推荐',
+};
 onLoad(async (options) => { store.value = await catalogService.store(options?.id || ''); });
 const canCheckout = computed(() => cart.store?.id === store.value?.id && cart.count > 0);
+const menuGroups = computed(() => {
+  const groups = new Map<string, MenuItem[]>();
+  for (const item of store.value?.menu ?? []) {
+    const items = groups.get(item.categoryId) ?? [];
+    items.push(item);
+    groups.set(item.categoryId, items);
+  }
+  return Array.from(groups, ([id, items], index) => ({
+    id,
+    name: categoryNames[id] ?? (index === 0 ? '店长推荐' : `精选分类 ${index + 1}`),
+    items,
+  }));
+});
+const storeInitial = computed(() => store.value?.name.slice(-1) || '食');
 async function add(optionIds: string[], quantity: number) {
   if (!store.value || !selected.value) return;
   if (await cart.add(store.value, selected.value, optionIds, quantity)) {
@@ -24,20 +48,109 @@ async function add(optionIds: string[], quantity: number) {
 function openCart() {
   if (canCheckout.value) isCartOpen.value = true;
 }
+const goBack = () => uni.navigateBack();
 const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
 </script>
 
 <template>
   <view v-if="store" class="page store-page">
-    <view class="card header"><text class="title">{{ store.name }}</text><text class="muted">{{ store.description }}</text><view class="virtual-notice">本店与菜单均为虚拟内容，不会真实接单或配送。</view></view>
-    <view v-for="item in store.menu" :key="item.id" class="card food">
-      <view class="food-image">{{ item.name.slice(-2) }}</view>
-      <view class="food-info"><text class="food-name">{{ item.name }}</text><text class="muted">{{ item.subtitle }}</text><text class="price">¥{{ (item.basePriceCents / 100).toFixed(2) }} 起</text></view>
-      <button size="mini" class="add" @tap="selected = item"><AppIcon name="plus" :size="15" /></button>
+    <view class="merchant-hero">
+      <view class="hero-decoration">{{ storeInitial }}</view>
+      <view class="hero-nav">
+        <button class="back-button" aria-label="返回" @tap="goBack">‹</button>
+      </view>
+
+      <view class="merchant-content">
+        <view class="store-logo">{{ storeInitial }}</view>
+        <view class="merchant-main">
+          <view class="merchant-title-row">
+            <text class="merchant-name">{{ store.name }}</text>
+            <text class="verified">✓</text>
+          </view>
+          <text class="merchant-subtitle">{{ store.description }}</text>
+        </view>
+      </view>
+
+      <view class="merchant-meta">
+        <text><text class="meta-strong">{{ store.rating.toFixed(1) }}</text> 分</text>
+        <text class="meta-dot"></text>
+        <text>月售 {{ store.monthlySales }}+</text>
+        <text class="meta-dot"></text>
+        <text>{{ store.virtualDeliveryMinutes }} 分钟</text>
+        <text class="meta-dot"></text>
+        <text>{{ store.distanceKm.toFixed(1) }} km</text>
+      </view>
+
+      <view class="notice-row">
+        <text class="notice-sign">i</text>
+        <text>本店与菜单均为虚拟内容，不会真实接单或配送。</text>
+      </view>
     </view>
+
+    <scroll-view class="service-strip" scroll-x :show-scrollbar="false">
+      <view class="service-items">
+        <view class="service-item">起送 <text>¥{{ (store.minimumOrderCents / 100).toFixed(0) }}</text></view>
+        <view class="service-item">配送 <text>{{ store.deliveryFeeCents ? `¥${(store.deliveryFeeCents / 100).toFixed(0)}` : '免配送费' }}</text></view>
+        <view class="service-item">准时达</view>
+        <view class="service-item">食材现做</view>
+      </view>
+    </scroll-view>
+
+    <view class="menu-layout">
+      <view class="category-sidebar">
+        <view
+          v-for="(group, index) in menuGroups"
+          :key="group.id"
+          class="category-button"
+          :class="{ active: index === 0 }"
+        >
+          <text>{{ group.name }}</text>
+          <text class="category-count">{{ group.items.length }} 件</text>
+        </view>
+      </view>
+
+      <view class="menu-content">
+        <view v-if="!menuGroups.length" class="empty-menu">菜单正在准备中</view>
+        <view v-for="group in menuGroups" :key="group.id" class="menu-section">
+          <view class="menu-section-title-row">
+            <text class="menu-section-title">{{ group.name }}</text>
+            <text class="menu-section-note">每日现做</text>
+          </view>
+
+          <view v-for="(item, itemIndex) in group.items" :key="item.id" class="product-card">
+            <view class="product-visual" :class="`visual-${itemIndex % 4}`">
+              <image v-if="item.imageUrl" class="product-image" :src="item.imageUrl" mode="aspectFill" />
+              <text v-else class="food-glyph">{{ item.name.slice(-1) }}</text>
+            </view>
+            <view class="product-info">
+              <text class="product-name">{{ item.name }}</text>
+              <text v-if="item.subtitle" class="product-desc">{{ item.subtitle }}</text>
+              <text class="product-sales">店长推荐 · 现点现做</text>
+              <view class="product-bottom">
+                <view class="product-price">
+                  <text class="price-symbol">¥</text>{{ (item.basePriceCents / 100).toFixed(2) }}
+                  <text class="price-from">起</text>
+                </view>
+                <button class="product-add" :class="{ 'has-spec': item.specGroups.length }" @tap="selected = item">
+                  {{ item.specGroups.length ? '选规格' : '＋' }}
+                </button>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <view class="cart-bar" :class="{ disabled: !canCheckout }" @tap="openCart">
-      <view class="cart-summary"><AppIcon name="cart" :size="24" /><text>{{ cart.count }} 件 · ¥{{ (cart.totalCents / 100).toFixed(2) }}</text></view>
-      <button class="primary-button" :disabled="!canCheckout" @tap.stop="checkout">去结算</button>
+      <view class="cart-trigger">
+        <AppIcon name="cart" :size="23" />
+        <text v-if="cart.count" class="cart-badge">{{ cart.count }}</text>
+      </view>
+      <view class="cart-summary">
+        <text class="cart-total">¥{{ (cart.totalCents / 100).toFixed(2) }}</text>
+        <text class="cart-note">{{ cart.count ? `已选 ${cart.count} 件` : '购物车还是空的' }}</text>
+      </view>
+      <button class="checkout-button" :disabled="!canCheckout" @tap.stop="checkout">去结算</button>
     </view>
     <SkuSheet :item="selected" @close="selected = null" @confirm="add" />
     <CartSheet :visible="isCartOpen" :lines="cart.lines" @close="isCartOpen = false" />
@@ -45,17 +158,445 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
 </template>
 
 <style scoped>
-.store-page { padding-bottom: 150rpx; }
-.header { display: flex; flex-direction: column; gap: 14rpx; }
-.title { font-size: 38rpx; font-weight: 700; }
-.food { display: flex; align-items: center; gap: 18rpx; }
-.food-image { width: 120rpx; height: 120rpx; border-radius: 16rpx; background: #f2f2f2; display: flex; align-items: center; justify-content: center; }
-.food-info { flex: 1; display: flex; flex-direction: column; gap: 8rpx; }
-.food-name { font-weight: 600; }
-.price { color: #d65523; font-weight: 700; }
-.add { margin: 0; border-radius: 50%; }
-.cart-bar { position: fixed; left: 24rpx; right: 24rpx; bottom: 24rpx; background: #222; color: #fff; border-radius: 999rpx; padding: 14rpx 16rpx 14rpx 24rpx; display: flex; align-items: center; justify-content: space-between; z-index: 20; }
-.cart-summary { display: flex; flex: 1; align-items: center; align-self: stretch; gap: 12rpx; }
-.cart-bar button { margin: 0; }
-.disabled { opacity: .7; }
+.store-page {
+  --ink: #151515;
+  --muted: #83837f;
+  --line: rgba(20, 20, 20, .08);
+  --lime: #dff75a;
+  --accent: #ff5b38;
+  min-height: 100vh;
+  padding: 28rpx 28rpx calc(196rpx + env(safe-area-inset-bottom));
+  overflow: hidden;
+  background: #f7f7f5;
+  color: var(--ink);
+}
+
+.merchant-hero {
+  position: relative;
+  min-height: 398rpx;
+  padding: max(24rpx, env(safe-area-inset-top)) 30rpx 28rpx;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-radius: 52rpx;
+  color: #fff;
+  background:
+    radial-gradient(circle at 81% 18%, rgba(223, 247, 90, .98) 0 10%, transparent 10.5%),
+    radial-gradient(circle at 79% 21%, rgba(223, 247, 90, .2) 0 25%, transparent 25.5%),
+    linear-gradient(139deg, #151515 3%, #263631 58%, #2f463b 100%);
+  box-shadow: 0 30rpx 76rpx rgba(21, 21, 18, .16);
+}
+.merchant-hero::before {
+  content: "";
+  position: absolute;
+  right: -105rpx;
+  bottom: -150rpx;
+  width: 390rpx;
+  height: 390rpx;
+  border: 2rpx solid rgba(255, 255, 255, .13);
+  border-radius: 80rpx;
+  transform: rotate(28deg);
+  box-shadow: inset 0 0 0 60rpx rgba(255, 255, 255, .025);
+}
+.hero-decoration {
+  position: absolute;
+  right: 18rpx;
+  bottom: -42rpx;
+  color: rgba(255, 255, 255, .08);
+  font-size: 270rpx;
+  line-height: 1;
+  font-weight: 900;
+  transform: rotate(-8deg);
+}
+.hero-nav { position: relative; z-index: 2; min-height: 68rpx; padding-right: 200rpx; }
+.back-button {
+  width: 68rpx;
+  height: 68rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 0 6rpx;
+  color: #fff;
+  border: 2rpx solid rgba(255, 255, 255, .12);
+  border-radius: 26rpx;
+  background: rgba(255, 255, 255, .13);
+  font-size: 50rpx;
+  font-weight: 300;
+  line-height: 1;
+}
+.back-button::after, .product-add::after, .checkout-button::after { border: 0; }
+.merchant-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 22rpx;
+  margin-top: 28rpx;
+}
+.store-logo {
+  width: 118rpx;
+  height: 118rpx;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(255, 255, 255, .5);
+  border-radius: 40rpx;
+  color: #19291f;
+  background: linear-gradient(145deg, #f3ffbe, var(--lime));
+  box-shadow: 0 22rpx 40rpx rgba(0, 0, 0, .18), inset 0 2rpx 0 rgba(255, 255, 255, .72);
+  font-size: 54rpx;
+  font-weight: 900;
+  transform: rotate(-3deg);
+}
+.merchant-main { min-width: 0; flex: 1; padding-top: 4rpx; }
+.merchant-title-row { display: flex; align-items: center; gap: 10rpx; min-width: 0; }
+.merchant-name {
+  overflow: hidden;
+  color: #fff;
+  font-size: 42rpx;
+  line-height: 1.1;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.verified {
+  width: 30rpx;
+  height: 30rpx;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: #111;
+  border-radius: 10rpx;
+  background: var(--lime);
+  font-size: 18rpx;
+  font-weight: 900;
+}
+.merchant-subtitle {
+  display: -webkit-box;
+  margin-top: 10rpx;
+  overflow: hidden;
+  color: rgba(255, 255, 255, .66);
+  font-size: 22rpx;
+  line-height: 1.35;
+  font-weight: 600;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.merchant-meta {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10rpx 14rpx;
+  margin: 26rpx 0 0 140rpx;
+  color: rgba(255, 255, 255, .84);
+  font-size: 20rpx;
+  font-weight: 650;
+}
+.meta-strong { color: #fff; font-weight: 900; }
+.meta-dot { width: 6rpx; height: 6rpx; border-radius: 50%; background: rgba(255, 255, 255, .35); }
+.notice-row {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 25rpx;
+  padding: 17rpx 20rpx;
+  border: 2rpx solid rgba(255, 255, 255, .12);
+  border-radius: 25rpx;
+  color: rgba(255, 255, 255, .72);
+  background: rgba(0, 0, 0, .13);
+  font-size: 20rpx;
+  line-height: 1.25;
+}
+.notice-sign {
+  width: 32rpx;
+  height: 32rpx;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10rpx;
+  color: #1d2b1f;
+  background: var(--lime);
+  font-size: 20rpx;
+  font-weight: 800;
+}
+
+.service-strip {
+  width: 100%;
+  margin-top: 22rpx;
+  padding: 16rpx 18rpx;
+  box-sizing: border-box;
+  border: 2rpx solid var(--line);
+  border-radius: 32rpx;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14rpx 32rpx rgba(20, 20, 20, .04);
+  white-space: nowrap;
+}
+.service-items { display: inline-flex; gap: 14rpx; }
+.service-item {
+  height: 52rpx;
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 0 18rpx;
+  border-radius: 20rpx;
+  color: #555552;
+  background: #f4f4f1;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+.service-item text { color: var(--ink); font-weight: 900; }
+
+.menu-layout {
+  min-height: calc(100vh - 650rpx);
+  display: flex;
+  align-items: stretch;
+  margin-top: 22rpx;
+  overflow: hidden;
+  border: 2rpx solid var(--line);
+  border-radius: 44rpx;
+  background: #fff;
+  box-shadow: 0 20rpx 48rpx rgba(21, 21, 18, .07);
+}
+.category-sidebar {
+  width: 160rpx;
+  flex: 0 0 auto;
+  padding: 20rpx 14rpx 150rpx;
+  box-sizing: border-box;
+  background: #f0f0ed;
+}
+.category-button {
+  position: relative;
+  min-height: 92rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 14rpx 10rpx;
+  box-sizing: border-box;
+  border-radius: 24rpx;
+  color: #7b7b78;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.category-button.active {
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 9rpx 24rpx rgba(20, 20, 20, .05);
+  font-weight: 900;
+}
+.category-button.active::before {
+  content: "";
+  position: absolute;
+  left: -14rpx;
+  top: 28rpx;
+  width: 6rpx;
+  height: 40rpx;
+  border-radius: 8rpx;
+  background: var(--accent);
+}
+.category-count { margin-top: 6rpx; color: #aaa9a5; font-size: 17rpx; font-weight: 600; }
+.menu-content { min-width: 0; flex: 1; padding: 0 18rpx 60rpx; background: #fff; }
+.menu-section { padding-top: 32rpx; }
+.menu-section + .menu-section { margin-top: 10rpx; }
+.menu-section-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+.menu-section-title { font-size: 34rpx; line-height: 1; font-weight: 900; }
+.menu-section-note { color: #9a9a97; font-size: 18rpx; font-weight: 600; }
+.empty-menu { padding: 80rpx 20rpx; color: var(--muted); text-align: center; font-size: 24rpx; }
+
+.product-card {
+  position: relative;
+  min-height: 190rpx;
+  display: flex;
+  gap: 18rpx;
+  padding: 18rpx;
+  box-sizing: border-box;
+  border-radius: 32rpx;
+  background: #fafaf8;
+  box-shadow: inset 0 0 0 2rpx rgba(20, 20, 20, .055);
+}
+.product-card + .product-card { margin-top: 16rpx; }
+.product-visual {
+  position: relative;
+  width: 150rpx;
+  height: 150rpx;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 30rpx;
+  box-shadow: inset 0 0 0 2rpx rgba(0, 0, 0, .04), 0 14rpx 32rpx rgba(20, 20, 20, .06);
+}
+.product-visual::before {
+  content: "";
+  position: absolute;
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .32);
+}
+.visual-0 { background: linear-gradient(145deg, #e3c794, #b26b3e); }
+.visual-1 { background: linear-gradient(145deg, #ffded2, #f49c80); }
+.visual-2 { background: linear-gradient(145deg, #faebb1, #d7ae55); }
+.visual-3 { background: linear-gradient(145deg, #d4ebff, #90baf5); }
+.product-image { position: relative; z-index: 1; width: 100%; height: 100%; }
+.food-glyph {
+  position: relative;
+  z-index: 1;
+  color: rgba(35, 25, 15, .76);
+  font-size: 66rpx;
+  font-weight: 900;
+  text-shadow: 0 10rpx 8rpx rgba(0, 0, 0, .13);
+}
+.product-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: 2rpx;
+}
+.product-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 27rpx;
+  line-height: 1.2;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.product-desc {
+  display: -webkit-box;
+  margin-top: 8rpx;
+  overflow: hidden;
+  color: #90908d;
+  font-size: 19rpx;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.product-sales { margin-top: 7rpx; color: #a9a9a5; font-size: 17rpx; font-weight: 600; }
+.product-bottom {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 12rpx;
+}
+.product-price { color: var(--accent); font-size: 25rpx; line-height: 1; font-weight: 900; white-space: nowrap; }
+.price-symbol { margin-right: 2rpx; font-size: 17rpx; }
+.price-from { margin-left: 4rpx; color: #a9a9a5; font-size: 16rpx; font-weight: 600; }
+.product-add {
+  min-width: 52rpx;
+  height: 52rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 12rpx;
+  border-radius: 20rpx;
+  color: #171717;
+  background: var(--lime);
+  box-shadow: 0 9rpx 20rpx rgba(120, 140, 26, .17);
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1;
+}
+.product-add.has-spec { min-width: 96rpx; font-size: 19rpx; }
+
+.cart-bar {
+  position: fixed;
+  z-index: 20;
+  left: 28rpx;
+  right: 28rpx;
+  bottom: calc(24rpx + env(safe-area-inset-bottom));
+  min-height: 104rpx;
+  display: flex;
+  align-items: center;
+  padding: 12rpx 12rpx 12rpx 18rpx;
+  box-sizing: border-box;
+  border: 2rpx solid rgba(255, 255, 255, .1);
+  border-radius: 999rpx;
+  color: #fff;
+  background: rgba(23, 23, 22, .97);
+  box-shadow: 0 24rpx 60rpx rgba(20, 20, 18, .25);
+}
+.cart-trigger {
+  position: relative;
+  width: 72rpx;
+  height: 72rpx;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #1a1a19;
+  background: var(--lime);
+}
+.cart-badge {
+  position: absolute;
+  top: -8rpx;
+  right: -6rpx;
+  min-width: 30rpx;
+  height: 30rpx;
+  padding: 0 5rpx;
+  box-sizing: border-box;
+  border: 3rpx solid #171716;
+  border-radius: 999rpx;
+  color: #fff;
+  background: var(--accent);
+  font-size: 17rpx;
+  line-height: 27rpx;
+  text-align: center;
+}
+.cart-summary {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 18rpx;
+}
+.cart-total { font-size: 30rpx; line-height: 1.1; font-weight: 900; }
+.cart-note { margin-top: 6rpx; color: rgba(255, 255, 255, .56); font-size: 18rpx; font-weight: 600; }
+.checkout-button {
+  height: 72rpx;
+  min-width: 142rpx;
+  margin: 0;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  color: #171717;
+  background: var(--lime);
+  font-size: 25rpx;
+  line-height: 72rpx;
+  font-weight: 900;
+}
+.checkout-button[disabled] { color: rgba(255, 255, 255, .45); background: #454542; }
+.cart-bar.disabled { opacity: .88; }
+
+@media (max-width: 370px) {
+  .store-page { padding-right: 20rpx; padding-left: 20rpx; }
+  .category-sidebar { width: 138rpx; padding-right: 10rpx; padding-left: 10rpx; }
+  .category-button { font-size: 20rpx; }
+  .menu-content { padding-right: 12rpx; padding-left: 12rpx; }
+  .product-card { gap: 14rpx; padding: 14rpx; }
+  .product-visual { width: 128rpx; height: 128rpx; }
+  .product-name { font-size: 25rpx; }
+  .product-add.has-spec { min-width: 82rpx; padding: 0 8rpx; font-size: 17rpx; }
+  .merchant-meta { margin-left: 0; }
+}
 </style>
