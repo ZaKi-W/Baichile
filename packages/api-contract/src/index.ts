@@ -35,6 +35,7 @@ export interface StoreSummary {
   monthlySales: number;
   distanceKm: number;
   rating: number;
+  recentViewers: number;
   systemHeat: number;
   sourceType: SourceType;
 }

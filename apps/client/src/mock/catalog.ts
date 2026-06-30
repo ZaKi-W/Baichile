@@ -14,7 +14,7 @@ export const mockStores: StoreDetail[] = names.map((name, index) => {
   const category = mockCategories[index % mockCategories.length];
   return {
     id, name, categoryId: category.id, description: '虚拟店铺 · 不会真实配送',
-    tags: ['夜航推荐', '虚拟配送'],
+    tags: ['堂食店', '热情掌柜'],
     deliveryFeeCents: index % 4 === 0 ? 0 : 100 + (index % 3) * 100,
     packingFeeCents: 100,
     minimumOrderCents: 1000 + (index % 4) * 300,
@@ -22,6 +22,7 @@ export const mockStores: StoreDetail[] = names.map((name, index) => {
     monthlySales: 186 + (index * 173) % 1200,
     distanceKm: 0.8 + (index % 8) * 0.6,
     rating: 4.3 + (index % 7) * 0.1,
+    recentViewers: 86 + (index * 127) % 900,
     systemHeat: 98 - index * 2,
     sourceType: 'original',
     menu: dishes.map((dish, itemIndex) => ({
