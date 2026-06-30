@@ -1,54 +1,70 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { StoreSummary } from '@baichile/api-contract';
-defineProps<{ store: StoreSummary }>();
+
+const props = withDefaults(defineProps<{ store: StoreSummary; index?: number }>(), { index: 0 });
+defineEmits<{ open: [] }>();
+
 const money = (value: number) => {
   const amount = value / 100;
   return Number.isInteger(amount) ? amount.toFixed(0) : amount.toFixed(2);
 };
-const deliveryFee = (value: number) => value === 0 ? '免配送费' : `配送费 ¥${money(value)}`;
+const deliveryFee = (value: number) => value === 0 ? '免配送费' : `配送费¥${money(value)}`;
+const distance = (value: number) => value < 1 ? `${Math.round(value * 1000)}m` : `${value.toFixed(1)}km`;
+const foodIcons = ['🍗', '🍜', '🍔', '🍱', '🧋', '🍰', '🍢', '🥗'];
+const avatar = computed(() => foodIcons[props.store.categoryId.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) % foodIcons.length]);
+const visibleTags = computed(() => props.store.tags.slice(0, 2));
 </script>
 
 <template>
-  <view class="card store" @tap="$emit('open')">
-    <view class="cover">{{ store.name.slice(0, 1) }}</view>
-    <view class="info">
-      <view class="heading">
-        <text class="name">{{ store.name }}</text>
+  <view class="store-card" :class="`tone-${index % 5}`" @tap="$emit('open')">
+    <view class="merchant-avatar" aria-hidden="true"><text>{{ avatar }}</text></view>
+    <view class="store-body">
+      <view class="store-topline">
+        <text class="store-name">{{ store.name }}</text>
+        <text class="score">★ {{ store.rating.toFixed(1) }}</text>
       </view>
-      <view class="merchant-meta">
-        <text>月售 {{ store.monthlySales }}</text>
-        <text v-if="store.tags[0]" class="merchant-tag">{{ store.tags[0] }}</text>
+      <view class="store-meta">
+        <text>¥{{ money(store.minimumOrderCents) }}起送</text>
+        <i class="meta-divider" />
+        <text>{{ deliveryFee(store.deliveryFeeCents) }}</text>
+        <text>📍 {{ distance(store.distanceKm) }}</text>
+        <text>🕒 {{ store.virtualDeliveryMinutes }}分钟</text>
       </view>
-      <view class="fulfilment">
-        <view class="fees">
-          <text>起送 ¥{{ money(store.minimumOrderCents) }}</text>
-          <text>{{ deliveryFee(store.deliveryFeeCents) }}</text>
-        </view>
-        <text class="distance">{{ store.distanceKm.toFixed(1) }}km&nbsp;&nbsp;{{ store.virtualDeliveryMinutes }}分钟</text>
+      <view class="tag-row">
+        <text v-for="tag in visibleTags" :key="tag" class="store-tag">{{ tag }}</text>
+        <text class="store-tag muted">月售{{ store.monthlySales }}</text>
       </view>
-      <view class="reputation">
-        <text class="rating">{{ store.rating.toFixed(1) }}分</text>
-        <text>最近24小时{{ store.recentViewers }}人看过</text>
-      </view>
-      <view class="tags"><text v-for="tag in store.tags.slice(1, 3)" :key="tag">{{ tag }}</text></view>
     </view>
   </view>
 </template>
 
 <style scoped>
-.store { display: flex; align-items: flex-start; gap: 22rpx; padding: 26rpx; }
-.cover { flex: 0 0 180rpx; width: 180rpx; height: 180rpx; border-radius: 14rpx; background: #f6efe7; color: #b85d2d; display: flex; align-items: center; justify-content: center; font-size: 60rpx; font-weight: 700; }
-.info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 10rpx; }
-.heading { min-width: 0; }
-.name { display: block; min-width: 0; overflow: hidden; font-weight: 700; font-size: 32rpx; line-height: 42rpx; text-overflow: ellipsis; white-space: nowrap; }
-.merchant-meta, .fulfilment, .fees, .reputation, .tags { display: flex; align-items: center; }
-.merchant-meta { gap: 12rpx; color: #888; font-size: 23rpx; }
-.merchant-tag { color: #339447; }
-.fulfilment { justify-content: space-between; gap: 12rpx; color: #777; font-size: 22rpx; white-space: nowrap; }
-.fees { min-width: 0; gap: 14rpx; }
-.distance { flex-shrink: 0; }
-.reputation { gap: 18rpx; overflow: hidden; color: #dd6818; font-size: 23rpx; font-weight: 600; white-space: nowrap; }
-.rating { flex-shrink: 0; font-size: 29rpx; font-weight: 700; }
-.tags { gap: 8rpx; overflow: hidden; }
-.tags text { flex-shrink: 0; padding: 3rpx 9rpx; border: 1rpx solid #f0d8c7; border-radius: 6rpx; color: #b66a3c; font-size: 19rpx; }
+.store-card { position: relative; min-height: 256rpx; display: grid; grid-template-columns: 152rpx minmax(0, 1fr); align-items: center; gap: 24rpx; padding: 24rpx; overflow: hidden; border-radius: 44rpx; color: #141414; background: #fff; box-shadow: inset 0 0 0 1rpx rgba(20, 20, 20, .08), 0 28rpx 56rpx rgba(21, 21, 18, .07); box-sizing: border-box; transition: transform .18s ease; }
+.store-card:active { transform: scale(.985); }
+.store-card::after { content: ""; position: absolute; right: -42rpx; bottom: -56rpx; width: 184rpx; height: 184rpx; border-radius: 50%; background: #ffe9e2; opacity: .62; pointer-events: none; }
+.store-card.tone-1::after { background: #e6f3de; }
+.store-card.tone-2::after { background: #e7edff; }
+.store-card.tone-3::after { background: #fff1c9; }
+.store-card.tone-4::after { background: #f5e5ff; }
+.merchant-avatar { position: relative; z-index: 1; width: 152rpx; height: 152rpx; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 48rpx; font-size: 80rpx; background: #ffebe2; box-shadow: inset 0 0 0 1rpx rgba(20, 20, 20, .05); }
+.tone-1 .merchant-avatar { background: #e7f3df; }
+.tone-2 .merchant-avatar { background: #e5edff; }
+.tone-3 .merchant-avatar { background: #fff1c8; }
+.tone-4 .merchant-avatar { background: #f4e4ff; }
+.merchant-avatar::before { content: ""; position: absolute; width: 176rpx; height: 62rpx; bottom: -28rpx; border-radius: 50%; background: rgba(255, 255, 255, .58); }
+.merchant-avatar text { z-index: 1; transform: translateY(-4rpx); filter: drop-shadow(0 10rpx 8rpx rgba(0, 0, 0, .12)); }
+.store-body { position: relative; z-index: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.store-topline { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.store-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 30rpx; line-height: 1.15; font-weight: 800; letter-spacing: -1rpx; }
+.score { flex: 0 0 auto; color: #a95019; font-size: 22rpx; font-weight: 800; }
+.store-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12rpx 16rpx; margin: 16rpx 0; color: #777773; font-size: 22rpx; line-height: 1; font-weight: 600; }
+.meta-divider { width: 1rpx; height: 20rpx; background: #deded9; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 10rpx; }
+.store-tag { padding: 8rpx 12rpx 6rpx; border-radius: 14rpx; color: #745324; background: #fff0d0; font-size: 18rpx; line-height: 1; font-weight: 700; }
+.store-tag.muted { color: #575754; background: #f1f1ee; }
+@media (max-width: 356px) {
+  .store-card { grid-template-columns: 134rpx minmax(0, 1fr); gap: 20rpx; }
+  .merchant-avatar { width: 134rpx; height: 134rpx; border-radius: 42rpx; font-size: 70rpx; }
+}
 </style>
