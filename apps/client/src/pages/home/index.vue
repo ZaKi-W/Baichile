@@ -6,10 +6,12 @@ import type { IconKey } from '@baichile/icon-registry';
 import AppIcon from '../../components/AppIcon.vue';
 import StoreCard from '../../components/StoreCard.vue';
 import { catalogService } from '../../services/catalog';
+import { useLocationStore } from '../../stores/location';
 
 const data = ref<HomeResponse>();
 const loading = ref(true);
 const error = ref('');
+const location = useLocationStore();
 async function load() {
   loading.value = true; error.value = '';
   try { data.value = await catalogService.home(); }
@@ -25,7 +27,7 @@ onLoad(load);
 <template>
   <view class="page">
     <view class="top">
-      <view><AppIcon name="location" :size="18" /><text>夜航市</text></view>
+      <view class="location" @tap="location.locate"><AppIcon name="location" :size="18" /><text>{{ location.status === 'locating' ? '定位中…' : location.label }}</text></view>
       <view class="search" @tap="openSearch"><AppIcon name="search" :size="17" /><text>搜索虚拟店铺或菜品</text></view>
     </view>
     <view v-if="loading" class="card muted">正在准备虚拟菜单…</view>
@@ -48,6 +50,7 @@ onLoad(load);
 <style scoped>
 .top { display: flex; flex-direction: column; gap: 18rpx; margin-bottom: 24rpx; }
 .top > view { display: flex; align-items: center; gap: 8rpx; }
+.location { width: fit-content; }
 .search { background: #fff; border-radius: 999rpx; padding: 18rpx 24rpx; color: #777; font-size: 26rpx; }
 .categories { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20rpx; background: #fff; border-radius: 20rpx; padding: 24rpx; margin-bottom: 20rpx; }
 .category { display: flex; align-items: center; flex-direction: column; gap: 8rpx; font-size: 23rpx; }

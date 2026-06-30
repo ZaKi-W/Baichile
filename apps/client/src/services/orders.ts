@@ -38,10 +38,17 @@ async function localQuote(request: QuoteRequest): Promise<OrderQuote> {
   };
 }
 
-function localRoute(id: string): VirtualRoute {
+function localRoute(id: string, destinationPoint?: GeoPoint): VirtualRoute {
   const p = (lat: number, lng: number): GeoPoint => ({ lat, lng, coordSystem: 'gcj02' });
-  const polyline = [p(31.2303, 121.4737), p(31.2312, 121.4751), p(31.2325, 121.4764), p(31.2338, 121.4782)];
-  return { id: `route_${id}`, cityCode: '310000', origin: polyline[0], destination: polyline[3], polyline, routeSource: 'prebuilt', label: '虚拟配送路线' };
+  const origin = p(31.2303, 121.4737);
+  const destination = destinationPoint || p(31.2338, 121.4782);
+  const polyline = [
+    origin,
+    p(origin.lat + (destination.lat - origin.lat) * 0.34, origin.lng + (destination.lng - origin.lng) * 0.3),
+    p(origin.lat + (destination.lat - origin.lat) * 0.68, origin.lng + (destination.lng - origin.lng) * 0.72),
+    destination,
+  ];
+  return { id: `route_${id}`, cityCode: '310000', origin, destination, polyline, routeSource: 'generated', label: '虚拟配送路线' };
 }
 
 export const orderService = {
@@ -61,7 +68,7 @@ export const orderService = {
     return {
       ...quote, id, isVirtual: true, visitorId: auth.visitorId,
       virtualDestinationId: request.virtualDestinationId, status: 'created',
-      startedAt: new Date().toISOString(), durationMs: 60_000, seed: id, route: localRoute(id),
+      startedAt: new Date().toISOString(), durationMs: 60_000, seed: id, route: localRoute(id, request.virtualDestinationPoint),
     };
   },
 };

@@ -45,7 +45,7 @@ export class OrderService {
   create(request: QuoteRequest, visitorId?: string): VirtualOrder {
     const quote = this.quote(request);
     const id = randomUUID();
-    const route = this.route(id);
+    const route = this.route(id, request.virtualDestinationPoint);
     const order: VirtualOrder = {
       ...quote,
       id,
@@ -84,19 +84,24 @@ export class OrderService {
     return { merged };
   }
 
-  private route(id: string): VirtualRoute {
+  private route(id: string, requestedDestination?: GeoPoint): VirtualRoute {
     const point = (lat: number, lng: number): GeoPoint => ({ lat, lng, coordSystem: 'gcj02' });
+    if (requestedDestination && requestedDestination.coordSystem !== 'gcj02') {
+      throw new BadRequestException('客户端定位必须使用 GCJ-02 坐标');
+    }
+    const origin = point(31.2303, 121.4737);
+    const destination = requestedDestination || point(31.2338, 121.4782);
     const polyline = [
-      point(31.2303, 121.4737),
-      point(31.2312, 121.4751),
-      point(31.2325, 121.4764),
-      point(31.2338, 121.4782),
+      origin,
+      point(origin.lat + (destination.lat - origin.lat) * 0.34, origin.lng + (destination.lng - origin.lng) * 0.3),
+      point(origin.lat + (destination.lat - origin.lat) * 0.68, origin.lng + (destination.lng - origin.lng) * 0.72),
+      destination,
     ];
     return {
       id: `route_${id}`,
       cityCode: '310000',
-      origin: polyline[0],
-      destination: polyline.at(-1)!,
+      origin,
+      destination,
       polyline,
       routeSource: 'prebuilt',
       label: '虚拟配送路线',

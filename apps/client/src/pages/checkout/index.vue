@@ -3,11 +3,13 @@ import { computed, ref } from 'vue';
 import { useCartStore } from '../../stores/cart';
 import { useOrderStore } from '../../stores/orders';
 import { orderService } from '../../services/orders';
+import { useLocationStore } from '../../stores/location';
 
 const cart = useCartStore();
 const orders = useOrderStore();
 const destination = ref('desk');
 const submitting = ref(false);
+const location = useLocationStore();
 const destinations = [
   { id: 'desk', name: '我的书桌边' }, { id: 'sofa', name: '沙发左侧' },
   { id: 'door', name: '卧室门口' }, { id: 'secret', name: '今晚的秘密基地' },
@@ -15,6 +17,7 @@ const destinations = [
 const request = computed(() => ({
   storeId: cart.store?.id || '',
   virtualDestinationId: destination.value,
+  virtualDestinationPoint: location.point || undefined,
   lines: cart.lines.map((line) => ({ menuItemId: line.item.id, optionIds: line.optionIds, quantity: line.quantity })),
 }));
 async function submit() {
@@ -34,6 +37,7 @@ async function submit() {
 <template>
   <view class="page">
     <view class="virtual-notice">本订单仅为互动模拟，不会扣款、不会发货。</view>
+    <view v-if="location.point" class="card location-note">将使用已授权的真实当前位置作为虚拟路线终点。<button size="mini" @tap="location.clear">不用当前位置</button></view>
     <view class="card">
       <text class="heading">虚拟收货地点</text>
       <radio-group @change="destination = $event.detail.value">
@@ -59,4 +63,3 @@ async function submit() {
 .total { font-weight: 700; border-bottom: 0; }
 .virtual-notice { margin-bottom: 20rpx; }
 </style>
-

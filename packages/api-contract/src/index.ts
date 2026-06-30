@@ -57,6 +57,7 @@ export interface QuoteRequest {
   storeId: string;
   lines: OrderLineInput[];
   virtualDestinationId: string;
+  virtualDestinationPoint?: import('@baichile/map-core').GeoPoint;
 }
 
 export interface QuoteLine {
@@ -100,4 +101,3 @@ export interface ApiError {
   code: 'BAD_REQUEST' | 'NOT_FOUND' | 'PRICE_CHANGED' | 'UNAUTHORIZED' | 'CONFIG_MISSING';
   message: string;
 }
-

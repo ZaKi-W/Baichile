@@ -7,6 +7,14 @@
   "transformPx": false,
   "mp-weixin": {
     "appid": "wxaeaa8efe4671ce80",
+    "permission": {
+      "scope.userLocation": {
+        "desc": "用于以当前位置生成虚拟配送终点，不会用于真实配送"
+      }
+    },
+    "requiredPrivateInfos": [
+      "getLocation"
+    ],
     "setting": {
       "urlCheck": false,
       "es6": true

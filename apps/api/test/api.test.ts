@@ -35,6 +35,7 @@ describe('MVP API', () => {
     const payload = {
       storeId: store.id,
       virtualDestinationId: 'desk',
+      virtualDestinationPoint: { lat: 31.2401, lng: 121.4902, coordSystem: 'gcj02' },
       lines: [{ menuItemId: store.menu[0].id, optionIds: [store.menu[0].specGroups[0].options[0].id], quantity: 2 }],
     };
     const quote = await app.inject({ method: 'POST', url: '/v1/orders/quote', payload });
@@ -49,6 +50,6 @@ describe('MVP API', () => {
     expect(order.json().isVirtual).toBe(true);
     expect(order.json().totalCents).toBe(quote.json().totalCents);
     expect(order.json().route.label).toBe('虚拟配送路线');
+    expect(order.json().route.destination).toEqual(payload.virtualDestinationPoint);
   });
 });
-
