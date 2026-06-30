@@ -39,7 +39,6 @@ onLoad(load);
           <text>{{ category.name }}</text>
         </view>
       </view>
-      <view class="card topic"><text class="title">今晚想吃什么</text><text class="muted">全部为原创虚拟店铺，不会真实配送</text></view>
       <text class="section-title">夜航推荐</text>
       <StoreCard v-for="store in data.stores" :key="store.id" :store="store" @open="openStore(store.id)" />
     </template>
@@ -54,8 +53,6 @@ onLoad(load);
 .search { background: #fff; border-radius: 999rpx; padding: 18rpx 24rpx; color: #777; font-size: 26rpx; }
 .categories { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20rpx; background: #fff; border-radius: 20rpx; padding: 24rpx; margin-bottom: 20rpx; }
 .category { display: flex; align-items: center; flex-direction: column; gap: 8rpx; font-size: 23rpx; }
-.topic { display: flex; flex-direction: column; gap: 8rpx; }
-.title, .section-title { font-weight: 700; font-size: 30rpx; }
-.section-title { display: block; margin: 28rpx 0 16rpx; }
+.section-title { display: block; margin: 8rpx 0 16rpx; font-weight: 700; font-size: 30rpx; }
 .tab-spacer { height: 120rpx; }
 </style>
