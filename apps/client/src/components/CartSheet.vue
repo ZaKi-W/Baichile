@@ -2,7 +2,7 @@
 import type { CartLine } from '../stores/cart';
 
 defineProps<{ visible: boolean; lines: CartLine[] }>();
-defineEmits<{ close: [] }>();
+defineEmits<{ close: []; remove: [key: string] }>();
 </script>
 
 <template>
@@ -15,7 +15,10 @@ defineEmits<{ close: [] }>();
           <text v-if="line.optionNames.length" class="muted">{{ line.optionNames.join('、') }}</text>
           <text class="quantity">× {{ line.quantity }}</text>
         </view>
-        <text class="price">¥{{ (line.totalCents / 100).toFixed(2) }}</text>
+        <view class="line-actions">
+          <text class="price">¥{{ (line.totalCents / 100).toFixed(2) }}</text>
+          <button class="remove-button" @tap="$emit('remove', line.key)">删除</button>
+        </view>
       </view>
     </view>
   </view>
@@ -30,4 +33,7 @@ defineEmits<{ close: [] }>();
 .name { font-weight: 600; }
 .quantity { font-size: 24rpx; }
 .price { font-weight: 700; }
+.line-actions { display: flex; flex: 0 0 auto; align-items: flex-end; flex-direction: column; gap: 12rpx; }
+.remove-button { margin: 0; padding: 0 14rpx; color: #a0442e; background: #fff0eb; border-radius: 14rpx; font-size: 21rpx; line-height: 42rpx; }
+.remove-button::after { border: 0; }
 </style>

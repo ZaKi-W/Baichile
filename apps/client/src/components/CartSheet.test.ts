@@ -12,5 +12,7 @@ describe('CartSheet', () => {
     expect(source).toContain("line.optionNames.join('、')");
     expect(source).toContain('× {{ line.quantity }}');
     expect(source).toContain('(line.totalCents / 100).toFixed(2)');
+    expect(source).toContain("defineEmits<{ close: []; remove: [key: string] }>()");
+    expect(source).toContain("@tap=\"$emit('remove', line.key)\"");
   });
 });

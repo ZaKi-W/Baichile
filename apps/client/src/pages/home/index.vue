@@ -52,7 +52,6 @@ const openAllCategories = () => {
   const first = data.value?.categories[0];
   if (first) openCategory(first.id, first.name);
 };
-const scan = () => uni.scanCode?.({ success: () => undefined });
 function showSlide(index: number) {
   activeSlide.value = (index + heroSlides.length) % heroSlides.length;
 }
@@ -87,7 +86,6 @@ onUnload(stopCarousel);
           <AppIcon name="search" :size="18" />
           <text>搜店铺、菜品、口味</text>
         </view>
-        <button class="search-scan" @tap.stop="scan">⌁</button>
       </view>
 
       <section class="hero">
@@ -196,8 +194,7 @@ button::after { border: 0; }
 .location-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 32rpx; font-weight: 800; letter-spacing: -1rpx; }
 .chevron { color: #7b7b78; font-size: 26rpx; transform: translateY(2rpx); }
 .search-wrap { position: relative; margin-bottom: 34rpx; }
-.search { height: 104rpx; display: flex; align-items: center; gap: 18rpx; padding: 0 96rpx 0 32rpx; border: 1rpx solid rgba(20, 20, 20, .08); border-radius: 36rpx; color: #9b9b98; background: rgba(255, 255, 255, .9); box-shadow: 0 18rpx 50rpx rgba(20, 20, 20, .04); box-sizing: border-box; font-size: 28rpx; font-weight: 600; }
-.search-scan { position: absolute; top: 14rpx; right: 14rpx; width: 76rpx; height: 76rpx; display: flex; align-items: center; justify-content: center; border-radius: 26rpx; background: #f1f1ee; font-size: 34rpx; }
+.search { height: 104rpx; display: flex; align-items: center; gap: 18rpx; padding: 0 32rpx; border: 1rpx solid rgba(20, 20, 20, .08); border-radius: 36rpx; color: #9b9b98; background: rgba(255, 255, 255, .9); box-shadow: 0 18rpx 50rpx rgba(20, 20, 20, .04); box-sizing: border-box; font-size: 28rpx; font-weight: 600; }
 .hero { position: relative; height: 364rpx; overflow: hidden; border-radius: 54rpx; background: #171717; box-shadow: 0 36rpx 100rpx rgba(21, 21, 18, .12); }
 .hero-track { height: 100%; position: relative; }
 .hero-slide { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) 264rpx; gap: 12rpx; align-items: center; padding: 44rpx 36rpx 40rpx; opacity: 0; pointer-events: none; transform: scale(1.025); transition: opacity .45s ease, transform .55s ease; overflow: hidden; box-sizing: border-box; }

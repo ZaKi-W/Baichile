@@ -17,6 +17,7 @@ export interface MenuItem {
   subtitle?: string;
   imageUrl?: string;
   basePriceCents: number;
+  monthlySales: number;
   specGroups: SpecGroup[];
   sourceType: SourceType;
 }

@@ -28,6 +28,7 @@ export const mockStores: StoreDetail[] = names.map((name, index) => {
     menu: dishes.map((dish, itemIndex) => ({
       id: `${id}-item-${itemIndex + 1}`, storeId: id, categoryId: category.id,
       name: `${name}${dish}`, subtitle: '原创虚拟菜单', basePriceCents: 1200 + itemIndex * 120,
+      monthlySales: 38 + (index * 47 + itemIndex * 83) % 900,
       sourceType: 'original',
       specGroups: [{
         id: `${id}-${itemIndex}-size`, name: '份量', required: true, minSelect: 1, maxSelect: 1,

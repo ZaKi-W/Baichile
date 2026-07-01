@@ -22,6 +22,7 @@ export const stores: StoreDetail[] = storeNames.map((name, storeIndex) => {
     name: `${name}${dish}`,
     subtitle: '原创虚拟菜单，仅用于互动演示',
     basePriceCents: 1200 + storeIndex * 30 + itemIndex * 120,
+    monthlySales: 38 + (storeIndex * 47 + itemIndex * 83) % 900,
     sourceType: 'original',
     specGroups: [
       {

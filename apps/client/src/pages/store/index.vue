@@ -23,6 +23,7 @@ const categoryNames: Record<string, string> = {
   night: '深夜推荐',
 };
 onLoad(async (options) => { store.value = await catalogService.store(options?.id || ''); });
+const hasCartItems = computed(() => cart.count > 0);
 const canCheckout = computed(() => cart.store?.id === store.value?.id && cart.count > 0);
 const menuGroups = computed(() => {
   const groups = new Map<string, MenuItem[]>();
@@ -46,7 +47,11 @@ async function add(optionIds: string[], quantity: number) {
   }
 }
 function openCart() {
-  if (canCheckout.value) isCartOpen.value = true;
+  if (hasCartItems.value) isCartOpen.value = true;
+}
+function removeFromCart(key: string) {
+  cart.remove(key);
+  if (!cart.lines.length) isCartOpen.value = false;
 }
 const goBack = () => uni.navigateBack();
 const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
@@ -125,7 +130,7 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
             <view class="product-info">
               <text class="product-name">{{ item.name }}</text>
               <text v-if="item.subtitle" class="product-desc">{{ item.subtitle }}</text>
-              <text class="product-sales">店长推荐 · 现点现做</text>
+              <text class="product-sales">月售 {{ item.monthlySales }}</text>
               <view class="product-bottom">
                 <view class="product-price">
                   <text class="price-symbol">¥</text>{{ (item.basePriceCents / 100).toFixed(2) }}
@@ -141,7 +146,7 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
       </view>
     </view>
 
-    <view class="cart-bar" :class="{ disabled: !canCheckout }" @tap="openCart">
+    <view class="cart-bar" :class="{ disabled: !hasCartItems }" @tap="openCart">
       <view class="cart-trigger">
         <AppIcon name="cart" :size="23" />
         <text v-if="cart.count" class="cart-badge">{{ cart.count }}</text>
@@ -153,7 +158,7 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
       <button class="checkout-button" :disabled="!canCheckout" @tap.stop="checkout">去结算</button>
     </view>
     <SkuSheet :item="selected" @close="selected = null" @confirm="add" />
-    <CartSheet :visible="isCartOpen" :lines="cart.lines" @close="isCartOpen = false" />
+    <CartSheet :visible="isCartOpen" :lines="cart.lines" @close="isCartOpen = false" @remove="removeFromCart" />
   </view>
 </template>
 
