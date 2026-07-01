@@ -11,8 +11,6 @@ interface WechatCodeSession {
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly request: typeof fetch = fetch) {}
-
   createGuest(): GuestSession {
     const id = randomUUID();
     return {
@@ -53,7 +51,7 @@ export class AuthService {
       js_code: input.code,
       grant_type: 'authorization_code',
     });
-    const response = await this.request(`https://api.weixin.qq.com/sns/jscode2session?${query}`);
+    const response = await fetch(`https://api.weixin.qq.com/sns/jscode2session?${query}`);
     const session = await response.json() as WechatCodeSession;
     if (!response.ok || !session.openid || session.errcode) {
       throw new BadRequestException('微信登录凭证无效');
