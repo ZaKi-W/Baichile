@@ -6,4 +6,4 @@ coverage/
 .DS_Store
 *.log
 apps/client/src/uni_modules/
-
+.worktrees/
