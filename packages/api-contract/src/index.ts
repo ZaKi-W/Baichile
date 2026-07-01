@@ -101,6 +101,24 @@ export interface GuestSession {
   refreshToken: string;
 }
 
+export interface UserProfile {
+  avatarUrl: string;
+  nickname: string;
+}
+
+export interface WechatMiniLoginRequest {
+  code: string;
+  visitorId?: string;
+  profile: UserProfile;
+}
+
+export interface AccountSession {
+  accountId: string;
+  accessToken: string;
+  provider: 'wechat' | 'dev-mock';
+  profile: UserProfile;
+}
+
 export interface AdministrativeArea {
   province: string;
   city: string;

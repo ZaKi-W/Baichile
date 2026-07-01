@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Inject, Param, Post, Query } from '@nestjs/common';
-import type { QuoteRequest } from '@baichile/api-contract';
+import type { QuoteRequest, WechatMiniLoginRequest } from '@baichile/api-contract';
 import { AuthService } from './auth.service';
 import { CatalogService } from './catalog.service';
 import { OrderService } from './order.service';
@@ -21,7 +21,11 @@ export class AppController {
   guest() { return this.auth.createGuest(); }
 
   @Post('auth/wechat-mini')
-  wechat(@Body() body: { visitorId?: string }) { return this.auth.mockWechat(body?.visitorId); }
+  async wechat(@Body() body: WechatMiniLoginRequest) {
+    const session = await this.auth.loginWechatMini(body);
+    if (body.visitorId) this.orders.merge(body.visitorId, session.accountId);
+    return session;
+  }
 
   @Post('auth/merge-visitor')
   merge(@Body() body: { visitorId: string; accountId: string }) {
