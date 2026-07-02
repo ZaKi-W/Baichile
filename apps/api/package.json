@@ -4,10 +4,13 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "db:migrate": "typeorm-ts-node-commonjs -d src/database/typeorm.data-source.ts migration:run",
+    "db:revert": "typeorm-ts-node-commonjs -d src/database/typeorm.data-source.ts migration:revert",
+    "db:seed": "ts-node src/database/seed.ts",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run ../../apps/api/test"
+    "test": "vitest run --root ../.. apps/api/test --no-file-parallelism"
   },
   "dependencies": {
     "@baichile/api-contract": "workspace:*",
@@ -29,6 +32,8 @@
     "@nestjs/cli": "^11.0.7",
     "@nestjs/testing": "^11.1.0",
     "@types/node": "^22.15.0",
+    "ts-loader": "^9.6.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   }
 }

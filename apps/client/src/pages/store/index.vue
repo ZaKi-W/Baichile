@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import type { MenuItem, StoreDetail } from '@baichile/api-contract';
 import AppIcon from '../../components/AppIcon.vue';
@@ -12,33 +12,70 @@ const store = ref<StoreDetail>();
 const selected = ref<MenuItem | null>(null);
 const isCartOpen = ref(false);
 const cart = useCartStore();
-const categoryNames: Record<string, string> = {
-  bbq: '招牌烧烤',
-  fried: '人气炸物',
-  burger: '经典汉堡',
-  noodles: '招牌粉面',
-  rice: '暖心盖饭',
-  tea: '清爽饮品',
-  dessert: '甜品小食',
-  night: '深夜推荐',
-};
-onLoad(async (options) => { store.value = await catalogService.store(options?.id || ''); });
+const activeCategoryId = ref('');
+const scrollAnchor = ref('');
+const sectionOffsets = new Map<string, number>();
+let isProgrammatic = false;
+
+onLoad(async (options) => {
+  store.value = await catalogService.store(options?.id || '');
+  await nextTick();
+  setTimeout(measureSections, 200);
+});
+
 const hasCartItems = computed(() => cart.count > 0);
 const canCheckout = computed(() => cart.store?.id === store.value?.id && cart.count > 0);
 const menuGroups = computed(() => {
-  const groups = new Map<string, MenuItem[]>();
+  const subs = store.value?.subCategories;
+  if (!subs?.length) return [];
+  const map = new Map<string, MenuItem[]>();
   for (const item of store.value?.menu ?? []) {
-    const items = groups.get(item.categoryId) ?? [];
+    const sub = item.subCategoryId ?? subs[0].id;
+    const items = map.get(sub) ?? [];
     items.push(item);
-    groups.set(item.categoryId, items);
+    map.set(sub, items);
   }
-  return Array.from(groups, ([id, items], index) => ({
-    id,
-    name: categoryNames[id] ?? (index === 0 ? '店长推荐' : `精选分类 ${index + 1}`),
-    items,
-  }));
+  return subs.filter((s) => map.has(s.id)).map((s) => ({ id: s.id, name: s.name, items: map.get(s.id)! }));
 });
 const storeInitial = computed(() => store.value?.name.slice(-1) || '食');
+
+function measureSections() {
+  uni.createSelectorQuery()
+    .selectAll('.menu-section')
+    .boundingClientRect((rects: any[]) => {
+      if (!rects?.length) return;
+      sectionOffsets.clear();
+      const firstTop = rects[0].top;
+      rects.forEach((rect: any) => {
+        const id = rect.id?.replace('cat-', '');
+        if (id) sectionOffsets.set(id, rect.top - firstTop);
+      });
+    })
+    .exec();
+}
+
+function onMenuScroll(e: any) {
+  if (isProgrammatic) return;
+  const scrollTop: number = e.detail.scrollTop;
+  let current = menuGroups.value[0]?.id ?? '';
+  for (const [id, offset] of sectionOffsets) {
+    if (offset <= scrollTop + 30) current = id;
+  }
+  if (current && current !== activeCategoryId.value) {
+    activeCategoryId.value = current;
+  }
+}
+
+function selectCategory(id: string) {
+  activeCategoryId.value = id;
+  isProgrammatic = true;
+  scrollAnchor.value = '';
+  nextTick(() => {
+    scrollAnchor.value = `cat-${id}`;
+    setTimeout(() => { isProgrammatic = false; }, 500);
+  });
+}
+
 async function add(optionIds: string[], quantity: number) {
   if (!store.value || !selected.value) return;
   if (await cart.add(store.value, selected.value, optionIds, quantity)) {
@@ -53,7 +90,6 @@ function removeFromCart(key: string) {
   cart.remove(key);
   if (!cart.lines.length) isCartOpen.value = false;
 }
-const goBack = () => uni.navigateBack();
 const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
 </script>
 
@@ -61,10 +97,6 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
   <view v-if="store" class="page store-page">
     <view class="merchant-hero">
       <view class="hero-decoration">{{ storeInitial }}</view>
-      <view class="hero-nav">
-        <button class="back-button" aria-label="返回" @tap="goBack">‹</button>
-      </view>
-
       <view class="merchant-content">
         <view class="store-logo">{{ storeInitial }}</view>
         <view class="merchant-main">
@@ -102,21 +134,22 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
     </scroll-view>
 
     <view class="menu-layout">
-      <view class="category-sidebar">
+      <scroll-view class="category-sidebar" scroll-y :show-scrollbar="false">
         <view
-          v-for="(group, index) in menuGroups"
+          v-for="group in menuGroups"
           :key="group.id"
           class="category-button"
-          :class="{ active: index === 0 }"
+          :class="{ active: group.id === (activeCategoryId || menuGroups[0]?.id) }"
+          @tap="selectCategory(group.id)"
         >
           <text>{{ group.name }}</text>
           <text class="category-count">{{ group.items.length }} 件</text>
         </view>
-      </view>
+      </scroll-view>
 
-      <view class="menu-content">
+      <scroll-view class="menu-content" scroll-y :show-scrollbar="false" :scroll-into-view="scrollAnchor" scroll-with-animation @scroll="onMenuScroll">
         <view v-if="!menuGroups.length" class="empty-menu">菜单正在准备中</view>
-        <view v-for="group in menuGroups" :key="group.id" class="menu-section">
+        <view v-for="group in menuGroups" :key="group.id" :id="`cat-${group.id}`" class="menu-section">
           <view class="menu-section-title-row">
             <text class="menu-section-title">{{ group.name }}</text>
             <text class="menu-section-note">每日现做</text>
@@ -143,7 +176,7 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
             </view>
           </view>
         </view>
-      </view>
+      </scroll-view>
     </view>
 
     <view class="cart-bar" :class="{ disabled: !hasCartItems }" @tap="openCart">
@@ -212,24 +245,7 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
   font-weight: 900;
   transform: rotate(-8deg);
 }
-.hero-nav { position: relative; z-index: 2; min-height: 68rpx; padding-right: 200rpx; }
-.back-button {
-  width: 68rpx;
-  height: 68rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 0 0 6rpx;
-  color: #fff;
-  border: 2rpx solid rgba(255, 255, 255, .12);
-  border-radius: 26rpx;
-  background: rgba(255, 255, 255, .13);
-  font-size: 50rpx;
-  font-weight: 300;
-  line-height: 1;
-}
-.back-button::after, .product-add::after, .checkout-button::after { border: 0; }
+.product-add::after, .checkout-button::after { border: 0; }
 .merchant-content {
   position: relative;
   z-index: 2;
@@ -371,6 +387,7 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
 }
 .category-sidebar {
   width: 160rpx;
+  height: calc(100vh - 650rpx);
   flex: 0 0 auto;
   padding: 20rpx 14rpx 150rpx;
   box-sizing: border-box;
@@ -407,7 +424,7 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
   background: var(--accent);
 }
 .category-count { margin-top: 6rpx; color: #aaa9a5; font-size: 17rpx; font-weight: 600; }
-.menu-content { min-width: 0; flex: 1; padding: 0 18rpx 60rpx; background: #fff; }
+.menu-content { min-width: 0; flex: 1; height: calc(100vh - 650rpx); padding: 0 18rpx 60rpx; background: #fff; }
 .menu-section { padding-top: 32rpx; }
 .menu-section + .menu-section { margin-top: 10rpx; }
 .menu-section-title-row {

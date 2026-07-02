@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { onShow } from '@dcloudio/uni-app';
 import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
+import { useAddressStore } from '../../stores/address';
 
 interface ChooseAvatarEvent {
   detail: {
@@ -11,13 +13,23 @@ interface ChooseAvatarEvent {
 
 const auth = useAuthStore();
 const orders = useOrderStore();
+const addresses = useAddressStore();
 const showLoginPopup = ref(false);
 const avatarUrl = ref('');
 const nickname = ref('');
 const loading = ref(false);
 
+onShow(() => {
+  void orders.load();
+  void addresses.load();
+});
+
 function openLogin() {
   showLoginPopup.value = true;
+}
+
+function openAddresses() {
+  uni.navigateTo({ url: '/pages/address-list/index' });
 }
 
 function closeLogin() {
@@ -45,8 +57,13 @@ async function login() {
     });
     showLoginPopup.value = false;
     uni.showToast({ title: '登录成功', icon: 'success' });
-  } catch {
-    uni.showToast({ title: '登录失败，请重试', icon: 'none' });
+    void orders.load();
+    void addresses.load();
+  } catch (error) {
+    uni.showToast({
+      title: error instanceof Error ? error.message : '登录失败，请重试',
+      icon: 'none',
+    });
   } finally {
     loading.value = false;
   }
@@ -55,32 +72,63 @@ async function login() {
 
 <template>
   <view class="page">
-    <view v-if="auth.accountId" class="card profile">
+    <!-- Logged in hero -->
+    <view v-if="auth.accountId" class="hero logged-in">
       <view class="profile-header">
         <image class="avatar" :src="auth.userProfile.avatarUrl" mode="aspectFill" />
         <view class="identity">
-          <text class="title">{{ auth.userProfile.nickname }}</text>
-          <text class="muted">微信用户 · 已登录</text>
+          <text class="nickname">{{ auth.userProfile.nickname }}</text>
+          <view class="badge">
+            <text class="badge-text">微信用户</text>
+          </view>
         </view>
       </view>
-      <view class="profile-stats">
-        <text class="muted">最近虚拟订单：{{ orders.orders.length }} 单</text>
+      <view class="stats-row">
+        <view class="stat-item">
+          <text class="stat-value">{{ orders.orders.length }}</text>
+          <text class="stat-label">虚拟订单</text>
+        </view>
       </view>
     </view>
 
-    <view v-else class="card login-card">
-      <view class="login-header">
-        <text class="title">登录白吃了</text>
-        <text class="muted">登录后会合并游客订单，并在这里显示你的头像和昵称。</text>
-      </view>
-      <button class="primary-button login-button" @tap="openLogin">微信登录</button>
-      <text class="muted login-footer">你也可以继续以游客身份浏览和下单。</text>
+    <!-- Not logged in hero -->
+    <view v-else class="hero guest">
+      <view class="guest-icon">👤</view>
+      <text class="guest-title">登录白吃了</text>
+      <text class="guest-desc">登录后会合并游客订单，并在这里显示你的头像和昵称</text>
+      <button class="login-btn" @tap="openLogin">
+        <text class="login-btn-text">微信登录</text>
+      </button>
+      <text class="guest-hint">你也可以继续以游客身份浏览和下单</text>
     </view>
 
-    <view class="card notice">
-      <text>关于白吃了</text>
-      <text class="muted">这是互动模拟产品，不提供真实支付、接单或配送。</text>
+    <!-- Menu section -->
+    <view class="menu-card">
+      <view class="menu-item">
+        <text class="menu-icon">📦</text>
+        <text class="menu-text">我的订单</text>
+        <text class="menu-arrow">›</text>
+      </view>
+      <view class="menu-divider" />
+      <view class="menu-item" @tap="openAddresses">
+        <text class="menu-icon">📍</text>
+        <text class="menu-text">收货地址</text>
+        <text class="menu-count">{{ addresses.addresses.length }}</text>
+        <text class="menu-arrow">›</text>
+      </view>
     </view>
+
+    <!-- About section -->
+    <view class="about-card">
+      <view class="about-header">
+        <text class="about-title">关于白吃了</text>
+      </view>
+      <text class="about-desc">这是互动模拟产品，不提供真实支付、接单或配送。</text>
+      <view class="about-meta">
+        <text class="version">v1.0.0</text>
+      </view>
+    </view>
+
     <view class="tab-spacer" />
 
     <!-- Login Popup -->
@@ -127,65 +175,229 @@ async function login() {
 </template>
 
 <style scoped>
-.profile,
-.login-card,
-.notice {
-  display: flex;
-  flex-direction: column;
-  gap: 14rpx;
+.page {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding: 0;
+  padding-bottom: 120rpx;
 }
 
-.profile-header {
+/* Hero section */
+.hero {
+  background: linear-gradient(135deg, #ff7a45 0%, #ff9a6c 100%);
+  padding: 60rpx 40rpx 50rpx;
+  margin-bottom: 24rpx;
+}
+
+/* Logged in hero */
+.hero.logged-in .profile-header {
   display: flex;
   align-items: center;
-  gap: 24rpx;
+  gap: 28rpx;
 }
 
-.profile-header > .avatar {
-  width: 128rpx;
-  height: 128rpx;
+.hero.logged-in .avatar {
+  width: 140rpx;
+  height: 140rpx;
   border-radius: 50%;
+  border: 4rpx solid rgba(255, 255, 255, 0.3);
   flex-shrink: 0;
 }
 
-.identity {
+.hero.logged-in .identity {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero.logged-in .nickname {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 12rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero.logged-in .badge {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.hero.logged-in .badge-text {
+  font-size: 22rpx;
+  color: #fff;
+}
+
+.stats-row {
+  display: flex;
+  margin-top: 36rpx;
+  padding-top: 32rpx;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.2);
+}
+
+.stat-item {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  align-items: center;
+  flex: 1;
 }
 
-.profile-stats {
-  padding-top: 12rpx;
-  border-top: 1rpx solid #f0f0f0;
-}
-
-.login-header {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.title {
-  font-size: 36rpx;
+.stat-value {
+  font-size: 44rpx;
   font-weight: 700;
+  color: #fff;
+  line-height: 1;
 }
 
-.login-button {
-  width: 100%;
-  margin-top: 12rpx;
-}
-
-.login-footer {
-  text-align: center;
+.stat-label {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.8);
   margin-top: 8rpx;
 }
 
-.notice {
+/* Guest hero */
+.hero.guest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 80rpx 40rpx 60rpx;
+}
+
+.guest-icon {
+  width: 120rpx;
+  height: 120rpx;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60rpx;
+  margin-bottom: 32rpx;
+}
+
+.guest-title {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 16rpx;
+}
+
+.guest-desc {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+  margin-bottom: 40rpx;
+  max-width: 500rpx;
+}
+
+.login-btn {
+  width: 400rpx;
+  height: 88rpx;
+  background: #fff;
+  border-radius: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+  margin-bottom: 24rpx;
+}
+
+.login-btn::after {
+  border: 0;
+}
+
+.login-btn-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #ff7a45;
+}
+
+.guest-hint {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Menu card */
+.menu-card {
+  background: #fff;
+  margin: 0 24rpx 24rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 32rpx 28rpx;
+}
+
+.menu-icon {
+  font-size: 40rpx;
+  margin-right: 20rpx;
+}
+
+.menu-text {
+  flex: 1;
+  font-size: 30rpx;
+  color: #333;
+}
+
+.menu-arrow {
+  font-size: 36rpx;
+  color: #ccc;
+}
+
+.menu-divider {
+  height: 1rpx;
+  background: #f0f0f0;
+  margin: 0 28rpx;
+}
+
+/* About card */
+.about-card {
+  background: #fff;
+  margin: 0 24rpx;
+  border-radius: 20rpx;
+  padding: 32rpx 28rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.about-header {
+  margin-bottom: 16rpx;
+}
+
+.about-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.about-desc {
+  font-size: 26rpx;
+  color: #888;
+  line-height: 1.6;
+  display: block;
+}
+
+.about-meta {
   margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.version {
+  font-size: 24rpx;
+  color: #aaa;
 }
 
 .tab-spacer {
-  height: 120rpx;
+  height: 40rpx;
 }
 
 /* Overlay */

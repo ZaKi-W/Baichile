@@ -12,32 +12,46 @@
 
 ## 本地运行
 
-需要 Node.js 20+ 与 pnpm 11+。
+需要 Node.js 20+、pnpm 11+ 与 Docker Desktop。首次运行：
 
 ```bash
 pnpm install
-cp .env.example .env
-pnpm dev:api
+cp .env.example apps/api/.env
+pnpm db:up
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
 ```
 
-另开终端启动 H5：
+`pnpm dev` 会同时启动 API 和微信小程序增量编译。开发者工具模拟器默认通过
+`http://127.0.0.1:3000` 访问本机 API。
+
+需要调试 H5 时使用：
 
 ```bash
 VITE_API_BASE_URL=http://localhost:3000 pnpm dev:h5
 ```
 
-不启动 API 也能运行客户端，此时使用本地 Mock，并在配送页显示明确标记的开发路线预览。
-
 ## 微信开发者工具
 
+日常开发先启动 API 和持续编译：
+
 ```bash
-pnpm build:mp-weixin
+pnpm dev
 ```
 
-在微信开发者工具中导入：
+首次在微信开发者工具中导入以下目录，之后保持开发命令运行即可自动同步代码，无需重新导入：
 
 ```text
-apps/client/dist/build/mp-weixin
+apps/client/dist/dev/mp-weixin
+```
+
+`pnpm build:mp-weixin` 仅用于生成发布构建，输出目录是 `apps/client/dist/build/mp-weixin`，不要将它作为日常开发目录。
+
+真机预览无法访问电脑的 `127.0.0.1`，需要使用电脑当前局域网 IP，例如：
+
+```bash
+VITE_API_BASE_URL=http://10.3.0.219:3000 pnpm dev
 ```
 
 目前没有正式 AppID。申请小程序后：
@@ -55,13 +69,17 @@ apps/client/dist/build/mp-weixin
 3. 在微信小程序后台添加地图服务所需域名。
 4. 接入前配送页会明确显示“开发预览 · 预设 GCJ-02 路线”，不会伪装成真实地图。
 
-## PostgreSQL/PostGIS
+## PostgreSQL
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+pnpm db:up
+pnpm db:migrate
+pnpm db:seed
 ```
 
-初始化脚本位于 `infra/sql/001_init.sql`。当前本地 API 使用进程内存储保证零配置启动；数据库结构已就绪，生产部署前需将订单、身份与目录 repository 切换到 TypeORM/PostgreSQL adapter。
+数据库由 Docker Desktop 运行，数据保存在 Docker volume 中。游客身份、账号、地址和虚拟订单已经通过 TypeORM 持久化；停止 API 或重启电脑不会丢失。需要停止数据库时运行 `pnpm db:down`。
+
+商品目录与埋点事件也存储在 PostgreSQL。`catalog.seed.ts` 仅作为可重复执行的初始化数据源，应用实际查询来自数据库；应用表结构由 TypeORM migration 管理。
 
 ## 验证
 

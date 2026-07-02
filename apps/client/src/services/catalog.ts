@@ -1,7 +1,6 @@
 import type { HomeResponse, StoreDetail } from '@baichile/api-contract';
 import { mockCategories, mockStores } from '../mock/catalog';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { API_BASE } from '../config/api';
 
 async function request<T>(path: string): Promise<T> {
   if (!API_BASE) throw new Error('mock');

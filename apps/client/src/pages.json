@@ -6,10 +6,13 @@
     { "path": "pages/category/index", "style": { "navigationBarTitleText": "分类" } },
     { "path": "pages/store/index", "style": { "navigationBarTitleText": "店铺" } },
     { "path": "pages/checkout/index", "style": { "navigationBarTitleText": "确认虚拟订单" } },
-    { "path": "pages/delivery/index", "style": { "navigationBarTitleText": "虚拟派送" } },
+    { "path": "pages/delivery/index", "style": { "navigationStyle": "custom" } },
     { "path": "pages/complete/index", "style": { "navigationBarTitleText": "虚拟订单完成" } },
     { "path": "pages/orders/index", "style": { "navigationBarTitleText": "订单" } },
-    { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } }
+    { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } },
+    { "path": "pages/location-picker/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/address-list/index", "style": { "navigationBarTitleText": "选择收货地址" } },
+    { "path": "pages/address-form/index", "style": { "navigationBarTitleText": "新增收货地址" } }
   ],
   "tabBar": {
     "color": "#777777",

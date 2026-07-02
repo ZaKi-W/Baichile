@@ -13,7 +13,8 @@
       }
     },
     "requiredPrivateInfos": [
-      "getLocation"
+      "getLocation",
+      "chooseLocation"
     ],
     "setting": {
       "urlCheck": false,

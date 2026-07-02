@@ -1,12 +1,32 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AuthService } from './auth.service';
 import { CatalogService } from './catalog.service';
 import { OrderService } from './order.service';
 import { MapService } from './map.service';
+import { AddressService } from './address.service';
+import { createDatabaseOptions } from './database/database.config';
+import { AccountEntity } from './database/entities/account.entity';
+import { AddressEntity } from './database/entities/address.entity';
+import { VirtualOrderEntity } from './database/entities/virtual-order.entity';
+import { VisitorSessionEntity } from './database/entities/visitor-session.entity';
+import { CategoryEntity } from './database/entities/category.entity';
+import { StoreEntity } from './database/entities/store.entity';
+import { StoreSubCategoryEntity } from './database/entities/store-sub-category.entity';
+import { MenuItemEntity } from './database/entities/menu-item.entity';
+import { AnalyticsEventEntity } from './database/entities/analytics-event.entity';
+import { AnalyticsService } from './analytics.service';
 
 @Module({
+  imports: [
+    TypeOrmModule.forRoot(createDatabaseOptions()),
+    TypeOrmModule.forFeature([
+      AccountEntity, VisitorSessionEntity, AddressEntity, VirtualOrderEntity,
+      CategoryEntity, StoreEntity, StoreSubCategoryEntity, MenuItemEntity, AnalyticsEventEntity,
+    ]),
+  ],
   controllers: [AppController],
-  providers: [AuthService, CatalogService, OrderService, MapService],
+  providers: [AuthService, CatalogService, OrderService, MapService, AddressService, AnalyticsService],
 })
 export class AppModule {}
