@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Inject, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Param, Post, Query, UnauthorizedException } from '@nestjs/common';
 import type { Address, QuoteRequest, WechatMiniLoginRequest } from '@baichile/api-contract';
 import { AuthService } from './auth.service';
 import { CatalogService } from './catalog.service';
@@ -7,6 +7,7 @@ import { MapService } from './map.service';
 import { AddressService } from './address.service';
 import { DataSource } from 'typeorm';
 import { AnalyticsService } from './analytics.service';
+import { WalletService } from './wallet.service';
 
 @Controller('v1')
 export class AppController {
@@ -18,6 +19,7 @@ export class AppController {
     @Inject(AddressService) private readonly addresses: AddressService,
     @Inject(DataSource) private readonly dataSource: DataSource,
     @Inject(AnalyticsService) private readonly analyticsService: AnalyticsService,
+    @Inject(WalletService) private readonly wallet: WalletService,
   ) {}
 
   @Get('health')
@@ -100,7 +102,7 @@ export class AppController {
     @Headers('authorization') authorization?: string,
   ) {
     const identity = await this.auth.resolvePersistedIdentity(authorization);
-    return this.orders.create(body, identity.visitorId, identity.accountId);
+    return this.orders.create(body, this.requireAccount(identity.accountId));
   }
 
   @Get('orders/me')
@@ -113,6 +115,30 @@ export class AppController {
   async mySavings(@Headers('authorization') authorization?: string) {
     const identity = await this.auth.resolvePersistedIdentity(authorization);
     return this.orders.savings(identity.accountId);
+  }
+
+  @Get('accounts/me/wallet')
+  async myWallet(@Headers('authorization') authorization?: string) {
+    const identity = await this.auth.resolvePersistedIdentity(authorization);
+    return this.wallet.summary(this.requireAccount(identity.accountId));
+  }
+
+  @Get('accounts/me/wallet/transactions')
+  async myWalletTransactions(@Headers('authorization') authorization?: string) {
+    const identity = await this.auth.resolvePersistedIdentity(authorization);
+    return this.wallet.listTransactions(this.requireAccount(identity.accountId));
+  }
+
+  @Post('accounts/me/check-in')
+  async checkIn(@Headers('authorization') authorization?: string) {
+    const identity = await this.auth.resolvePersistedIdentity(authorization);
+    return this.wallet.checkIn(this.requireAccount(identity.accountId));
+  }
+
+  @Post('accounts/me/test-credit')
+  async testCredit(@Headers('authorization') authorization?: string) {
+    const identity = await this.auth.resolvePersistedIdentity(authorization);
+    return this.wallet.testCredit(this.requireAccount(identity.accountId));
   }
 
   @Get('orders/:orderId')
@@ -130,5 +156,12 @@ export class AppController {
       const addresses = await this.addresses.merge(visitorId, accountId, manager);
       return { merged: orders.merged + addresses.merged };
     });
+  }
+
+  private requireAccount(accountId?: string): string {
+    if (!accountId) {
+      throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: '请先登录' });
+    }
+    return accountId;
   }
 }

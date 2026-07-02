@@ -107,6 +107,27 @@ export interface AccountSavings {
   completedOrderCount: number;
 }
 
+export type WalletTransactionType =
+  | 'initial_grant'
+  | 'daily_checkin'
+  | 'order_payment'
+  | 'test_credit';
+
+export interface WalletSummary {
+  balanceCents: number;
+  checkedInToday: boolean;
+}
+
+export interface WalletTransaction {
+  id: string;
+  type: WalletTransactionType;
+  amountCents: number;
+  balanceAfterCents: number;
+  orderId?: string;
+  description: string;
+  createdAt: string;
+}
+
 export interface VirtualOrder extends OrderQuote {
   id: string;
   isVirtual: true;
@@ -177,6 +198,13 @@ export interface PlaceSuggestion {
 }
 
 export interface ApiError {
-  code: 'BAD_REQUEST' | 'NOT_FOUND' | 'PRICE_CHANGED' | 'UNAUTHORIZED' | 'CONFIG_MISSING';
+  code:
+    | 'BAD_REQUEST'
+    | 'NOT_FOUND'
+    | 'PRICE_CHANGED'
+    | 'UNAUTHORIZED'
+    | 'CONFIG_MISSING'
+    | 'INSUFFICIENT_BALANCE'
+    | 'ALREADY_CHECKED_IN';
   message: string;
 }

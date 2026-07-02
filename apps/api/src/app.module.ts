@@ -17,6 +17,8 @@ import { StoreSubCategoryEntity } from './database/entities/store-sub-category.e
 import { MenuItemEntity } from './database/entities/menu-item.entity';
 import { AnalyticsEventEntity } from './database/entities/analytics-event.entity';
 import { AnalyticsService } from './analytics.service';
+import { WalletTransactionEntity } from './database/entities/wallet-transaction.entity';
+import { WalletService } from './wallet.service';
 
 @Module({
   imports: [
@@ -24,9 +26,10 @@ import { AnalyticsService } from './analytics.service';
     TypeOrmModule.forFeature([
       AccountEntity, VisitorSessionEntity, AddressEntity, VirtualOrderEntity,
       CategoryEntity, StoreEntity, StoreSubCategoryEntity, MenuItemEntity, AnalyticsEventEntity,
+      WalletTransactionEntity,
     ]),
   ],
   controllers: [AppController],
-  providers: [AuthService, CatalogService, OrderService, MapService, AddressService, AnalyticsService],
+  providers: [AuthService, CatalogService, OrderService, MapService, AddressService, AnalyticsService, WalletService],
 })
 export class AppModule {}

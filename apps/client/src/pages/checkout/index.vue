@@ -5,10 +5,15 @@ import { useCartStore } from '../../stores/cart';
 import { useOrderStore } from '../../stores/orders';
 import { useAddressStore } from '../../stores/address';
 import { orderService } from '../../services/orders';
+import { useAuthStore } from '../../stores/auth';
+import { useWalletStore } from '../../stores/wallet';
+import { ApiRequestError } from '../../services/http';
 
 const cart = useCartStore();
 const orders = useOrderStore();
 const addressStore = useAddressStore();
+const auth = useAuthStore();
+const wallet = useWalletStore();
 const submitting = ref(false);
 
 const selectedAddress = computed(() => addressStore.selected);
@@ -32,6 +37,12 @@ const canSubmit = computed(() => cart.lines.length > 0 && !!selectedAddress.valu
 
 async function submit() {
   if (!canSubmit.value || submitting.value) return;
+  if (!auth.accountId) {
+    auth.requestLogin();
+    uni.showToast({ title: '请先登录后使用虚拟余额下单', icon: 'none' });
+    setTimeout(() => uni.switchTab({ url: '/pages/profile/index' }), 350);
+    return;
+  }
   if (!selectedAddress.value) {
     uni.showToast({ title: '请选择收货地址', icon: 'none' });
     return;
@@ -40,17 +51,20 @@ async function submit() {
   try {
     const order = await orderService.create(request.value);
     orders.save(order);
+    wallet.recordPayment(order.totalCents);
     cart.clear();
     uni.redirectTo({ url: `/pages/delivery/index?id=${order.id}` });
-  } catch {
-    uni.showToast({ title: '订单创建失败，请重试', icon: 'none' });
+    void wallet.load().catch(() => undefined);
+  } catch (error) {
+    const insufficient = error instanceof ApiRequestError && error.code === 'INSUFFICIENT_BALANCE';
+    uni.showToast({ title: insufficient ? '余额不足' : '订单创建失败，请重试', icon: 'none' });
   } finally { submitting.value = false; }
 }
 </script>
 
 <template>
   <view class="page">
-    <view class="virtual-notice">本订单仅为互动模拟，不会扣款、不会发货。</view>
+    <view class="virtual-notice">仅扣除应用内虚拟余额，不涉及真实支付。</view>
 
     <!-- 收货地址卡片 -->
     <view class="address-card" @tap="openAddressPicker">

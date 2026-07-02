@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { CreatePersistenceTables1760000000000 } from '../src/database/migrations/1760000000000-CreatePersistenceTables';
 import { CreateCatalogAndAnalyticsTables1760000001000 } from '../src/database/migrations/1760000001000-CreateCatalogAndAnalyticsTables';
 import { AddCalories1760000002000 } from '../src/database/migrations/1760000002000-AddCalories';
+import { AddWallet1760000003000 } from '../src/database/migrations/1760000003000-AddWallet';
 
 describe('persistence migration', () => {
   let db: DataSource;
@@ -15,6 +16,7 @@ describe('persistence migration', () => {
         CreatePersistenceTables1760000000000,
         CreateCatalogAndAnalyticsTables1760000001000,
         AddCalories1760000002000,
+        AddWallet1760000003000,
       ],
     });
     await db.initialize();
@@ -60,5 +62,19 @@ describe('persistence migration', () => {
     ) as Array<{ table_name: string; column_name: string }>;
 
     expect(rows).toHaveLength(3);
+  });
+
+  it('adds account balances and immutable wallet transactions', async () => {
+    const columns = await db.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'accounts' AND column_name = 'balance_cents'`,
+    ) as Array<{ column_name: string }>;
+    const tables = await db.query(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'wallet_transactions'`,
+    ) as Array<{ table_name: string }>;
+
+    expect(columns).toHaveLength(1);
+    expect(tables).toHaveLength(1);
   });
 });

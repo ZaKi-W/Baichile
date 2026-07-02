@@ -22,6 +22,7 @@ export const useAuthStore = defineStore('auth', {
     accountId: '' as string,
     provider: 'guest' as 'guest' | 'dev-mock' | 'wechat',
     userProfile: { ...EMPTY_PROFILE } as UserProfile,
+    loginRequested: false,
   }),
   actions: {
     async ensureGuest() {
@@ -113,6 +114,14 @@ export const useAuthStore = defineStore('auth', {
         provider: this.provider,
         profile: this.userProfile,
       } satisfies AccountSession);
+    },
+    requestLogin() {
+      this.loginRequested = true;
+    },
+    consumeLoginRequest() {
+      const requested = this.loginRequested;
+      this.loginRequested = false;
+      return requested;
     },
     async devLogin() {
       if (import.meta.env.PROD) throw new Error('生产环境不可使用模拟微信登录');

@@ -4,6 +4,7 @@ import { onShow } from '@dcloudio/uni-app';
 import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { useAddressStore } from '../../stores/address';
+import { useWalletStore } from '../../stores/wallet';
 
 interface ChooseAvatarEvent {
   detail: {
@@ -14,14 +15,20 @@ interface ChooseAvatarEvent {
 const auth = useAuthStore();
 const orders = useOrderStore();
 const addresses = useAddressStore();
+const wallet = useWalletStore();
 const showLoginPopup = ref(false);
 const avatarUrl = ref('');
 const nickname = ref('');
 const loading = ref(false);
+const walletAction = ref<'check-in' | 'credit' | ''>('');
 
 onShow(() => {
   void orders.load();
   void addresses.load();
+  if (auth.accountId) {
+    void wallet.load().catch(() => uni.showToast({ title: '余额加载失败', icon: 'none' }));
+  }
+  else if (auth.consumeLoginRequest()) showLoginPopup.value = true;
 });
 
 function openLogin() {
@@ -30,6 +37,36 @@ function openLogin() {
 
 function openAddresses() {
   uni.navigateTo({ url: '/pages/address-list/index' });
+}
+
+function openWallet() {
+  uni.navigateTo({ url: '/pages/wallet/index' });
+}
+
+async function checkIn() {
+  if (wallet.summary.checkedInToday || walletAction.value) return;
+  walletAction.value = 'check-in';
+  try {
+    await wallet.checkIn();
+    uni.showToast({ title: '签到成功，获得 ¥100', icon: 'success' });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '签到失败', icon: 'none' });
+  } finally {
+    walletAction.value = '';
+  }
+}
+
+async function addTestCredit() {
+  if (walletAction.value) return;
+  walletAction.value = 'credit';
+  try {
+    await wallet.addTestCredit();
+    uni.showToast({ title: '已增加 ¥1000', icon: 'success' });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '加钱失败', icon: 'none' });
+  } finally {
+    walletAction.value = '';
+  }
 }
 
 function closeLogin() {
@@ -59,6 +96,7 @@ async function login() {
     uni.showToast({ title: '登录成功', icon: 'success' });
     void orders.load();
     void addresses.load();
+    void wallet.load().catch(() => uni.showToast({ title: '余额加载失败', icon: 'none' }));
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : '登录失败，请重试',
@@ -107,11 +145,47 @@ async function login() {
       <button class="login-btn" @tap="openLogin">
         <text class="login-btn-text">微信登录</text>
       </button>
-      <text class="guest-hint">你也可以继续以游客身份浏览和下单</text>
+      <text class="guest-hint">你可以先浏览店铺，登录后使用虚拟余额下单</text>
+    </view>
+
+    <view v-if="auth.accountId" class="wallet-card">
+      <view class="wallet-balance" @tap="openWallet">
+        <text class="wallet-label">虚拟余额</text>
+        <view class="wallet-amount-row">
+          <text class="wallet-currency">¥</text>
+          <text class="wallet-amount">{{ (wallet.summary.balanceCents / 100).toFixed(2) }}</text>
+          <text class="wallet-arrow">›</text>
+        </view>
+        <text class="wallet-note">仅限应用内体验，不可充值或提现</text>
+      </view>
+      <view class="wallet-actions">
+        <button
+          class="wallet-action check-in"
+          :loading="walletAction === 'check-in'"
+          :disabled="wallet.summary.checkedInToday || !!walletAction"
+          @tap="checkIn"
+        >
+          {{ wallet.summary.checkedInToday ? '今日已签到' : '签到领 ¥100' }}
+        </button>
+        <button
+          class="wallet-action test-credit"
+          :loading="walletAction === 'credit'"
+          :disabled="!!walletAction"
+          @tap="addTestCredit"
+        >
+          测试加 ¥1000
+        </button>
+      </view>
     </view>
 
     <!-- Menu section -->
     <view class="menu-card">
+      <view v-if="auth.accountId" class="menu-item" @tap="openWallet">
+        <text class="menu-icon">👛</text>
+        <text class="menu-text">我的钱包</text>
+        <text class="menu-arrow">›</text>
+      </view>
+      <view v-if="auth.accountId" class="menu-divider" />
       <view class="menu-item">
         <text class="menu-icon">📦</text>
         <text class="menu-text">我的订单</text>
@@ -337,6 +411,85 @@ async function login() {
 }
 
 /* Menu card */
+.wallet-card {
+  margin: 0 24rpx 24rpx;
+  overflow: hidden;
+  border-radius: 24rpx;
+  background: #20211d;
+  color: #fff;
+  box-shadow: 0 12rpx 28rpx rgba(25, 26, 22, 0.16);
+}
+
+.wallet-balance {
+  padding: 30rpx 30rpx 24rpx;
+}
+
+.wallet-label,
+.wallet-note {
+  display: block;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 23rpx;
+}
+
+.wallet-amount-row {
+  display: flex;
+  align-items: baseline;
+  margin: 10rpx 0 12rpx;
+}
+
+.wallet-currency {
+  margin-right: 8rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.wallet-amount {
+  flex: 1;
+  font-size: 56rpx;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.wallet-arrow {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 42rpx;
+}
+
+.wallet-actions {
+  display: flex;
+  gap: 16rpx;
+  padding: 20rpx 24rpx;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.wallet-action {
+  flex: 1;
+  height: 72rpx;
+  margin: 0;
+  border-radius: 36rpx;
+  font-size: 25rpx;
+  font-weight: 700;
+  line-height: 72rpx;
+}
+
+.wallet-action::after {
+  border: 0;
+}
+
+.wallet-action.check-in {
+  color: #161714;
+  background: #dff75a;
+}
+
+.wallet-action.test-credit {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.wallet-action[disabled] {
+  opacity: 0.55;
+}
+
 .menu-card {
   background: #fff;
   margin: 0 24rpx 24rpx;
