@@ -10,8 +10,9 @@ import {
 import type { DeliveryStatus, GeoPoint, VirtualRoute } from '@baichile/map-core';
 import { CatalogService } from './catalog.service';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { VirtualOrderEntity } from './database/entities/virtual-order.entity';
+import { WalletService } from './wallet.service';
 
 export function summarizeCompletedOrders(
   orders: Array<{
@@ -34,6 +35,8 @@ export class OrderService {
   constructor(
     @Inject(CatalogService) private readonly catalog: CatalogService,
     @InjectRepository(VirtualOrderEntity) private readonly orders: Repository<VirtualOrderEntity>,
+    @Inject(DataSource) private readonly dataSource: DataSource,
+    @Inject(WalletService) private readonly wallet: WalletService,
   ) {}
 
   async quote(request: QuoteRequest): Promise<OrderQuote> {
@@ -76,7 +79,8 @@ export class OrderService {
     };
   }
 
-  async create(request: QuoteRequest, visitorId?: string, accountId?: string): Promise<VirtualOrder> {
+  async create(request: QuoteRequest, accountId: string): Promise<VirtualOrder> {
+    await this.wallet.initializeAccount(accountId);
     const quote = await this.quote(request);
     const store = await this.catalog.find(request.storeId);
     const id = randomUUID();
@@ -85,7 +89,6 @@ export class OrderService {
       ...quote,
       id,
       isVirtual: true,
-      visitorId: visitorId || 'anonymous',
       accountId,
       virtualDestinationId: request.virtualDestinationId,
       status: 'created',
@@ -94,24 +97,27 @@ export class OrderService {
       seed: id.slice(0, 8),
       route,
     };
-    await this.orders.save(this.orders.create({
-      id: order.id,
-      visitorId: visitorId ?? null,
-      accountId: accountId ?? null,
-      status: order.status,
-      storeId: order.storeId,
-      destinationId: order.virtualDestinationId,
-      startedAt: new Date(order.startedAt),
-      durationMs: order.durationMs,
-      seed: order.seed,
-      itemsTotalCents: order.itemsTotalCents,
-      deliveryFeeCents: order.deliveryFeeCents,
-      packingFeeCents: order.packingFeeCents,
-      totalCents: order.totalCents,
-      itemsTotalCaloriesKcal: order.itemsTotalCaloriesKcal,
-      lines: order.lines,
-      route: order.route,
-    }));
+    await this.dataSource.transaction(async (manager) => {
+      await manager.getRepository(VirtualOrderEntity).save(manager.getRepository(VirtualOrderEntity).create({
+        id: order.id,
+        visitorId: null,
+        accountId,
+        status: order.status,
+        storeId: order.storeId,
+        destinationId: order.virtualDestinationId,
+        startedAt: new Date(order.startedAt),
+        durationMs: order.durationMs,
+        seed: order.seed,
+        itemsTotalCents: order.itemsTotalCents,
+        deliveryFeeCents: order.deliveryFeeCents,
+        packingFeeCents: order.packingFeeCents,
+        totalCents: order.totalCents,
+        itemsTotalCaloriesKcal: order.itemsTotalCaloriesKcal,
+        lines: order.lines,
+        route: order.route,
+      }));
+      await this.wallet.debitOrder(manager, accountId, order.totalCents, order.id);
+    });
     return order;
   }
 

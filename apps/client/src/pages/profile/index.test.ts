@@ -31,4 +31,13 @@ describe('profile page WeChat login', () => {
     expect(source).toContain('min-height: 52rpx');
     expect(source).not.toContain('money-value');
   });
+
+  it('shows the wallet balance, daily check-in and test credit controls', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('wallet.summary.balanceCents');
+    expect(source).toContain('签到领 ¥100');
+    expect(source).toContain('测试加 ¥1000');
+    expect(source).toContain("'/pages/wallet/index'");
+  });
 });

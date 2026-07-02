@@ -11,6 +11,8 @@ import { MenuItemEntity } from './entities/menu-item.entity';
 import { AnalyticsEventEntity } from './entities/analytics-event.entity';
 import { CreateCatalogAndAnalyticsTables1760000001000 } from './migrations/1760000001000-CreateCatalogAndAnalyticsTables';
 import { AddCalories1760000002000 } from './migrations/1760000002000-AddCalories';
+import { WalletTransactionEntity } from './entities/wallet-transaction.entity';
+import { AddWallet1760000003000 } from './migrations/1760000003000-AddWallet';
 
 export function createDatabaseOptions(): PostgresConnectionOptions {
   const url = process.env.DATABASE_URL;
@@ -25,11 +27,13 @@ export function createDatabaseOptions(): PostgresConnectionOptions {
     entities: [
       AccountEntity, VisitorSessionEntity, AddressEntity, VirtualOrderEntity,
       CategoryEntity, StoreEntity, StoreSubCategoryEntity, MenuItemEntity, AnalyticsEventEntity,
+      WalletTransactionEntity,
     ],
     migrations: [
       CreatePersistenceTables1760000000000,
       CreateCatalogAndAnalyticsTables1760000001000,
       AddCalories1760000002000,
+      AddWallet1760000003000,
     ],
   };
 }

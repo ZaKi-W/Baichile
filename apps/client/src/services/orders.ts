@@ -1,9 +1,9 @@
 import type { AccountSavings, OrderQuote, QuoteRequest, VirtualOrder } from '@baichile/api-contract';
 import { calculateLineCalories, calculateOrderTotal } from '@baichile/domain';
-import type { GeoPoint, VirtualRoute } from '@baichile/map-core';
 import { catalogService } from './catalog';
 import { useAuthStore } from '../stores/auth';
 import { API_BASE } from '../config/api';
+import { ApiRequestError, requestApi } from './http';
 
 function post<T>(path: string, data: unknown, headers: Record<string, string> = {}): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -56,27 +56,6 @@ async function localQuote(request: QuoteRequest): Promise<OrderQuote> {
   };
 }
 
-function localRoute(id: string, destinationPoint?: GeoPoint): VirtualRoute {
-  const p = (lat: number, lng: number): GeoPoint => ({ lat, lng, coordSystem: 'gcj02' });
-  const destination = destinationPoint || p(31.2338, 121.4782);
-
-  // Generate store origin near destination (0.5–2.5 km away)
-  const seed = Math.abs(id.split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0));
-  const angle = (seed % 360) * (Math.PI / 180);
-  const dist = 0.5 + ((seed % 200) / 100); // 0.5 ~ 2.5 km
-  const dLat = (dist * Math.cos(angle)) / 111;
-  const dLng = (dist * Math.sin(angle)) / (111 * Math.cos(destination.lat * Math.PI / 180));
-  const origin = p(destination.lat + dLat, destination.lng + dLng);
-
-  const polyline = [
-    origin,
-    p(origin.lat + (destination.lat - origin.lat) * 0.34, origin.lng + (destination.lng - origin.lng) * 0.3),
-    p(origin.lat + (destination.lat - origin.lat) * 0.68, origin.lng + (destination.lng - origin.lng) * 0.72),
-    destination,
-  ];
-  return { id: `route_${id}`, cityCode: '310000', origin, destination, polyline, routeSource: 'generated', label: '虚拟配送路线' };
-}
-
 export const orderService = {
   async quote(request: QuoteRequest): Promise<OrderQuote> {
     if (!API_BASE) return localQuote(request);
@@ -85,20 +64,9 @@ export const orderService = {
   async create(request: QuoteRequest): Promise<VirtualOrder> {
     const auth = useAuthStore();
     if (API_BASE) {
-      return post<VirtualOrder>('/v1/orders/virtual', request, {
-        Authorization: `Bearer ${auth.accessToken}`,
-      });
+      return requestApi<VirtualOrder>('POST', '/v1/orders/virtual', auth.accessToken, request);
     }
-    const quote = await localQuote(request);
-    const store = await catalogService.store(request.storeId);
-    const id = `local_${Date.now()}`;
-    return {
-      ...quote, id, isVirtual: true, visitorId: auth.visitorId,
-      virtualDestinationId: request.virtualDestinationId, status: 'created',
-      accountId: auth.accountId || undefined,
-      startedAt: new Date().toISOString(), durationMs: store.virtualDeliveryMinutes * 60_000,
-      seed: id, route: localRoute(id, request.virtualDestinationPoint),
-    };
+    throw new ApiRequestError('服务未配置，暂时无法创建订单');
   },
   async list(): Promise<VirtualOrder[]> {
     const auth = useAuthStore();

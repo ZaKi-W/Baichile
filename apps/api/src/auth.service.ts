@@ -1,10 +1,11 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type { AccountSession, GuestSession, WechatMiniLoginRequest } from '@baichile/api-contract';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { AccountEntity } from './database/entities/account.entity';
 import { VisitorSessionEntity } from './database/entities/visitor-session.entity';
+import { WalletService } from './wallet.service';
 
 interface WechatCodeSession {
   openid?: string;
@@ -18,6 +19,7 @@ export class AuthService {
   constructor(
     @InjectRepository(AccountEntity) private readonly accounts: Repository<AccountEntity>,
     @InjectRepository(VisitorSessionEntity) private readonly visitors: Repository<VisitorSessionEntity>,
+    @Inject(WalletService) private readonly wallet: WalletService,
   ) {}
 
   resolveIdentity(authorization?: string): { visitorId?: string; accountId?: string } {
@@ -36,11 +38,15 @@ export class AuthService {
   async resolvePersistedIdentity(authorization?: string): Promise<{ visitorId?: string; accountId?: string }> {
     const identity = this.resolveIdentity(authorization);
     if (identity.accountId && !await this.accounts.existsBy({ id: identity.accountId })) {
-      await this.accounts.insert({
-        id: identity.accountId,
-        wechatOpenIdHash: null,
-        nickname: null,
-        avatarUrl: null,
+      await this.accounts.manager.transaction(async (manager) => {
+        await manager.getRepository(AccountEntity).insert({
+          id: identity.accountId!,
+          wechatOpenIdHash: null,
+          nickname: null,
+          avatarUrl: null,
+          balanceCents: 0,
+        });
+        await this.wallet.initializeAccount(identity.accountId!, manager);
       });
     }
     return identity;
@@ -80,9 +86,13 @@ export class AuthService {
         provider: 'dev-mock',
         profile,
       };
-      await this.accounts.save(this.accounts.create({
-        id: session.accountId, wechatOpenIdHash: null, nickname: profile.nickname, avatarUrl: profile.avatarUrl,
-      }));
+      await this.accounts.manager.transaction(async (manager) => {
+        await manager.save(manager.getRepository(AccountEntity).create({
+          id: session.accountId, wechatOpenIdHash: null, nickname: profile.nickname,
+          avatarUrl: profile.avatarUrl, balanceCents: 0,
+        }));
+        await this.wallet.initializeAccount(session.accountId, manager);
+      });
       return session;
     }
 
@@ -101,9 +111,13 @@ export class AuthService {
     const digest = createHash('sha256').update(session.openid).digest('hex');
     const existing = await this.accounts.findOneBy({ wechatOpenIdHash: digest });
     const accountId = existing?.id ?? `account_${digest.slice(0, 24)}`;
-    await this.accounts.save(this.accounts.create({
-      ...existing, id: accountId, wechatOpenIdHash: digest, nickname: profile.nickname, avatarUrl: profile.avatarUrl,
-    }));
+    await this.accounts.manager.transaction(async (manager) => {
+      await manager.save(manager.getRepository(AccountEntity).create({
+        ...existing, id: accountId, wechatOpenIdHash: digest, nickname: profile.nickname,
+        avatarUrl: profile.avatarUrl, balanceCents: existing?.balanceCents ?? 0,
+      }));
+      await this.wallet.initializeAccount(accountId, manager);
+    });
     return {
       accountId,
       accessToken: `account.${digest}`,

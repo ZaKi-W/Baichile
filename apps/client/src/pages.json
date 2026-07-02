@@ -10,6 +10,7 @@
     { "path": "pages/complete/index", "style": { "navigationBarTitleText": "虚拟订单完成" } },
     { "path": "pages/orders/index", "style": { "navigationBarTitleText": "订单" } },
     { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } },
+    { "path": "pages/wallet/index", "style": { "navigationBarTitleText": "我的钱包" } },
     { "path": "pages/location-picker/index", "style": { "navigationStyle": "custom" } },
     { "path": "pages/address-list/index", "style": { "navigationBarTitleText": "选择收货地址" } },
     { "path": "pages/address-form/index", "style": { "navigationBarTitleText": "新增收货地址" } }

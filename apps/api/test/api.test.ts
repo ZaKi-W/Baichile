@@ -110,6 +110,62 @@ describe('MVP API', () => {
     expect(response.body).not.toContain('session_key');
   });
 
+  it('initializes an account wallet and supports daily check-in and test credits', async () => {
+    const initial = await app.inject({
+      method: 'GET',
+      url: '/v1/accounts/me/wallet',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    expect(initial.statusCode).toBe(200);
+    expect(initial.json()).toEqual({ balanceCents: 30_000, checkedInToday: false });
+
+    const checkIn = await app.inject({
+      method: 'POST',
+      url: '/v1/accounts/me/check-in',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    expect(checkIn.statusCode).toBe(201);
+    expect(checkIn.json()).toEqual({ balanceCents: 40_000, checkedInToday: true });
+
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: '/v1/accounts/me/check-in',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json().code).toBe('ALREADY_CHECKED_IN');
+
+    const credit = await app.inject({
+      method: 'POST',
+      url: '/v1/accounts/me/test-credit',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    expect(credit.statusCode).toBe(201);
+    expect(credit.json()).toEqual({ balanceCents: 140_000, checkedInToday: true });
+
+    const transactions = await app.inject({
+      method: 'GET',
+      url: '/v1/accounts/me/wallet/transactions',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    expect(transactions.statusCode).toBe(200);
+    expect(transactions.json().map((item: { type: string }) => item.type)).toEqual([
+      'test_credit',
+      'daily_checkin',
+      'initial_grant',
+    ]);
+  });
+
+  it('rejects wallet access and order creation for guests', async () => {
+    const wallet = await app.inject({
+      method: 'GET',
+      url: '/v1/accounts/me/wallet',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(wallet.statusCode).toBe(401);
+    expect(wallet.json().code).toBe('UNAUTHORIZED');
+  });
+
   it('rejects missing WeChat credentials in production', async () => {
     const previousNodeEnv = process.env.NODE_ENV;
     const previousAppId = process.env.WECHAT_MINI_APP_ID;
@@ -173,19 +229,14 @@ describe('MVP API', () => {
     expect(quote.json().lines[0].totalCaloriesKcal).toBe(
       quote.json().lines[0].unitCaloriesKcal * 2,
     );
-    const order = await app.inject({
+    const guestOrder = await app.inject({
       method: 'POST',
       url: '/v1/orders/virtual',
       headers: { authorization: `Bearer ${token}`, 'x-visitor-id': visitorId },
       payload,
     });
-    expect(order.statusCode).toBe(201);
-    expect(order.json().isVirtual).toBe(true);
-    expect(order.json().totalCents).toBe(quote.json().totalCents);
-    expect(order.json().itemsTotalCaloriesKcal).toBe(quote.json().itemsTotalCaloriesKcal);
-    expect(order.json().durationMs).toBe(store.virtualDeliveryMinutes * 60_000);
-    expect(order.json().route.label).toBe('虚拟配送路线');
-    expect(order.json().route.destination).toEqual(payload.virtualDestinationPoint);
+    expect(guestOrder.statusCode).toBe(401);
+    expect(guestOrder.json().code).toBe('UNAUTHORIZED');
 
     const accountOrder = await app.inject({
       method: 'POST',
@@ -197,6 +248,19 @@ describe('MVP API', () => {
     });
     expect(accountOrder.statusCode).toBe(201);
     expect(accountOrder.json().accountId).toBe(accountId);
+    expect(accountOrder.json().isVirtual).toBe(true);
+    expect(accountOrder.json().totalCents).toBe(quote.json().totalCents);
+    expect(accountOrder.json().itemsTotalCaloriesKcal).toBe(quote.json().itemsTotalCaloriesKcal);
+    expect(accountOrder.json().durationMs).toBe(store.virtualDeliveryMinutes * 60_000);
+    expect(accountOrder.json().route.label).toBe('虚拟配送路线');
+    expect(accountOrder.json().route.destination).toEqual(payload.virtualDestinationPoint);
+
+    const walletAfterOrder = await app.inject({
+      method: 'GET',
+      url: '/v1/accounts/me/wallet',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    expect(walletAfterOrder.json().balanceCents).toBe(140_000 - accountOrder.json().totalCents);
 
     const anonymousList = await app.inject({ method: 'GET', url: '/v1/orders/me' });
     expect(anonymousList.json()).toEqual([]);
@@ -246,6 +310,32 @@ describe('MVP API', () => {
       savedCaloriesKcal: accountOrder.json().itemsTotalCaloriesKcal,
       completedOrderCount: 1,
     });
+
+    const beforeInsufficient = await app.inject({
+      method: 'GET',
+      url: '/v1/orders/me',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    const balanceDatabase = new DataSource(createDatabaseOptions());
+    await balanceDatabase.initialize();
+    await balanceDatabase.query('UPDATE accounts SET balance_cents = 0 WHERE id = $1', [accountId]);
+    await balanceDatabase.destroy();
+
+    const insufficient = await app.inject({
+      method: 'POST',
+      url: '/v1/orders/virtual',
+      headers: { authorization: `Bearer ${accountToken}` },
+      payload,
+    });
+    expect(insufficient.statusCode).toBe(409);
+    expect(insufficient.json().code).toBe('INSUFFICIENT_BALANCE');
+
+    const afterInsufficient = await app.inject({
+      method: 'GET',
+      url: '/v1/orders/me',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    expect(afterInsufficient.json()).toHaveLength(beforeInsufficient.json().length);
   });
 
   it('keeps account data after the application restarts', async () => {
