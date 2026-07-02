@@ -28,5 +28,7 @@ describe('profile page WeChat login', () => {
     expect(source).toContain('orders.savings.completedOrderCount');
     expect(source).toContain('累计省下');
     expect(source).toContain('约省卡路里');
+    expect(source).toContain('min-height: 52rpx');
+    expect(source).not.toContain('money-value');
   });
 });

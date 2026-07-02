@@ -7,6 +7,6 @@ describe('orders savings presentation', () => {
 
     expect(source).toContain("isCompleted(order.startedAt, order.durationMs)");
     expect(source).toContain('省 ¥{{ (order.totalCents / 100).toFixed(2) }}');
-    expect(source).toContain('约省 {{ order.itemsTotalCaloriesKcal }} 千卡');
+    expect(source).toContain('约省 {{ order.itemsTotalCaloriesKcal || 0 }} 千卡');
   });
 });

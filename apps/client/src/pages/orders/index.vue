@@ -39,7 +39,7 @@ onHide(() => clearInterval(statusTimer));
         </view>
         <view v-if="isCompleted(order.startedAt, order.durationMs)" class="savings">
           <text>省 ¥{{ (order.totalCents / 100).toFixed(2) }}</text>
-          <text class="calorie-saving">约省 {{ order.itemsTotalCaloriesKcal }} 千卡</text>
+          <text class="calorie-saving">约省 {{ order.itemsTotalCaloriesKcal || 0 }} 千卡</text>
         </view>
         <text v-else>¥{{ (order.totalCents / 100).toFixed(2) }}</text>
       </view>

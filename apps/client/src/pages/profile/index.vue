@@ -89,7 +89,7 @@ async function login() {
           <text class="stat-label">完成订单</text>
         </view>
         <view class="stat-item">
-          <text class="stat-value money-value">¥{{ (orders.savings.savedMoneyCents / 100).toFixed(2) }}</text>
+          <text class="stat-value">¥{{ (orders.savings.savedMoneyCents / 100).toFixed(2) }}</text>
           <text class="stat-label">累计省下</text>
         </view>
         <view class="stat-item">
@@ -255,13 +255,17 @@ async function login() {
 }
 
 .stat-value {
-  font-size: 44rpx;
+  min-height: 52rpx;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  box-sizing: border-box;
+  font-size: 38rpx;
   font-weight: 700;
   color: #fff;
   line-height: 1;
+  white-space: nowrap;
 }
-
-.money-value { font-size: 36rpx; }
 
 .stat-label {
   font-size: 24rpx;
