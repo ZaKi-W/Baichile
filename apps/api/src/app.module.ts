@@ -19,6 +19,9 @@ import { AnalyticsEventEntity } from './database/entities/analytics-event.entity
 import { AnalyticsService } from './analytics.service';
 import { WalletTransactionEntity } from './database/entities/wallet-transaction.entity';
 import { WalletService } from './wallet.service';
+import { AdminUserEntity } from './database/entities/admin-user.entity';
+import { AdminSessionEntity } from './database/entities/admin-session.entity';
+import { AdminAuditLogEntity } from './database/entities/admin-audit-log.entity';
 
 @Module({
   imports: [
@@ -27,6 +30,7 @@ import { WalletService } from './wallet.service';
       AccountEntity, VisitorSessionEntity, AddressEntity, VirtualOrderEntity,
       CategoryEntity, StoreEntity, StoreSubCategoryEntity, MenuItemEntity, AnalyticsEventEntity,
       WalletTransactionEntity,
+      AdminUserEntity, AdminSessionEntity, AdminAuditLogEntity,
     ]),
   ],
   controllers: [AppController],

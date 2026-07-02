@@ -1,6 +1,7 @@
 import type { SpecGroup } from '@baichile/domain';
 import type { DeliveryIncidentAssignment } from '@baichile/domain';
 import type { DeliveryStatus, VirtualRoute } from '@baichile/map-core';
+export * from './admin';
 
 export type SourceType = 'original' | 'licensed' | 'authorized' | 'derived';
 
@@ -113,7 +114,8 @@ export type WalletTransactionType =
   | 'daily_checkin'
   | 'order_payment'
   | 'test_credit'
-  | 'order_refund';
+  | 'order_refund'
+  | 'admin_adjustment';
 
 export interface WalletSummary {
   balanceCents: number;

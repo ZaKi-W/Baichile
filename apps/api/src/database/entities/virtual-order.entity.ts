@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
+import type { AdminOrderStatus } from '@baichile/api-contract';
+import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('virtual_orders')
 export class VirtualOrderEntity {
@@ -22,5 +23,8 @@ export class VirtualOrderEntity {
   @Column({ name: 'incident_started_at', type: 'timestamptz', nullable: true }) incidentStartedAt!: Date | null;
   @Column({ name: 'failed_at', type: 'timestamptz', nullable: true }) failedAt!: Date | null;
   @Column({ name: 'refunded_at', type: 'timestamptz', nullable: true }) refundedAt!: Date | null;
+  @Column({ name: 'admin_status', type: 'text', default: 'normal' }) adminStatus!: AdminOrderStatus;
+  @Column({ name: 'admin_note', type: 'text', default: '' }) adminNote!: string;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt!: Date;
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' }) updatedAt!: Date;
 }

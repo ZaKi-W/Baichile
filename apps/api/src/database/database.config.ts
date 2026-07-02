@@ -14,6 +14,10 @@ import { AddCalories1760000002000 } from './migrations/1760000002000-AddCalories
 import { WalletTransactionEntity } from './entities/wallet-transaction.entity';
 import { AddWallet1760000003000 } from './migrations/1760000003000-AddWallet';
 import { AddDeliveryIncidents1760000004000 } from './migrations/1760000004000-AddDeliveryIncidents';
+import { AdminUserEntity } from './entities/admin-user.entity';
+import { AdminSessionEntity } from './entities/admin-session.entity';
+import { AdminAuditLogEntity } from './entities/admin-audit-log.entity';
+import { AddAdminConsole1760000005000 } from './migrations/1760000005000-AddAdminConsole';
 
 export function createDatabaseOptions(): PostgresConnectionOptions {
   const url = process.env.DATABASE_URL;
@@ -29,6 +33,7 @@ export function createDatabaseOptions(): PostgresConnectionOptions {
       AccountEntity, VisitorSessionEntity, AddressEntity, VirtualOrderEntity,
       CategoryEntity, StoreEntity, StoreSubCategoryEntity, MenuItemEntity, AnalyticsEventEntity,
       WalletTransactionEntity,
+      AdminUserEntity, AdminSessionEntity, AdminAuditLogEntity,
     ],
     migrations: [
       CreatePersistenceTables1760000000000,
@@ -36,6 +41,7 @@ export function createDatabaseOptions(): PostgresConnectionOptions {
       AddCalories1760000002000,
       AddWallet1760000003000,
       AddDeliveryIncidents1760000004000,
+      AddAdminConsole1760000005000,
     ],
   };
 }

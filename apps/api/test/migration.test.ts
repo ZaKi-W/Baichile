@@ -5,6 +5,7 @@ import { CreateCatalogAndAnalyticsTables1760000001000 } from '../src/database/mi
 import { AddCalories1760000002000 } from '../src/database/migrations/1760000002000-AddCalories';
 import { AddWallet1760000003000 } from '../src/database/migrations/1760000003000-AddWallet';
 import { AddDeliveryIncidents1760000004000 } from '../src/database/migrations/1760000004000-AddDeliveryIncidents';
+import { AddAdminConsole1760000005000 } from '../src/database/migrations/1760000005000-AddAdminConsole';
 
 describe('persistence migration', () => {
   let db: DataSource;
@@ -19,6 +20,7 @@ describe('persistence migration', () => {
         AddCalories1760000002000,
         AddWallet1760000003000,
         AddDeliveryIncidents1760000004000,
+        AddAdminConsole1760000005000,
       ],
     });
     await db.initialize();
@@ -94,5 +96,27 @@ describe('persistence migration', () => {
 
     expect(columns).toHaveLength(4);
     expect(indexes).toHaveLength(1);
+  });
+
+  it('adds admin tables and managed business fields', async () => {
+    const tables = await db.query(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = ANY($1)`,
+      [['admin_users', 'admin_sessions', 'admin_audit_logs']],
+    ) as Array<{ table_name: string }>;
+    const columns = await db.query(
+      `SELECT table_name, column_name FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND (table_name, column_name) IN (
+           ('accounts', 'status'),
+           ('stores', 'status'),
+           ('menu_items', 'status'),
+           ('virtual_orders', 'admin_status'),
+           ('virtual_orders', 'admin_note')
+         )`,
+    ) as Array<{ table_name: string; column_name: string }>;
+
+    expect(tables).toHaveLength(3);
+    expect(columns).toHaveLength(5);
   });
 });
