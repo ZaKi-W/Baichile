@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { randomUUID } from 'node:crypto';
 import type { OrderQuote, QuoteRequest, VirtualOrder } from '@baichile/api-contract';
 import { calculateLineTotal, calculateOrderTotal, validateSelections } from '@baichile/domain';
-import type { GeoPoint, VirtualRoute } from '@baichile/map-core';
+import type { DeliveryStatus, GeoPoint, VirtualRoute } from '@baichile/map-core';
 import { CatalogService } from './catalog.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
@@ -48,6 +48,7 @@ export class OrderService {
 
   async create(request: QuoteRequest, visitorId?: string, accountId?: string): Promise<VirtualOrder> {
     const quote = await this.quote(request);
+    const store = await this.catalog.find(request.storeId);
     const id = randomUUID();
     const route = this.route(id, request.virtualDestinationPoint);
     const order: VirtualOrder = {
@@ -59,7 +60,7 @@ export class OrderService {
       virtualDestinationId: request.virtualDestinationId,
       status: 'created',
       startedAt: new Date().toISOString(),
-      durationMs: 60_000,
+      durationMs: store.virtualDeliveryMinutes * 60_000,
       seed: id.slice(0, 8),
       route,
     };
@@ -112,7 +113,7 @@ export class OrderService {
       accountId: row.accountId ?? undefined,
       storeId: row.storeId,
       virtualDestinationId: row.destinationId,
-      status: row.status as VirtualOrder['status'],
+      status: this.currentStatus(row),
       startedAt: row.startedAt.toISOString(),
       durationMs: row.durationMs,
       seed: row.seed,
@@ -123,6 +124,17 @@ export class OrderService {
       lines: row.lines as VirtualOrder['lines'],
       route: row.route as VirtualRoute,
     };
+  }
+
+  private currentStatus(row: VirtualOrderEntity): DeliveryStatus {
+    const elapsed = Date.now() - row.startedAt.getTime();
+    if (elapsed >= 83_000 + row.durationMs) return 'completed';
+    if (elapsed >= 83_000) return 'delivering';
+    if (elapsed >= 78_000) return 'picked_up';
+    if (elapsed >= 18_000) return 'rider_assigned';
+    if (elapsed >= 8_000) return 'preparing';
+    if (elapsed >= 3_000) return 'merchant_accepted';
+    return 'created';
   }
 
   private route(id: string, requestedDestination?: GeoPoint): VirtualRoute {

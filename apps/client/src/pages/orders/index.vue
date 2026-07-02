@@ -10,7 +10,10 @@ const now = ref(Date.now());
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 const openOrder = (id: string) => uni.navigateTo({ url: `/pages/delivery/index?id=${id}` });
 const openLogin = () => uni.switchTab({ url: '/pages/profile/index' });
-const statusLabel = (startedAt: string) => getOrderStep(new Date(startedAt).getTime(), now.value).label;
+const statusLabel = (startedAt: string, durationMs: number) => {
+  const step = getOrderStep(new Date(startedAt).getTime(), durationMs, now.value);
+  return step.listLabel || step.label;
+};
 onShow(() => {
   now.value = Date.now();
   void orders.load();
@@ -30,11 +33,11 @@ onHide(() => clearInterval(statusTimer));
       <view class="row">
         <view class="order-heading">
           <text>虚拟订单</text>
-          <text class="status-badge">{{ statusLabel(order.startedAt) }}</text>
+          <text class="status-badge">{{ statusLabel(order.startedAt, order.durationMs) }}</text>
         </view>
         <text>¥{{ (order.totalCents / 100).toFixed(2) }}</text>
       </view>
-      <text class="muted">{{ new Date(order.startedAt).toLocaleString() }} · 不会真实送达</text>
+      <text class="muted">{{ new Date(order.startedAt).toLocaleString() }}</text>
     </view>
     <view v-if="auth.accountId && !orders.orders.length" class="card muted">还没有虚拟订单，先去首页逛逛吧。</view>
     <view class="tab-spacer" />

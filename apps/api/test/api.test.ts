@@ -178,6 +178,7 @@ describe('MVP API', () => {
     expect(order.statusCode).toBe(201);
     expect(order.json().isVirtual).toBe(true);
     expect(order.json().totalCents).toBe(quote.json().totalCents);
+    expect(order.json().durationMs).toBe(store.virtualDeliveryMinutes * 60_000);
     expect(order.json().route.label).toBe('虚拟配送路线');
     expect(order.json().route.destination).toEqual(payload.virtualDestinationPoint);
 
