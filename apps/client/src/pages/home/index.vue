@@ -46,6 +46,7 @@ async function load() {
   }
 }
 const openSearch = () => uni.navigateTo({ url: '/pages/search/index' });
+const openLocationPicker = () => uni.navigateTo({ url: '/pages/location-picker/index' });
 const openCategory = (id: string, name: string) => uni.navigateTo({ url: `/pages/category/index?id=${id}&name=${encodeURIComponent(name)}` });
 const openStore = (id: string) => uni.navigateTo({ url: `/pages/store/index?id=${id}` });
 const openAllCategories = () => {
@@ -64,7 +65,10 @@ function stopCarousel() {
   carouselTimer = undefined;
 }
 
-onLoad(load);
+onLoad(() => {
+  load();
+  if (location.status === 'idle') location.locate();
+});
 onShow(startCarousel);
 onHide(stopCarousel);
 onUnload(stopCarousel);
@@ -74,7 +78,7 @@ onUnload(stopCarousel);
   <view class="home-page">
     <main class="app-main" :style="safeTopStyle">
       <header class="topbar">
-        <button class="location-button" @tap="location.locate">
+        <button class="location-button" @tap="openLocationPicker">
           <AppIcon name="location" :size="17" />
           <text class="location-name">{{ location.status === 'locating' ? '定位中…' : location.label }}</text>
           <text class="chevron">⌄</text>

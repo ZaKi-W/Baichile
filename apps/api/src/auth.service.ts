@@ -1,6 +1,10 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type { AccountSession, GuestSession, WechatMiniLoginRequest } from '@baichile/api-contract';
+import { InjectRepository } from '@nestjs/typeorm';
+import { EntityManager, Repository } from 'typeorm';
+import { AccountEntity } from './database/entities/account.entity';
+import { VisitorSessionEntity } from './database/entities/visitor-session.entity';
 
 interface WechatCodeSession {
   openid?: string;
@@ -11,13 +15,46 @@ interface WechatCodeSession {
 
 @Injectable()
 export class AuthService {
-  createGuest(): GuestSession {
+  constructor(
+    @InjectRepository(AccountEntity) private readonly accounts: Repository<AccountEntity>,
+    @InjectRepository(VisitorSessionEntity) private readonly visitors: Repository<VisitorSessionEntity>,
+  ) {}
+
+  resolveIdentity(authorization?: string): { visitorId?: string; accountId?: string } {
+    const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!token) return {};
+    if (token.startsWith('guest.')) {
+      return { visitorId: `visitor_${token.slice('guest.'.length)}` };
+    }
+    if (token.startsWith('account.')) {
+      const subject = token.slice('account.'.length);
+      return { accountId: `account_${/^[a-f0-9]{64}$/i.test(subject) ? subject.slice(0, 24) : subject}` };
+    }
+    return {};
+  }
+
+  async resolvePersistedIdentity(authorization?: string): Promise<{ visitorId?: string; accountId?: string }> {
+    const identity = this.resolveIdentity(authorization);
+    if (identity.accountId && !await this.accounts.existsBy({ id: identity.accountId })) {
+      await this.accounts.insert({
+        id: identity.accountId,
+        wechatOpenIdHash: null,
+        nickname: null,
+        avatarUrl: null,
+      });
+    }
+    return identity;
+  }
+
+  async createGuest(): Promise<GuestSession> {
     const id = randomUUID();
-    return {
+    const session = {
       visitorId: `visitor_${id}`,
       accessToken: `guest.${id}`,
       refreshToken: `refresh.${randomUUID()}`,
     };
+    await this.visitors.save(this.visitors.create({ visitorId: session.visitorId, accountId: null }));
+    return session;
   }
 
   mockWechat(visitorId?: string) {
@@ -37,12 +74,16 @@ export class AuthService {
         throw new ServiceUnavailableException('微信登录配置缺失');
       }
       const id = randomUUID();
-      return {
+      const session: AccountSession = {
         accountId: `account_${id}`,
         accessToken: `account.${id}`,
         provider: 'dev-mock',
         profile,
       };
+      await this.accounts.save(this.accounts.create({
+        id: session.accountId, wechatOpenIdHash: null, nickname: profile.nickname, avatarUrl: profile.avatarUrl,
+      }));
+      return session;
     }
 
     const query = new URLSearchParams({
@@ -58,12 +99,22 @@ export class AuthService {
     }
 
     const digest = createHash('sha256').update(session.openid).digest('hex');
+    const existing = await this.accounts.findOneBy({ wechatOpenIdHash: digest });
+    const accountId = existing?.id ?? `account_${digest.slice(0, 24)}`;
+    await this.accounts.save(this.accounts.create({
+      ...existing, id: accountId, wechatOpenIdHash: digest, nickname: profile.nickname, avatarUrl: profile.avatarUrl,
+    }));
     return {
-      accountId: `account_${digest.slice(0, 24)}`,
+      accountId,
       accessToken: `account.${digest}`,
       provider: 'wechat',
       profile,
     };
+  }
+
+  async linkVisitorToAccount(visitorId: string, accountId: string, manager?: EntityManager) {
+    const repo = (manager ?? this.visitors.manager).getRepository(VisitorSessionEntity);
+    await repo.update({ visitorId }, { accountId });
   }
 
   private validateProfile(input: WechatMiniLoginRequest) {

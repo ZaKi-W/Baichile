@@ -1,59 +1,636 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
-import { onLoad, onShow } from '@dcloudio/uni-app';
-import { calculateDeliverySnapshot, interpolateAlongPolyline } from '@baichile/map-core';
-import AppIcon from '../../components/AppIcon.vue';
+import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref } from 'vue';
+import { onLoad } from '@dcloudio/uni-app';
+import { catalogService } from '../../services/catalog';
+import { useAddressStore } from '../../stores/address';
+import { useCartStore } from '../../stores/cart';
 import { useOrderStore } from '../../stores/orders';
+import { getOrderStepIndex, ORDER_STEPS } from '../../utils/order-status';
 
 const orders = useOrderStore();
+const addressStore = useAddressStore();
+const cart = useCartStore();
+
 const orderId = ref('');
-const now = ref(Date.now());
-let timer: ReturnType<typeof setInterval> | undefined;
+const storeName = ref('商家');
+const storeDistanceKm = ref(3);
+const storeDeliveryMinutes = ref(30);
+let mapCtx: UniApp.MapContext | null = null;
+const mapReady = ref(false);
+let cameraFramed = false;
+
+const statusBarHeight = uni.getSystemInfoSync().statusBarHeight ?? 20;
+const safeTopStyle = { paddingTop: `${statusBarHeight + 8}px` };
+
 const order = computed(() => orders.find(orderId.value));
-const snapshot = computed(() => order.value
-  ? calculateDeliverySnapshot(now.value, new Date(order.value.startedAt).getTime(), order.value.durationMs)
-  : null);
-const rider = computed(() => order.value && snapshot.value
-  ? interpolateAlongPolyline(order.value.route.polyline, snapshot.value.progress) : null);
-const statusText = computed(() => ({
-  created: '虚拟订单已创建', merchant_accepted: '商家已模拟接单', preparing: '正在模拟备餐',
-  rider_assigned: '虚拟骑手已接单', picked_up: '虚拟骑手已取餐', delivering: '正在前往虚拟目的地',
-  virtual_arrived: '已到达虚拟终点', completed: '虚拟派送已完成',
-}[snapshot.value?.status || 'created']));
-onLoad((options) => { orderId.value = options?.id || ''; });
-onShow(() => { now.value = Date.now(); clearInterval(timer); timer = setInterval(() => { now.value = Date.now(); }, 500); });
-onBeforeUnmount(() => clearInterval(timer));
-const openComplete = () => order.value && uni.redirectTo({ url: `/pages/complete/index?id=${order.value.id}` });
+
+/* ── delivery address ── */
+const deliveryAddress = computed(() => {
+  if (!order.value) return '';
+  const addr = addressStore.addresses.find((a) => a.id === order.value!.virtualDestinationId);
+  return addr ? `${addr.address}${addr.detail ? ' ' + addr.detail : ''}` : '配送地址';
+});
+
+/* ── map center: destination (收货地址) ── */
+const mapCenter = computed(() => {
+  if (!order.value) return { lat: 31.2303, lng: 121.4737 };
+  return {
+    lat: order.value.route.destination.lat,
+    lng: order.value.route.destination.lng,
+  };
+});
+
+/* ── rider position: random around destination, based on store distanceKm ── */
+const riderPosition = computed(() => {
+  if (!order.value) return null;
+  const dest = order.value.route.destination;
+  const distKm = storeDistanceKm.value;
+
+  const hash = seedHash(order.value.seed);
+  const angle = (hash % 360) * (Math.PI / 180);
+  // Place rider at 30%–80% of store distance from destination
+  const dist = distKm * (0.3 + ((hash % 50) / 100));
+
+  const dLat = (dist * Math.cos(angle)) / 111;
+  const dLng = (dist * Math.sin(angle)) / (111 * Math.cos(dest.lat * Math.PI / 180));
+
+  return {
+    lat: dest.lat + dLat,
+    lng: dest.lng + dLng,
+  };
+});
+
+/* ── markers ── */
+const markers = computed(() => {
+  if (!order.value || !riderPosition.value) return [];
+  const route = order.value.route;
+  return [
+    {
+      id: 1,
+      latitude: route.origin.lat,
+      longitude: route.origin.lng,
+      iconPath: '/static/marker-store.png',
+      width: 32,
+      height: 38,
+      anchor: { x: 0.5, y: 1 },
+      callout: {
+        content: storeName.value,
+        display: 'ALWAYS' as const,
+        fontSize: 13,
+        borderRadius: 6,
+        padding: 6,
+        bgColor: '#ffffff',
+        color: '#151515',
+        borderWidth: 0,
+      },
+    },
+    {
+      id: 2,
+      latitude: route.destination.lat,
+      longitude: route.destination.lng,
+      iconPath: '/static/marker-dest.png',
+      width: 32,
+      height: 38,
+      anchor: { x: 0.5, y: 1 },
+      callout: {
+        content: deliveryAddress.value.length > 14
+          ? deliveryAddress.value.slice(0, 14) + '…'
+          : deliveryAddress.value,
+        display: 'ALWAYS' as const,
+        fontSize: 13,
+        borderRadius: 6,
+        padding: 6,
+        bgColor: '#ffffff',
+        color: '#151515',
+        borderWidth: 0,
+      },
+    },
+    {
+      id: 3,
+      latitude: riderPosition.value.lat,
+      longitude: riderPosition.value.lng,
+      iconPath: '/static/marker-rider.png',
+      width: 40,
+      height: 40,
+      anchor: { x: 0.5, y: 0.5 },
+    },
+  ];
+});
+
+/* ── polyline ── */
+const polylineConfig = computed(() => {
+  if (!order.value) return [];
+  return [
+    {
+      points: order.value.route.polyline.map((p) => ({
+        latitude: p.lat,
+        longitude: p.lng,
+      })),
+      color: '#FF5A38',
+      width: 6,
+      arrowLine: true,
+      borderColor: '#ffffff',
+      borderWidth: 2,
+      dottedLine: false,
+    },
+  ];
+});
+
+/* ── timeline with step progression ── */
+const STEPS = ORDER_STEPS;
+const FINAL_STEP = ORDER_STEPS.length - 1;
+
+const currentStepIndex = ref(0);
+let stepTimer: ReturnType<typeof setInterval> | undefined;
+
+function startStepTimer() {
+  clearInterval(stepTimer);
+  if (!order.value) return;
+  const startedAt = new Date(order.value.startedAt).getTime();
+  // Immediately set step based on elapsed time (supports re-entering)
+  currentStepIndex.value = getOrderStepIndex(startedAt);
+  // If already at final step, no need for interval
+  if (currentStepIndex.value >= FINAL_STEP) return;
+  // Otherwise poll every second until we reach final step
+  stepTimer = setInterval(() => {
+    currentStepIndex.value = getOrderStepIndex(startedAt);
+    if (currentStepIndex.value >= FINAL_STEP) clearInterval(stepTimer);
+  }, 1000);
+}
+
+const statusText = computed(() => STEPS[currentStepIndex.value]?.statusText || '配送中');
+
+/* ── progress bar: maps step to percentage (0→0%, 5→70%, stays at 70%) ── */
+const progressPercent = computed(() => {
+  const pct = (currentStepIndex.value / FINAL_STEP) * 70;
+  return Math.min(pct, 70);
+});
+
+/* ── rider name ── */
+const SURNAMES = ['张', '李', '王', '刘', '陈', '杨', '赵', '黄', '周', '吴'];
+const riderName = computed(() => {
+  if (!order.value) return '骑手';
+  const hash = seedHash(order.value.seed);
+  return `${SURNAMES[hash % SURNAMES.length]}师傅`;
+});
+
+/* ── estimated delivery time ── */
+const etaText = computed(() => {
+  const min = storeDeliveryMinutes.value;
+  return `预计 ${min}~${min + 10} 分钟送达`;
+});
+
+/* ── distance display ── */
+const distanceText = computed(() => {
+  return `距离收货地址约 ${storeDistanceKm.value.toFixed(1)} 公里`;
+});
+
+/* ── deterministic hash from seed string ── */
+function seedHash(seed: string): number {
+  return Math.abs(seed.split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0));
+}
+
+/* ── resolve store info ── */
+async function resolveStoreInfo() {
+  if (!order.value) return;
+  try {
+    let detail;
+    if (cart.store && cart.store.id === order.value.storeId) {
+      detail = cart.store;
+    } else {
+      detail = await catalogService.store(order.value.storeId);
+    }
+    storeName.value = detail.name;
+    storeDistanceKm.value = detail.distanceKm || 3;
+    storeDeliveryMinutes.value = detail.virtualDeliveryMinutes || 30;
+  } catch {
+    storeName.value = '商家';
+  }
+}
+
+/* ── map ready & camera framing ── */
+function onMapUpdated() {
+  if (!mapCtx) {
+    mapCtx = uni.createMapContext('deliveryMap', getCurrentInstance());
+  }
+  mapReady.value = true;
+
+  if (!cameraFramed && order.value) {
+    cameraFramed = true;
+    nextTick(() => {
+      mapCtx?.includePoints({
+        points: order.value!.route.polyline.map((p) => ({
+          latitude: p.lat,
+          longitude: p.lng,
+        })),
+        padding: [100, 60, 300, 60],
+      });
+    });
+  }
+}
+
+/* ── lifecycle ── */
+onLoad(async (options) => {
+  orderId.value = options?.id || '';
+  startStepTimer();
+  await resolveStoreInfo();
+});
+
+onBeforeUnmount(() => clearInterval(stepTimer));
+
+/* ── navigation ── */
+function goBack() {
+  uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/home/index' }) });
+}
 </script>
 
 <template>
-  <view v-if="order && snapshot" class="page">
-    <view class="virtual-notice">骑手位置与配送路线均为虚拟演示，不对应真实配送。</view>
-    <view class="card map-preview">
-      <text class="badge">开发预览 · 预设 GCJ-02 路线</text>
-      <view class="route-line" />
-      <view class="origin">店</view><view class="destination">点</view>
-      <view class="rider" :style="{ left: `${8 + snapshot.progress * 78}%`, top: `${70 - snapshot.progress * 38}%` }"><AppIcon name="rider" :size="28" /></view>
+  <view class="delivery-page" v-if="order">
+    <!-- ── 全屏地图 ── -->
+    <map
+      id="deliveryMap"
+      class="delivery-map"
+      :latitude="mapCenter.lat"
+      :longitude="mapCenter.lng"
+      :scale="14"
+      :markers="markers"
+      :polyline="polylineConfig"
+      :show-location="false"
+      :enable-zoom="true"
+      :enable-scroll="true"
+      :enable-rotate="false"
+      :enable-overlooking="false"
+      @updated="onMapUpdated"
+    />
+
+    <!-- ── 浮动返回按钮 ── -->
+    <view class="nav-floating" :style="safeTopStyle">
+      <view class="back-btn" @tap="goBack">
+        <text class="back-icon">‹</text>
+      </view>
     </view>
-    <view class="card status">
-      <text class="title">{{ statusText }}</text>
-      <text class="muted">预计还有 {{ Math.ceil(snapshot.remainingMs / 1000) }} 秒</text>
-      <progress :percent="snapshot.progress * 100" activeColor="#ff7a45" />
-      <text class="muted">当前位置：{{ rider?.lat.toFixed(5) }}, {{ rider?.lng.toFixed(5) }}（GCJ-02）</text>
+
+    <!-- ── 底部信息面板 ── -->
+    <view class="bottom-sheet">
+      <view class="sheet-handle" />
+
+      <!-- 状态头部 -->
+      <view class="sheet-header">
+        <text class="status-label">{{ statusText }}</text>
+        <text class="eta-text">{{ etaText }}</text>
+        <text class="distance-text">{{ distanceText }}</text>
+      </view>
+
+      <!-- 进度条 -->
+      <view class="progress-track">
+        <view class="progress-fill" :style="{ width: `${progressPercent}%` }" />
+      </view>
+
+      <!-- 时间轴 -->
+      <scroll-view scroll-x class="timeline-scroll">
+        <view class="timeline">
+          <view
+            v-for="(step, idx) in STEPS"
+            :key="step.key"
+            class="step"
+          >
+            <view v-if="idx > 0" class="step-line" :class="{ active: idx <= currentStepIndex }" />
+            <view class="step-dot" :class="{
+              done: idx < currentStepIndex,
+              current: idx === currentStepIndex,
+              pending: idx > currentStepIndex,
+            }" />
+            <text class="step-label" :class="{ active: idx <= currentStepIndex }">{{ step.label }}</text>
+          </view>
+        </view>
+      </scroll-view>
+
+      <!-- 分隔线 -->
+      <view class="divider" />
+
+      <!-- 骑手信息 -->
+      <view class="rider-row">
+        <view class="rider-avatar">
+          <text class="rider-emoji">🛵</text>
+        </view>
+        <view class="rider-info">
+          <text class="rider-name">{{ riderName }}</text>
+          <text class="rider-tag">配送骑手</text>
+        </view>
+        <view class="contact-btn">
+          <text class="contact-text">联系骑手</text>
+        </view>
+      </view>
+
+      <!-- 分隔线 -->
+      <view class="divider" />
+
+      <!-- 路线信息 -->
+      <view class="route-info">
+        <view class="route-point">
+          <view class="route-dot origin" />
+          <view class="route-text">
+            <text class="route-label">商家</text>
+            <text class="route-value">{{ storeName }}</text>
+          </view>
+        </view>
+        <view class="route-connector" />
+        <view class="route-point">
+          <view class="route-dot dest" />
+          <view class="route-text">
+            <text class="route-label">送达</text>
+            <text class="route-value">{{ deliveryAddress }}</text>
+          </view>
+        </view>
+      </view>
     </view>
-    <button v-if="snapshot.progress >= 1" class="primary-button" @tap="openComplete">查看完成页</button>
   </view>
-  <view v-else class="page"><view class="card muted">未找到该虚拟订单。</view></view>
+
+  <!-- 未找到订单 -->
+  <view v-else class="empty-state">
+    <text class="empty-text">未找到该订单</text>
+  </view>
 </template>
 
 <style scoped>
-.virtual-notice { margin-bottom: 20rpx; }
-.map-preview { position: relative; height: 460rpx; overflow: hidden; background: #e9eee9; }
-.badge { position: absolute; z-index: 3; background: #fff; padding: 8rpx 14rpx; border-radius: 8rpx; font-size: 20rpx; }
-.route-line { position: absolute; width: 75%; height: 8rpx; background: #ff7a45; left: 12%; top: 56%; transform: rotate(-25deg); border-radius: 999rpx; }
-.origin,.destination { position: absolute; background: #fff; width: 52rpx; height: 52rpx; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-.origin { left: 7%; top: 68%; }.destination { right: 7%; top: 27%; }
-.rider { position: absolute; transform: translate(-50%, -50%); transition: left .5s linear, top .5s linear; }
-.status { display: flex; flex-direction: column; gap: 18rpx; }
-.title { font-size: 34rpx; font-weight: 700; }
+.delivery-page {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── 地图 ── */
+.delivery-map {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── 浮动导航 ── */
+.nav-floating {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  padding-left: 24rpx;
+  padding-top: 8rpx;
+}
+.back-btn {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+}
+.back-icon {
+  font-size: 48rpx;
+  font-weight: 300;
+  color: #151515;
+  line-height: 1;
+}
+
+/* ── 底部面板 ── */
+.bottom-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: #ffffff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 20rpx 32rpx calc(28rpx + env(safe-area-inset-bottom));
+  box-shadow: 0 -8rpx 40rpx rgba(0, 0, 0, 0.08);
+  max-height: 58vh;
+  overflow-y: auto;
+}
+.sheet-handle {
+  width: 64rpx;
+  height: 8rpx;
+  background: #e0e0e0;
+  border-radius: 4rpx;
+  margin: 0 auto 24rpx;
+}
+
+/* ── 状态头部 ── */
+.sheet-header {
+  margin-bottom: 20rpx;
+}
+.status-label {
+  display: block;
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #151515;
+  line-height: 1.3;
+}
+.eta-text {
+  display: block;
+  font-size: 26rpx;
+  color: #666;
+  margin-top: 8rpx;
+}
+.distance-text {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 4rpx;
+}
+
+/* ── 进度条 ── */
+.progress-track {
+  height: 8rpx;
+  background: #f0f0f0;
+  border-radius: 4rpx;
+  overflow: hidden;
+  margin-bottom: 28rpx;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff5b38, #ff8a65);
+  border-radius: 4rpx;
+  transition: width 0.6s ease;
+}
+
+/* ── 时间轴 ── */
+.timeline-scroll {
+  white-space: nowrap;
+  margin: 0 -8rpx;
+  margin-bottom: 24rpx;
+}
+.timeline {
+  display: flex;
+  align-items: flex-start;
+  padding: 0 8rpx;
+}
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  min-width: 88rpx;
+  flex-shrink: 0;
+}
+.step-line {
+  position: absolute;
+  top: 9rpx;
+  right: 50%;
+  width: 100%;
+  height: 4rpx;
+  background: #e8e8e8;
+  z-index: 0;
+}
+.step-line.active {
+  background: #ff5b38;
+}
+.step-dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  z-index: 1;
+  margin-bottom: 10rpx;
+  flex-shrink: 0;
+}
+.step-dot.done {
+  background: #ff5b38;
+}
+.step-dot.current {
+  background: #ff5b38;
+  width: 24rpx;
+  height: 24rpx;
+  box-shadow: 0 0 0 6rpx rgba(255, 91, 56, 0.2);
+}
+.step-dot.pending {
+  background: #e8e8e8;
+}
+.step-label {
+  font-size: 20rpx;
+  color: #bbb;
+  text-align: center;
+  white-space: nowrap;
+}
+.step-label.active {
+  color: #333;
+  font-weight: 600;
+}
+
+/* ── 分隔线 ── */
+.divider {
+  height: 1rpx;
+  background: #f0f0f0;
+  margin: 20rpx 0;
+}
+
+/* ── 骑手信息 ── */
+.rider-row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+.rider-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: #f0f4ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.rider-emoji {
+  font-size: 36rpx;
+}
+.rider-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rider-name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #151515;
+}
+.rider-tag {
+  font-size: 22rpx;
+  color: #999;
+  margin-top: 4rpx;
+}
+.contact-btn {
+  padding: 14rpx 28rpx;
+  border-radius: 32rpx;
+  background: #f5f5f5;
+  flex-shrink: 0;
+}
+.contact-text {
+  font-size: 24rpx;
+  color: #333;
+  font-weight: 600;
+}
+
+/* ── 路线信息 ── */
+.route-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+.route-point {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+.route-dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  margin-top: 8rpx;
+  flex-shrink: 0;
+}
+.route-dot.origin {
+  background: #ff5b38;
+}
+.route-dot.dest {
+  background: #00b450;
+}
+.route-text {
+  flex: 1;
+  min-width: 0;
+}
+.route-label {
+  display: block;
+  font-size: 22rpx;
+  color: #999;
+}
+.route-value {
+  display: block;
+  font-size: 26rpx;
+  color: #333;
+  font-weight: 600;
+  margin-top: 2rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.route-connector {
+  width: 2rpx;
+  height: 28rpx;
+  background: #e0e0e0;
+  margin-left: 7rpx;
+}
+
+/* ── 空状态 ── */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+.empty-text {
+  font-size: 30rpx;
+  color: #999;
+}
 </style>

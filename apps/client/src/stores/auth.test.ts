@@ -19,7 +19,7 @@ describe('auth store WeChat login', () => {
         data: unknown;
         success: (response: { data: unknown }) => void;
       }) => {
-        expect(url).toBe('/v1/auth/wechat-mini');
+        expect(url).toBe('http://127.0.0.1:3000/v1/auth/wechat-mini');
         expect(data).toEqual({
           code: 'wx-login-code',
           visitorId: 'visitor_existing',
@@ -82,5 +82,21 @@ describe('auth store WeChat login', () => {
     expect(auth.visitorId).toBe('visitor_existing');
     expect(auth.accessToken).toBe('guest.token');
     expect(auth.accountId).toBe('');
+  });
+
+  it('surfaces the API error message when WeChat rejects login', async () => {
+    vi.mocked(uni.request).mockImplementation((options) => {
+      options.success?.({
+        statusCode: 400,
+        data: { message: '微信登录凭证无效' },
+      } as never);
+      return undefined as never;
+    });
+    const auth = useAuthStore();
+
+    await expect(auth.wechatLogin({
+      avatarUrl: 'https://example.com/avatar.png',
+      nickname: '小白',
+    })).rejects.toThrow('微信登录凭证无效');
   });
 });

@@ -13,6 +13,7 @@ export interface MenuItem {
   id: string;
   storeId: string;
   categoryId: string;
+  subCategoryId?: string;
   name: string;
   subtitle?: string;
   imageUrl?: string;
@@ -20,6 +21,11 @@ export interface MenuItem {
   monthlySales: number;
   specGroups: SpecGroup[];
   sourceType: SourceType;
+}
+
+export interface MenuSubCategory {
+  id: string;
+  name: string;
 }
 
 export interface StoreSummary {
@@ -43,6 +49,7 @@ export interface StoreSummary {
 
 export interface StoreDetail extends StoreSummary {
   menu: MenuItem[];
+  subCategories?: MenuSubCategory[];
 }
 
 export interface HomeResponse {
@@ -127,6 +134,29 @@ export interface AdministrativeArea {
   adcode: string;
   cityCode: string;
   districtCode: string;
+}
+
+export interface Address {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  detail: string;
+  tag: string;
+  lat: number;
+  lng: number;
+  isDefault: boolean;
+}
+
+export interface PlaceSuggestion {
+  id: string;
+  title: string;
+  address: string;
+  province: string;
+  city: string;
+  district: string;
+  lat: number;
+  lng: number;
 }
 
 export interface ApiError {

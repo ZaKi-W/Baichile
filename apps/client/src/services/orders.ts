@@ -3,8 +3,7 @@ import { calculateOrderTotal } from '@baichile/domain';
 import type { GeoPoint, VirtualRoute } from '@baichile/map-core';
 import { catalogService } from './catalog';
 import { useAuthStore } from '../stores/auth';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { API_BASE } from '../config/api';
 
 function post<T>(path: string, data: unknown, headers: Record<string, string> = {}): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -12,6 +11,17 @@ function post<T>(path: string, data: unknown, headers: Record<string, string> = 
       method: 'POST',
       url: `${API_BASE}${path}`,
       data: data as UniApp.RequestOptions['data'],
+      header: headers,
+      success: (response) => response.statusCode < 400 ? resolve(response.data as T) : reject(new Error('接口请求失败')),
+      fail: reject,
+    });
+  });
+}
+
+function get<T>(path: string, headers: Record<string, string> = {}): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    uni.request({
+      url: `${API_BASE}${path}`,
       header: headers,
       success: (response) => response.statusCode < 400 ? resolve(response.data as T) : reject(new Error('接口请求失败')),
       fail: reject,
@@ -40,8 +50,16 @@ async function localQuote(request: QuoteRequest): Promise<OrderQuote> {
 
 function localRoute(id: string, destinationPoint?: GeoPoint): VirtualRoute {
   const p = (lat: number, lng: number): GeoPoint => ({ lat, lng, coordSystem: 'gcj02' });
-  const origin = p(31.2303, 121.4737);
   const destination = destinationPoint || p(31.2338, 121.4782);
+
+  // Generate store origin near destination (0.5–2.5 km away)
+  const seed = Math.abs(id.split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0));
+  const angle = (seed % 360) * (Math.PI / 180);
+  const dist = 0.5 + ((seed % 200) / 100); // 0.5 ~ 2.5 km
+  const dLat = (dist * Math.cos(angle)) / 111;
+  const dLng = (dist * Math.sin(angle)) / (111 * Math.cos(destination.lat * Math.PI / 180));
+  const origin = p(destination.lat + dLat, destination.lng + dLng);
+
   const polyline = [
     origin,
     p(origin.lat + (destination.lat - origin.lat) * 0.34, origin.lng + (destination.lng - origin.lng) * 0.3),
@@ -60,7 +78,7 @@ export const orderService = {
     const auth = useAuthStore();
     if (API_BASE) {
       return post<VirtualOrder>('/v1/orders/virtual', request, {
-        Authorization: `Bearer ${auth.accessToken}`, 'x-visitor-id': auth.visitorId,
+        Authorization: `Bearer ${auth.accessToken}`,
       });
     }
     const quote = await localQuote(request);
@@ -68,7 +86,18 @@ export const orderService = {
     return {
       ...quote, id, isVirtual: true, visitorId: auth.visitorId,
       virtualDestinationId: request.virtualDestinationId, status: 'created',
+      accountId: auth.accountId || undefined,
       startedAt: new Date().toISOString(), durationMs: 60_000, seed: id, route: localRoute(id, request.virtualDestinationPoint),
     };
+  },
+  async list(): Promise<VirtualOrder[]> {
+    const auth = useAuthStore();
+    if (!auth.accountId) return [];
+    if (!API_BASE) {
+      return (uni.getStorageSync(`baichile:orders:${auth.accountId}`) || []) as VirtualOrder[];
+    }
+    return get<VirtualOrder[]>('/v1/orders/me', {
+      Authorization: `Bearer ${auth.accessToken}`,
+    });
   },
 };

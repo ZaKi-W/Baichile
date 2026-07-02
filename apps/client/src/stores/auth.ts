@@ -1,10 +1,19 @@
 import { defineStore } from 'pinia';
 import type { AccountSession, UserProfile, WechatMiniLoginRequest } from '@baichile/api-contract';
+import { API_BASE } from '../config/api';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 const VISITOR_KEY = 'baichile:visitor';
 const ACCOUNT_KEY = 'baichile:account';
 const EMPTY_PROFILE: UserProfile = { avatarUrl: '', nickname: '' };
+
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error) return value.message || fallback;
+  if (value && typeof value === 'object') {
+    if ('message' in value && typeof value.message === 'string') return value.message;
+    if ('errMsg' in value && typeof value.errMsg === 'string') return value.errMsg;
+  }
+  return fallback;
+}
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -72,12 +81,12 @@ export const useAuthStore = defineStore('auth', {
           data: payload,
           success: (response) => {
             if (response.statusCode && response.statusCode >= 400) {
-              reject(new Error('微信登录失败'));
+              reject(new Error(errorMessage(response.data, '微信登录失败')));
               return;
             }
             resolve(response.data as AccountSession);
           },
-          fail: reject,
+          fail: (error) => reject(new Error(errorMessage(error, '网络连接失败'))),
         });
       });
       this.applyAccount(session);
