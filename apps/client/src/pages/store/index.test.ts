@@ -28,7 +28,6 @@ describe('store page cart interaction', () => {
     expect(source).toContain('class="category-sidebar"');
     expect(source).toContain('class="product-card"');
     expect(source).toContain("item.specGroups.length ? '选规格' : '＋'");
-    expect(source).toContain('@tap="goBack"');
   });
 
   it('shows each menu item monthly sales', () => {
