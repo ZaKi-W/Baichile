@@ -7,6 +7,8 @@ describe('native tab bar configuration', () => {
 
     expect(pages.tabBar.custom).toBeUndefined();
     expect(pages.tabBar.list.map((item: { text: string }) => item.text)).toEqual(['首页', '发现', '订单', '我的']);
+    expect(pages.tabBar.list.every((item: { iconPath?: string; selectedIconPath?: string }) =>
+      item.iconPath?.endsWith('.png') && item.selectedIconPath?.endsWith('.png'))).toBe(true);
   });
 
   it('registers the wallet page', () => {
@@ -17,13 +19,11 @@ describe('native tab bar configuration', () => {
     });
   });
 
-  it('shows code version 4 on the profile tab badge at launch', () => {
+  it('does not use a tab badge for the code version', () => {
     const app = readFileSync(new URL('./App.vue', import.meta.url), 'utf8');
-    const version = readFileSync(new URL('./config/code-version.ts', import.meta.url), 'utf8');
 
-    expect(version).toContain('CODE_VERSION = 4');
-    expect(app).toContain('uni.setTabBarBadge');
-    expect(app).toContain('index: 3');
-    expect(app).toContain('text: String(CODE_VERSION)');
+    expect(app).not.toContain('uni.setTabBarBadge');
+    expect(app).not.toContain('CODE_VERSION');
+    expect(app).toContain('uni.removeTabBarBadge');
   });
 });

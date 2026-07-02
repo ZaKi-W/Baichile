@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { useAddressStore } from '../../stores/address';
 import { useWalletStore } from '../../stores/wallet';
+import { CODE_VERSION } from '../../config/code-version';
 
 interface ChooseAvatarEvent {
   detail: {
@@ -207,7 +208,7 @@ async function login() {
       </view>
       <text class="about-desc">这是互动模拟产品，不提供真实支付、接单或配送。</text>
       <view class="about-meta">
-        <text class="version">v1.0.0</text>
+        <text class="version">v1.0.0 · 代码版本 {{ CODE_VERSION }}</text>
       </view>
     </view>
 

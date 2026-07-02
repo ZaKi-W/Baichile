@@ -3,21 +3,33 @@ import { computed, ref } from 'vue';
 import { onHide, onLoad, onShow, onUnload } from '@dcloudio/uni-app';
 import type { HomeResponse } from '@baichile/api-contract';
 import type { IconKey } from '@baichile/icon-registry';
+import { getDeliveryIncidentPhase } from '@baichile/domain';
 import AppIcon from '../../components/AppIcon.vue';
+import HomeOrderCarousel from '../../components/HomeOrderCarousel.vue';
 import StoreCard from '../../components/StoreCard.vue';
 import { catalogService } from '../../services/catalog';
+import { useAuthStore } from '../../stores/auth';
 import { useLocationStore } from '../../stores/location';
+import { useOrderStore } from '../../stores/orders';
+import { createHomeOrderSummary, homeOrderSeenKey } from '../../utils/home-order-summary';
 
 const data = ref<HomeResponse>();
 const loading = ref(true);
 const error = ref('');
 const location = useLocationStore();
+const auth = useAuthStore();
+const orders = useOrderStore();
+const orderNow = ref(Date.now());
+const dismissedOrderIds = ref<string[]>([]);
+const sessionOrderIds = ref<string[]>([]);
 const activeSlide = ref(0);
 const activeFilter = ref('综合排序');
 const filters = ['综合排序', '距离最近', '评分最高', '预计更快', '免配送费'];
 const statusBarHeight = uni.getSystemInfoSync().statusBarHeight ?? 20;
 const safeTopStyle = computed(() => ({ paddingTop: `${statusBarHeight + 14}px` }));
 let carouselTimer: ReturnType<typeof setInterval> | undefined;
+let orderTimer: ReturnType<typeof setInterval> | undefined;
+const settlementRequested = new Set<string>();
 
 const heroSlides = [
   { eyebrow: '✦ 本周主题餐单', title: '认真吃饭，\n不必将就。', description: '精选附近口碑店，把今天这一顿吃明白。', food: '🍛', counter: '新店上架', tone: 'new' },
@@ -65,13 +77,83 @@ function stopCarousel() {
   carouselTimer = undefined;
 }
 
+function seenStorageKey() {
+  return homeOrderSeenKey(auth.accountId);
+}
+
+function loadDismissedOrderIds() {
+  dismissedOrderIds.value = auth.accountId
+    ? (uni.getStorageSync(seenStorageKey()) || []) as string[]
+    : [];
+}
+
+function dismissOrder(orderId: string) {
+  sessionOrderIds.value = sessionOrderIds.value.filter((id) => id !== orderId);
+  if (!auth.accountId || dismissedOrderIds.value.includes(orderId)) return;
+  dismissedOrderIds.value = [...dismissedOrderIds.value, orderId];
+  uni.setStorageSync(seenStorageKey(), dismissedOrderIds.value);
+}
+
+function openOrder(orderId: string) {
+  uni.navigateTo({
+    url: `/pages/delivery/index?id=${orderId}`,
+  });
+}
+
+async function refreshOrders() {
+  await orders.load();
+  loadDismissedOrderIds();
+  sessionOrderIds.value = orders.orders
+    .map((order) => createHomeOrderSummary(order, orderNow.value))
+    .filter((summary) => !summary.terminal && !dismissedOrderIds.value.includes(summary.order.id))
+    .map((summary) => summary.order.id);
+}
+
+function refreshFailedIncidentRefunds() {
+  const pendingRefunds = orders.orders.filter((order) => (
+    order.incident
+    && getDeliveryIncidentPhase(order.incident, orderNow.value) === 'failed'
+    && order.refundStatus !== 'refunded'
+    && !settlementRequested.has(order.id)
+  ));
+  if (!pendingRefunds.length) return;
+  pendingRefunds.forEach((order) => settlementRequested.add(order.id));
+  void orders.load();
+}
+
+function startOrderTimer() {
+  stopOrderTimer();
+  orderNow.value = Date.now();
+  orderTimer = setInterval(() => {
+    orderNow.value = Date.now();
+    refreshFailedIncidentRefunds();
+  }, 1000);
+}
+
+function stopOrderTimer() {
+  if (orderTimer) clearInterval(orderTimer);
+  orderTimer = undefined;
+}
+
+function handleShow() {
+  settlementRequested.clear();
+  startCarousel();
+  startOrderTimer();
+  void refreshOrders();
+}
+
+function handleHide() {
+  stopCarousel();
+  stopOrderTimer();
+}
+
 onLoad(() => {
   load();
   if (location.status === 'idle') location.locate();
 });
-onShow(startCarousel);
-onHide(stopCarousel);
-onUnload(stopCarousel);
+onShow(handleShow);
+onHide(handleHide);
+onUnload(handleHide);
 </script>
 
 <template>
@@ -123,6 +205,14 @@ onUnload(stopCarousel);
           />
         </view>
       </section>
+
+      <HomeOrderCarousel
+        :orders="orders.orders"
+        :now="orderNow"
+        :visible-order-ids="sessionOrderIds"
+        @open="openOrder"
+        @dismiss="dismissOrder"
+      />
 
       <view v-if="loading" class="state-block">正在准备虚拟菜单…</view>
       <view v-else-if="error" class="state-block error-state">

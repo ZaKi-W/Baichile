@@ -21,10 +21,10 @@
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [
-      { "pagePath": "pages/home/index", "text": "首页" },
-      { "pagePath": "pages/discover/index", "text": "发现" },
-      { "pagePath": "pages/orders/index", "text": "订单" },
-      { "pagePath": "pages/profile/index", "text": "我的" }
+      { "pagePath": "pages/home/index", "text": "首页", "iconPath": "static/tabbar/home.png", "selectedIconPath": "static/tabbar/home-active.png" },
+      { "pagePath": "pages/discover/index", "text": "发现", "iconPath": "static/tabbar/discover.png", "selectedIconPath": "static/tabbar/discover-active.png" },
+      { "pagePath": "pages/orders/index", "text": "订单", "iconPath": "static/tabbar/orders.png", "selectedIconPath": "static/tabbar/orders-active.png" },
+      { "pagePath": "pages/profile/index", "text": "我的", "iconPath": "static/tabbar/profile.png", "selectedIconPath": "static/tabbar/profile-active.png" }
     ]
   },
   "globalStyle": {

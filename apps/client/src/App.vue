@@ -1,17 +1,13 @@
 <script setup lang="ts">
 import { onLaunch, onShow } from '@dcloudio/uni-app';
 import { useAuthStore } from './stores/auth';
-import { CODE_VERSION } from './config/code-version';
 
 onLaunch(() => {
   useAuthStore().ensureGuest();
 });
 
 onShow(() => {
-  uni.setTabBarBadge({
-    index: 3,
-    text: String(CODE_VERSION),
-  });
+  uni.removeTabBarBadge({ index: 3 });
 });
 </script>
 

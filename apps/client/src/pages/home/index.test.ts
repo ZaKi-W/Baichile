@@ -19,11 +19,25 @@ describe('home page sections', () => {
     expect(source).not.toContain('function runHeroAction');
     expect(source).not.toContain('排序 ⇅');
     expect(source).toContain('.filter-chip { flex: 0 0 auto; min-height: 64rpx; display: inline-flex; align-items: center; justify-content: center;');
-    expect(source).toContain('onUnload(stopCarousel)');
+    expect(source).toContain('onUnload(handleHide)');
     expect(source).toContain('data.categories.slice(0, 8)');
     expect(source).toContain(':index="index"');
     expect(source).not.toContain('今晚想吃什么');
     expect(source).not.toContain('class="card topic"');
     expect(source).not.toContain('.topic {');
+  });
+
+  it('loads and refreshes home order cards below the hero', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('HomeOrderCarousel');
+    expect(source.indexOf('<HomeOrderCarousel')).toBeGreaterThan(source.indexOf('</section>'));
+    expect(source).toContain('orders.load()');
+    expect(source).toContain('startOrderTimer');
+    expect(source).toContain('stopOrderTimer');
+    expect(source).toContain('homeOrderSeenKey');
+    expect(source).toContain('refreshFailedIncidentRefunds');
+    expect(source).toContain('sessionOrderIds');
+    expect(source).toContain('!summary.terminal');
   });
 });
