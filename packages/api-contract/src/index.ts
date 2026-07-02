@@ -18,9 +18,17 @@ export interface MenuItem {
   subtitle?: string;
   imageUrl?: string;
   basePriceCents: number;
+  caloriesKcal: number;
+  calorieSource: CalorieSource;
   monthlySales: number;
   specGroups: SpecGroup[];
   sourceType: SourceType;
+}
+
+export interface CalorieSource {
+  type: 'official' | 'composition_estimate';
+  description: string;
+  referenceUrl: string;
 }
 
 export interface MenuSubCategory {
@@ -79,6 +87,8 @@ export interface QuoteLine {
   quantity: number;
   unitPriceCents: number;
   totalCents: number;
+  unitCaloriesKcal: number;
+  totalCaloriesKcal: number;
 }
 
 export interface OrderQuote {
@@ -88,6 +98,13 @@ export interface OrderQuote {
   deliveryFeeCents: number;
   packingFeeCents: number;
   totalCents: number;
+  itemsTotalCaloriesKcal: number;
+}
+
+export interface AccountSavings {
+  savedMoneyCents: number;
+  savedCaloriesKcal: number;
+  completedOrderCount: number;
 }
 
 export interface VirtualOrder extends OrderQuote {

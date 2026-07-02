@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { calculateLineTotal, calculateOrderTotal, validateSelections } from './index';
+import {
+  calculateLineCalories,
+  calculateLineTotal,
+  calculateOrderTotal,
+  validateSelections,
+} from './index';
 
 describe('order pricing', () => {
   it('uses integer cents for item options and quantity', () => {
@@ -8,6 +13,16 @@ describe('order pricing', () => {
 
   it('adds delivery and packing fees once', () => {
     expect(calculateOrderTotal([4600, 1200], 300, 100)).toBe(6200);
+  });
+});
+
+describe('order calories', () => {
+  it('adds selected specification calories and multiplies by quantity', () => {
+    expect(calculateLineCalories(420, [180, -35], 2)).toBe(1130);
+  });
+
+  it('rejects a calorie result below zero', () => {
+    expect(() => calculateLineCalories(20, [-30], 1)).toThrow('卡路里不能小于 0');
   });
 });
 
@@ -31,4 +46,3 @@ describe('SKU validation', () => {
     expect(validateSelections(groups, ['large'])).toEqual({ valid: true });
   });
 });
-

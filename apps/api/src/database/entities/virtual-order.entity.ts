@@ -15,6 +15,7 @@ export class VirtualOrderEntity {
   @Column({ name: 'delivery_fee_cents', type: 'integer' }) deliveryFeeCents!: number;
   @Column({ name: 'packing_fee_cents', type: 'integer' }) packingFeeCents!: number;
   @Column({ name: 'total_cents', type: 'integer' }) totalCents!: number;
+  @Column({ name: 'items_total_calories_kcal', type: 'integer' }) itemsTotalCaloriesKcal!: number;
   @Column('jsonb') lines!: unknown[];
   @Column('jsonb') route!: unknown;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt!: Date;

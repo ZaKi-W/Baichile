@@ -1,5 +1,6 @@
 import type { Category, MenuItem, MenuSubCategory, StoreDetail } from '@baichile/api-contract';
 import type { SpecGroup } from '@baichile/domain';
+import { estimateCalories, withCalorieDeltas } from './calorie-estimates';
 
 /* ═══════════════════════════════════════════════
    Categories
@@ -40,30 +41,34 @@ function sizeSpec(id: string): SpecGroup {
   return {
     id: `${id}-size`, name: '份量', required: true, minSelect: 1, maxSelect: 1,
     options: [
-      { id: `${id}-std`, name: '标准份', priceDeltaCents: 0, isDefault: true },
-      { id: `${id}-lg`, name: '大份', priceDeltaCents: 500 },
+      { id: `${id}-std`, name: '标准份', priceDeltaCents: 0, calorieDeltaKcal: 0, isDefault: true },
+      { id: `${id}-lg`, name: '大份', priceDeltaCents: 500, calorieDeltaKcal: 0 },
     ],
   };
 }
 function spiceSpec(id: string, levels: string[] = ['微辣', '中辣', '特辣']): SpecGroup {
   return {
     id: `${id}-spice`, name: '辣度', required: false, minSelect: 0, maxSelect: 1,
-    options: levels.map((name, i) => ({ id: `${id}-spice-${i}`, name, priceDeltaCents: 0 })),
+    options: levels.map((name, i) => ({
+      id: `${id}-spice-${i}`, name, priceDeltaCents: 0, calorieDeltaKcal: 0,
+    })),
   };
 }
 function sweetSpec(id: string, levels: string[] = ['正常糖', '七分糖', '半糖', '不加糖']): SpecGroup {
   return {
     id: `${id}-sweet`, name: '甜度', required: false, minSelect: 0, maxSelect: 1,
-    options: levels.map((name, i) => ({ id: `${id}-sweet-${i}`, name, priceDeltaCents: 0 })),
+    options: levels.map((name, i) => ({
+      id: `${id}-sweet-${i}`, name, priceDeltaCents: 0, calorieDeltaKcal: 0,
+    })),
   };
 }
 function tempSpec(id: string): SpecGroup {
   return {
     id: `${id}-temp`, name: '温度', required: false, minSelect: 0, maxSelect: 1,
     options: [
-      { id: `${id}-hot`, name: '热', priceDeltaCents: 0 },
-      { id: `${id}-ice`, name: '冰', priceDeltaCents: 0 },
-      { id: `${id}-warm`, name: '温', priceDeltaCents: 0 },
+      { id: `${id}-hot`, name: '热', priceDeltaCents: 0, calorieDeltaKcal: 0 },
+      { id: `${id}-ice`, name: '冰', priceDeltaCents: 0, calorieDeltaKcal: 0 },
+      { id: `${id}-warm`, name: '温', priceDeltaCents: 0, calorieDeltaKcal: 0 },
     ],
   };
 }
@@ -71,9 +76,9 @@ function drinkSizeSpec(id: string): SpecGroup {
   return {
     id: `${id}-size`, name: '杯型', required: true, minSelect: 1, maxSelect: 1,
     options: [
-      { id: `${id}-med`, name: '中杯', priceDeltaCents: 0, isDefault: true },
-      { id: `${id}-lg`, name: '大杯', priceDeltaCents: 300 },
-      { id: `${id}-xl`, name: '超大杯', priceDeltaCents: 500 },
+      { id: `${id}-med`, name: '中杯', priceDeltaCents: 0, calorieDeltaKcal: 0, isDefault: true },
+      { id: `${id}-lg`, name: '大杯', priceDeltaCents: 300, calorieDeltaKcal: 0 },
+      { id: `${id}-xl`, name: '超大杯', priceDeltaCents: 500, calorieDeltaKcal: 0 },
     ],
   };
 }
@@ -164,6 +169,7 @@ function buildStore(raw: RawStore): StoreDetail {
     const specs = item.specs
       ? item.specs.map((s, si) => ({ ...defaultSpecs[si] ?? sizeSpec(itemId), ...s, id: s.id ?? `${itemId}-spec-${si}`, options: (s.options ?? defaultSpecs[si]?.options ?? []).map((o, oi) => ({ ...o, id: o.id ?? `${itemId}-opt-${si}-${oi}` })) }))
       : defaultSpecs;
+    const calorieEstimate = estimateCalories(item.name, raw.categoryId);
     return {
       id: itemId,
       storeId: id,
@@ -172,9 +178,10 @@ function buildStore(raw: RawStore): StoreDetail {
       name: item.name,
       subtitle: item.subtitle,
       basePriceCents: yuan(item.price),
+      ...calorieEstimate,
       monthlySales: Math.floor(30 + Math.random() * 800),
       sourceType: 'original',
-      specGroups: specs,
+      specGroups: withCalorieDeltas(specs, calorieEstimate.caloriesKcal),
     };
   });
   return {

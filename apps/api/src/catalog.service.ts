@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { HomeResponse, MenuItem, SourceType, StoreDetail } from '@baichile/api-contract';
+import type { CalorieSource, HomeResponse, MenuItem, SourceType, StoreDetail } from '@baichile/api-contract';
 import type { SpecGroup } from '@baichile/domain';
 import { In, Repository } from 'typeorm';
 import { CategoryEntity } from './database/entities/category.entity';
@@ -69,6 +69,7 @@ export class CatalogService {
         subCategoryId: item.subCategoryId ?? undefined, name: item.name,
         subtitle: item.subtitle ?? undefined, imageUrl: item.imageUrl ?? undefined,
         basePriceCents: item.basePriceCents, monthlySales: item.monthlySales,
+        caloriesKcal: item.caloriesKcal, calorieSource: item.calorieSource as CalorieSource,
         specGroups: item.specGroups as SpecGroup[], sourceType: item.sourceType as SourceType,
       })),
       subCategories: subs.filter((item) => item.storeId === store.id)

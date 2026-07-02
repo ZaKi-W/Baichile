@@ -19,4 +19,14 @@ describe('profile page WeChat login', () => {
     expect(source).toContain('{{ auth.userProfile.nickname }}');
     expect(source).toContain('v-if="auth.accountId"');
   });
+
+  it('shows completed-order money and calorie savings for the account', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('orders.savings.savedMoneyCents');
+    expect(source).toContain('orders.savings.savedCaloriesKcal');
+    expect(source).toContain('orders.savings.completedOrderCount');
+    expect(source).toContain('累计省下');
+    expect(source).toContain('约省卡路里');
+  });
 });

@@ -1,14 +1,31 @@
 import { defineStore } from 'pinia';
-import type { VirtualOrder } from '@baichile/api-contract';
+import type { AccountSavings, VirtualOrder } from '@baichile/api-contract';
 import { orderService } from '../services/orders';
 import { useAuthStore } from './auth';
 
 const orderKey = (ownerId: string) => `baichile:orders:${ownerId}`;
+const emptySavings = (): AccountSavings => ({
+  savedMoneyCents: 0,
+  savedCaloriesKcal: 0,
+  completedOrderCount: 0,
+});
+
+function savingsFromOrders(orders: VirtualOrder[], now = Date.now()): AccountSavings {
+  return orders.reduce<AccountSavings>((summary, order) => {
+    const completed = now - new Date(order.startedAt).getTime() >= 83_000 + order.durationMs;
+    if (!completed) return summary;
+    summary.savedMoneyCents += order.totalCents;
+    summary.savedCaloriesKcal += order.itemsTotalCaloriesKcal || 0;
+    summary.completedOrderCount += 1;
+    return summary;
+  }, emptySavings());
+}
 
 export const useOrderStore = defineStore('orders', {
   state: () => ({
     orders: [] as VirtualOrder[],
     current: null as VirtualOrder | null,
+    savings: emptySavings(),
   }),
   actions: {
     async load() {
@@ -17,13 +34,18 @@ export const useOrderStore = defineStore('orders', {
       if (!auth.accountId) {
         this.orders = [];
         this.current = null;
+        this.savings = emptySavings();
         return;
       }
       try {
-        this.orders = await orderService.list();
+        [this.orders, this.savings] = await Promise.all([
+          orderService.list(),
+          orderService.savings(),
+        ]);
         uni.setStorageSync(orderKey(auth.accountId), this.orders);
       } catch {
         this.orders = (uni.getStorageSync(orderKey(auth.accountId)) || []) as VirtualOrder[];
+        this.savings = savingsFromOrders(this.orders);
       }
     },
     save(order: VirtualOrder) {

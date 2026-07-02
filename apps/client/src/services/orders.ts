@@ -1,5 +1,5 @@
-import type { OrderQuote, QuoteRequest, VirtualOrder } from '@baichile/api-contract';
-import { calculateOrderTotal } from '@baichile/domain';
+import type { AccountSavings, OrderQuote, QuoteRequest, VirtualOrder } from '@baichile/api-contract';
+import { calculateLineCalories, calculateOrderTotal } from '@baichile/domain';
 import type { GeoPoint, VirtualRoute } from '@baichile/map-core';
 import { catalogService } from './catalog';
 import { useAuthStore } from '../stores/auth';
@@ -35,16 +35,24 @@ async function localQuote(request: QuoteRequest): Promise<OrderQuote> {
     const item = store.menu.find((candidate) => candidate.id === input.menuItemId)!;
     const options = item.specGroups.flatMap((group) => group.options).filter((option) => input.optionIds.includes(option.id));
     const unitPriceCents = item.basePriceCents + options.reduce((sum, option) => sum + option.priceDeltaCents, 0);
+    const unitCaloriesKcal = calculateLineCalories(
+      item.caloriesKcal,
+      options.map((option) => option.calorieDeltaKcal),
+      1,
+    );
     return {
       menuItemId: item.id, name: item.name, optionNames: options.map((option) => option.name),
       quantity: input.quantity, unitPriceCents, totalCents: unitPriceCents * input.quantity,
+      unitCaloriesKcal, totalCaloriesKcal: unitCaloriesKcal * input.quantity,
     };
   });
   const itemsTotalCents = lines.reduce((sum, line) => sum + line.totalCents, 0);
+  const itemsTotalCaloriesKcal = lines.reduce((sum, line) => sum + line.totalCaloriesKcal, 0);
   return {
     storeId: store.id, lines, itemsTotalCents,
     deliveryFeeCents: store.deliveryFeeCents, packingFeeCents: store.packingFeeCents,
     totalCents: calculateOrderTotal(lines.map((line) => line.totalCents), store.deliveryFeeCents, store.packingFeeCents),
+    itemsTotalCaloriesKcal,
   };
 }
 
@@ -101,5 +109,24 @@ export const orderService = {
     return get<VirtualOrder[]>('/v1/orders/me', {
       Authorization: `Bearer ${auth.accessToken}`,
     });
+  },
+  async savings(): Promise<AccountSavings> {
+    const auth = useAuthStore();
+    const empty = { savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0 };
+    if (!auth.accountId) return empty;
+    if (API_BASE) {
+      return get<AccountSavings>('/v1/accounts/me/savings', {
+        Authorization: `Bearer ${auth.accessToken}`,
+      });
+    }
+    const orders = (uni.getStorageSync(`baichile:orders:${auth.accountId}`) || []) as VirtualOrder[];
+    return orders.reduce<AccountSavings>((summary, order) => {
+      const completed = Date.now() - new Date(order.startedAt).getTime() >= 83_000 + order.durationMs;
+      if (!completed) return summary;
+      summary.savedMoneyCents += order.totalCents;
+      summary.savedCaloriesKcal += order.itemsTotalCaloriesKcal;
+      summary.completedOrderCount += 1;
+      return summary;
+    }, empty);
   },
 };

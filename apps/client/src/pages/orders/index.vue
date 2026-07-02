@@ -14,6 +14,8 @@ const statusLabel = (startedAt: string, durationMs: number) => {
   const step = getOrderStep(new Date(startedAt).getTime(), durationMs, now.value);
   return step.listLabel || step.label;
 };
+const isCompleted = (startedAt: string, durationMs: number) =>
+  getOrderStep(new Date(startedAt).getTime(), durationMs, now.value).key === 'completed';
 onShow(() => {
   now.value = Date.now();
   void orders.load();
@@ -35,7 +37,11 @@ onHide(() => clearInterval(statusTimer));
           <text>虚拟订单</text>
           <text class="status-badge">{{ statusLabel(order.startedAt, order.durationMs) }}</text>
         </view>
-        <text>¥{{ (order.totalCents / 100).toFixed(2) }}</text>
+        <view v-if="isCompleted(order.startedAt, order.durationMs)" class="savings">
+          <text>省 ¥{{ (order.totalCents / 100).toFixed(2) }}</text>
+          <text class="calorie-saving">约省 {{ order.itemsTotalCaloriesKcal }} 千卡</text>
+        </view>
+        <text v-else>¥{{ (order.totalCents / 100).toFixed(2) }}</text>
       </view>
       <text class="muted">{{ new Date(order.startedAt).toLocaleString() }}</text>
     </view>
@@ -48,6 +54,8 @@ onHide(() => clearInterval(statusTimer));
 .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12rpx; font-weight: 600; }
 .order-heading { display: flex; align-items: center; gap: 14rpx; }
 .status-badge { padding: 5rpx 12rpx; border-radius: 999rpx; background: #fff0eb; color: #ff5b38; font-size: 22rpx; font-weight: 600; }
+.savings { display: flex; flex-direction: column; align-items: flex-end; color: #ff5b38; }
+.calorie-saving { margin-top: 4rpx; color: #7b8c38; font-size: 22rpx; font-weight: 500; }
 .login-button { margin-top: 20rpx; }
 .tab-spacer { height: 120rpx; }
 </style>

@@ -10,6 +10,8 @@ export class MenuItemEntity {
   @Column({ type: 'text', nullable: true }) subtitle!: string | null;
   @Column({ name: 'image_url', type: 'text', nullable: true }) imageUrl!: string | null;
   @Column({ name: 'base_price_cents', type: 'integer' }) basePriceCents!: number;
+  @Column({ name: 'calories_kcal', type: 'integer' }) caloriesKcal!: number;
+  @Column({ name: 'calorie_source', type: 'jsonb' }) calorieSource!: unknown;
   @Column({ name: 'monthly_sales', type: 'integer' }) monthlySales!: number;
   @Column({ name: 'spec_groups', type: 'jsonb' }) specGroups!: unknown[];
   @Column({ name: 'source_type', type: 'text' }) sourceType!: string;

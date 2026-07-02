@@ -85,8 +85,16 @@ async function login() {
       </view>
       <view class="stats-row">
         <view class="stat-item">
-          <text class="stat-value">{{ orders.orders.length }}</text>
-          <text class="stat-label">虚拟订单</text>
+          <text class="stat-value">{{ orders.savings.completedOrderCount }}</text>
+          <text class="stat-label">完成订单</text>
+        </view>
+        <view class="stat-item">
+          <text class="stat-value money-value">¥{{ (orders.savings.savedMoneyCents / 100).toFixed(2) }}</text>
+          <text class="stat-label">累计省下</text>
+        </view>
+        <view class="stat-item">
+          <text class="stat-value">{{ orders.savings.savedCaloriesKcal }}</text>
+          <text class="stat-label">约省卡路里</text>
         </view>
       </view>
     </view>
@@ -252,6 +260,8 @@ async function login() {
   color: #fff;
   line-height: 1;
 }
+
+.money-value { font-size: 36rpx; }
 
 .stat-label {
   font-size: 24rpx;

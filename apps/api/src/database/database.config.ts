@@ -10,6 +10,7 @@ import { StoreSubCategoryEntity } from './entities/store-sub-category.entity';
 import { MenuItemEntity } from './entities/menu-item.entity';
 import { AnalyticsEventEntity } from './entities/analytics-event.entity';
 import { CreateCatalogAndAnalyticsTables1760000001000 } from './migrations/1760000001000-CreateCatalogAndAnalyticsTables';
+import { AddCalories1760000002000 } from './migrations/1760000002000-AddCalories';
 
 export function createDatabaseOptions(): PostgresConnectionOptions {
   const url = process.env.DATABASE_URL;
@@ -25,6 +26,10 @@ export function createDatabaseOptions(): PostgresConnectionOptions {
       AccountEntity, VisitorSessionEntity, AddressEntity, VirtualOrderEntity,
       CategoryEntity, StoreEntity, StoreSubCategoryEntity, MenuItemEntity, AnalyticsEventEntity,
     ],
-    migrations: [CreatePersistenceTables1760000000000, CreateCatalogAndAnalyticsTables1760000001000],
+    migrations: [
+      CreatePersistenceTables1760000000000,
+      CreateCatalogAndAnalyticsTables1760000001000,
+      AddCalories1760000002000,
+    ],
   };
 }

@@ -2,6 +2,7 @@ export interface SpecOption {
   id: string;
   name: string;
   priceDeltaCents: number;
+  calorieDeltaKcal: number;
   isDefault?: boolean;
 }
 
@@ -31,6 +32,18 @@ export function calculateOrderTotal(
   return lineTotals.reduce((sum, total) => sum + total, 0) + deliveryFeeCents + packingFeeCents;
 }
 
+export function calculateLineCalories(
+  baseCaloriesKcal: number,
+  optionCalorieDeltas: number[],
+  quantity: number,
+): number {
+  if (!Number.isInteger(quantity) || quantity < 1) throw new Error('商品数量必须是正整数');
+  const unitCalories = baseCaloriesKcal
+    + optionCalorieDeltas.reduce((sum, calories) => sum + calories, 0);
+  if (unitCalories < 0) throw new Error('卡路里不能小于 0');
+  return unitCalories * quantity;
+}
+
 export function validateSelections(
   groups: SpecGroup[],
   optionIds: string[],
@@ -45,4 +58,3 @@ export function validateSelections(
   }
   return { valid: true };
 }
-

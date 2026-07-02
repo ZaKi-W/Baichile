@@ -109,6 +109,12 @@ export class AppController {
     return this.orders.list(identity.visitorId, identity.accountId);
   }
 
+  @Get('accounts/me/savings')
+  async mySavings(@Headers('authorization') authorization?: string) {
+    const identity = await this.auth.resolvePersistedIdentity(authorization);
+    return this.orders.savings(identity.accountId);
+  }
+
   @Get('orders/:orderId')
   order(@Param('orderId') orderId: string) { return this.orders.find(orderId); }
 

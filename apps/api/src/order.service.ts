@@ -1,12 +1,33 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { OrderQuote, QuoteRequest, VirtualOrder } from '@baichile/api-contract';
-import { calculateLineTotal, calculateOrderTotal, validateSelections } from '@baichile/domain';
+import type { AccountSavings, OrderQuote, QuoteRequest, VirtualOrder } from '@baichile/api-contract';
+import {
+  calculateLineCalories,
+  calculateLineTotal,
+  calculateOrderTotal,
+  validateSelections,
+} from '@baichile/domain';
 import type { DeliveryStatus, GeoPoint, VirtualRoute } from '@baichile/map-core';
 import { CatalogService } from './catalog.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { VirtualOrderEntity } from './database/entities/virtual-order.entity';
+
+export function summarizeCompletedOrders(
+  orders: Array<{
+    completed: boolean;
+    totalCents: number;
+    itemsTotalCaloriesKcal: number;
+  }>,
+): AccountSavings {
+  return orders.reduce<AccountSavings>((summary, order) => {
+    if (!order.completed) return summary;
+    summary.savedMoneyCents += order.totalCents;
+    summary.savedCaloriesKcal += order.itemsTotalCaloriesKcal;
+    summary.completedOrderCount += 1;
+    return summary;
+  }, { savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0 });
+}
 
 @Injectable()
 export class OrderService {
@@ -26,6 +47,11 @@ export class OrderService {
       const options = item.specGroups.flatMap((group) => group.options)
         .filter((option) => input.optionIds.includes(option.id));
       const unitPriceCents = item.basePriceCents + options.reduce((sum, option) => sum + option.priceDeltaCents, 0);
+      const unitCaloriesKcal = calculateLineCalories(
+        item.caloriesKcal,
+        options.map((option) => option.calorieDeltaKcal),
+        1,
+      );
       return {
         menuItemId: item.id,
         name: item.name,
@@ -33,9 +59,12 @@ export class OrderService {
         quantity: input.quantity,
         unitPriceCents,
         totalCents: calculateLineTotal(item.basePriceCents, options.map((option) => option.priceDeltaCents), input.quantity),
+        unitCaloriesKcal,
+        totalCaloriesKcal: unitCaloriesKcal * input.quantity,
       };
     });
     const itemsTotalCents = lines.reduce((sum, line) => sum + line.totalCents, 0);
+    const itemsTotalCaloriesKcal = lines.reduce((sum, line) => sum + line.totalCaloriesKcal, 0);
     return {
       storeId: store.id,
       lines,
@@ -43,6 +72,7 @@ export class OrderService {
       deliveryFeeCents: store.deliveryFeeCents,
       packingFeeCents: store.packingFeeCents,
       totalCents: calculateOrderTotal(lines.map((line) => line.totalCents), store.deliveryFeeCents, store.packingFeeCents),
+      itemsTotalCaloriesKcal,
     };
   }
 
@@ -78,6 +108,7 @@ export class OrderService {
       deliveryFeeCents: order.deliveryFeeCents,
       packingFeeCents: order.packingFeeCents,
       totalCents: order.totalCents,
+      itemsTotalCaloriesKcal: order.itemsTotalCaloriesKcal,
       lines: order.lines,
       route: order.route,
     }));
@@ -105,6 +136,18 @@ export class OrderService {
     return { merged: result.affected ?? 0 };
   }
 
+  async savings(accountId?: string): Promise<AccountSavings> {
+    if (!accountId) {
+      return { savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0 };
+    }
+    const rows = await this.orders.findBy({ accountId });
+    return summarizeCompletedOrders(rows.map((row) => ({
+      completed: this.currentStatus(row) === 'completed',
+      totalCents: row.totalCents,
+      itemsTotalCaloriesKcal: row.itemsTotalCaloriesKcal,
+    })));
+  }
+
   private toOrder(row: VirtualOrderEntity): VirtualOrder {
     return {
       id: row.id,
@@ -121,6 +164,7 @@ export class OrderService {
       deliveryFeeCents: row.deliveryFeeCents,
       packingFeeCents: row.packingFeeCents,
       totalCents: row.totalCents,
+      itemsTotalCaloriesKcal: row.itemsTotalCaloriesKcal,
       lines: row.lines as VirtualOrder['lines'],
       route: row.route as VirtualRoute,
     };

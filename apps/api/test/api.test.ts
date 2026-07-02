@@ -169,6 +169,10 @@ describe('MVP API', () => {
     };
     const quote = await app.inject({ method: 'POST', url: '/v1/orders/quote', payload });
     expect(quote.statusCode).toBe(201);
+    expect(quote.json().itemsTotalCaloriesKcal).toBeGreaterThan(0);
+    expect(quote.json().lines[0].totalCaloriesKcal).toBe(
+      quote.json().lines[0].unitCaloriesKcal * 2,
+    );
     const order = await app.inject({
       method: 'POST',
       url: '/v1/orders/virtual',
@@ -178,6 +182,7 @@ describe('MVP API', () => {
     expect(order.statusCode).toBe(201);
     expect(order.json().isVirtual).toBe(true);
     expect(order.json().totalCents).toBe(quote.json().totalCents);
+    expect(order.json().itemsTotalCaloriesKcal).toBe(quote.json().itemsTotalCaloriesKcal);
     expect(order.json().durationMs).toBe(store.virtualDeliveryMinutes * 60_000);
     expect(order.json().route.label).toBe('虚拟配送路线');
     expect(order.json().route.destination).toEqual(payload.virtualDestinationPoint);
@@ -209,6 +214,38 @@ describe('MVP API', () => {
       headers: { authorization: `Bearer ${accountToken}` },
     });
     expect(accountList.json().map((item: { id: string }) => item.id)).toContain(accountOrder.json().id);
+
+    const pendingSavings = await app.inject({
+      method: 'GET',
+      url: '/v1/accounts/me/savings',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    expect(pendingSavings.json()).toEqual({
+      savedMoneyCents: 0,
+      savedCaloriesKcal: 0,
+      completedOrderCount: 0,
+    });
+
+    const database = new DataSource(createDatabaseOptions());
+    await database.initialize();
+    await database.query(
+      `UPDATE virtual_orders
+       SET started_at = now() - ((duration_ms + 84000) * interval '1 millisecond')
+       WHERE id = $1`,
+      [accountOrder.json().id],
+    );
+    await database.destroy();
+
+    const completedSavings = await app.inject({
+      method: 'GET',
+      url: '/v1/accounts/me/savings',
+      headers: { authorization: `Bearer ${accountToken}` },
+    });
+    expect(completedSavings.json()).toEqual({
+      savedMoneyCents: accountOrder.json().totalCents,
+      savedCaloriesKcal: accountOrder.json().itemsTotalCaloriesKcal,
+      completedOrderCount: 1,
+    });
   });
 
   it('keeps account data after the application restarts', async () => {

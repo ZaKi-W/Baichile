@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import { CreatePersistenceTables1760000000000 } from '../src/database/migrations/1760000000000-CreatePersistenceTables';
 import { CreateCatalogAndAnalyticsTables1760000001000 } from '../src/database/migrations/1760000001000-CreateCatalogAndAnalyticsTables';
+import { AddCalories1760000002000 } from '../src/database/migrations/1760000002000-AddCalories';
 
 describe('persistence migration', () => {
   let db: DataSource;
@@ -10,7 +11,11 @@ describe('persistence migration', () => {
     db = new DataSource({
       type: 'postgres',
       url: process.env.DATABASE_URL,
-      migrations: [CreatePersistenceTables1760000000000, CreateCatalogAndAnalyticsTables1760000001000],
+      migrations: [
+        CreatePersistenceTables1760000000000,
+        CreateCatalogAndAnalyticsTables1760000001000,
+        AddCalories1760000002000,
+      ],
     });
     await db.initialize();
     await db.undoLastMigration({ transaction: 'all' }).catch(() => undefined);
@@ -41,5 +46,19 @@ describe('persistence migration', () => {
     expect(rows.map((row) => row.table_name).sort()).toEqual(
       ['analytics_events', 'categories', 'menu_items', 'store_sub_categories', 'stores'],
     );
+  });
+
+  it('adds calorie snapshots to catalog and orders', async () => {
+    const rows = await db.query(
+      `SELECT table_name, column_name FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND (table_name, column_name) IN (
+           ('menu_items', 'calories_kcal'),
+           ('menu_items', 'calorie_source'),
+           ('virtual_orders', 'items_total_calories_kcal')
+         )`,
+    ) as Array<{ table_name: string; column_name: string }>;
+
+    expect(rows).toHaveLength(3);
   });
 });
