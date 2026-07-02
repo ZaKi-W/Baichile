@@ -4,7 +4,7 @@ import { onHide, onShow } from '@dcloudio/uni-app';
 import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { getOrderStep } from '../../utils/order-status';
-import { getDeliveryIncidentPhase } from '@baichile/domain';
+import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
 import type { VirtualOrder } from '@baichile/api-contract';
 const auth = useAuthStore();
 const orders = useOrderStore();
@@ -20,6 +20,13 @@ const statusLabel = (order: VirtualOrder) => {
   }
   const step = getOrderStep(new Date(order.startedAt).getTime(), order.durationMs, now.value);
   return step.listLabel || step.label;
+};
+const incidentText = (order: VirtualOrder) => {
+  if (!order.incident) return '';
+  const phase = getDeliveryIncidentPhase(order.incident, now.value);
+  if (phase === 'pending') return '';
+  const incident = findDeliveryIncident(order.incident.key);
+  return phase === 'failed' ? incident.failedText : incident.activeText;
 };
 const isCompleted = (startedAt: string, durationMs: number) =>
   getOrderStep(new Date(startedAt).getTime(), durationMs, now.value).key === 'completed';
@@ -54,6 +61,7 @@ onHide(() => clearInterval(statusTimer));
         </view>
         <text v-else>¥{{ (order.totalCents / 100).toFixed(2) }}</text>
       </view>
+      <text v-if="incidentText(order)" class="incident-story">{{ incidentText(order) }}</text>
       <text class="muted">{{ new Date(order.startedAt).toLocaleString() }}</text>
     </view>
     <view v-if="auth.accountId && !orders.orders.length" class="card muted">还没有虚拟订单，先去首页逛逛吧。</view>
@@ -68,6 +76,7 @@ onHide(() => clearInterval(statusTimer));
 .savings { display: flex; flex-direction: column; align-items: flex-end; color: #ff5b38; }
 .calorie-saving { margin-top: 4rpx; color: #7b8c38; font-size: 22rpx; font-weight: 500; }
 .failed-refund { color: #777; }
+.incident-story { display: block; margin-bottom: 10rpx; color: #ff5b38; font-size: 25rpx; line-height: 1.45; }
 .login-button { margin-top: 20rpx; }
 .tab-spacer { height: 120rpx; }
 </style>

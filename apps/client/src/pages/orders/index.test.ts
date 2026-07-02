@@ -17,4 +17,12 @@ describe('orders savings presentation', () => {
     expect(source).toContain('已退款');
     expect(source).toContain("order.status === 'failed'");
   });
+
+  it('shows the incident story directly in the order list', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('incidentText(order)');
+    expect(source).toContain('findDeliveryIncident');
+    expect(source).toContain('incident-story');
+  });
 });

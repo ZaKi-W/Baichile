@@ -87,15 +87,16 @@ export function stableHash(value: string): number {
 
 export function selectDeliveryIncident(
   seed: string,
-  deliveryDurationMinutes: number,
+  _deliveryDurationMinutes: number,
   orderStartedAt = Date.now(),
 ): DeliveryIncidentAssignment | undefined {
   const hash = stableHash(seed);
-  const startedAt = orderStartedAt + 83_000 + Math.round(deliveryDurationMinutes * 60_000 * 0.2);
+  if (hash % 10 >= 3) return undefined;
+  const startedAt = orderStartedAt + 30_000;
   return {
     key: DELIVERY_INCIDENTS[Math.floor(hash / 10) % DELIVERY_INCIDENTS.length].key,
     startedAt: new Date(startedAt).toISOString(),
-    failedAt: new Date(startedAt + 10_000).toISOString(),
+    failedAt: new Date(startedAt + 15_000).toISOString(),
   };
 }
 

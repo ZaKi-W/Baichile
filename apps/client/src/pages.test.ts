@@ -17,11 +17,11 @@ describe('native tab bar configuration', () => {
     });
   });
 
-  it('shows code version 1 on the profile tab badge at launch', () => {
+  it('shows code version 4 on the profile tab badge at launch', () => {
     const app = readFileSync(new URL('./App.vue', import.meta.url), 'utf8');
     const version = readFileSync(new URL('./config/code-version.ts', import.meta.url), 'utf8');
 
-    expect(version).toContain('CODE_VERSION = 1');
+    expect(version).toContain('CODE_VERSION = 4');
     expect(app).toContain('uni.setTabBarBadge');
     expect(app).toContain('index: 3');
     expect(app).toContain('text: String(CODE_VERSION)');
