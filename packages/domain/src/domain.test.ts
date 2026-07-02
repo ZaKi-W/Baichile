@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DELIVERY_INCIDENTS,
   calculateLineCalories,
   calculateLineTotal,
   calculateOrderTotal,
+  getDeliveryIncidentPhase,
+  selectDeliveryIncident,
   validateSelections,
 } from './index';
 
@@ -44,5 +47,28 @@ describe('SKU validation', () => {
 
   it('accepts a valid required selection', () => {
     expect(validateSelections(groups, ['large'])).toEqual({ valid: true });
+  });
+});
+
+describe('delivery incidents', () => {
+  it('selects one stable incident for every hash bucket', () => {
+    const orderStartedAt = Date.parse('2026-07-02T00:00:00.000Z');
+    expect(selectDeliveryIncident('seed-0', 20, orderStartedAt))
+      .toEqual(selectDeliveryIncident('seed-0', 20, orderStartedAt));
+    expect(Array.from({ length: 100 }, (_, index) => selectDeliveryIncident(`seed-${index}`, 20))
+      .filter(Boolean)).toHaveLength(100);
+    expect(DELIVERY_INCIDENTS).toHaveLength(8);
+  });
+
+  it('derives the incident and failed phases from absolute timestamps', () => {
+    const assignment = {
+      key: DELIVERY_INCIDENTS[0].key,
+      startedAt: '2026-07-02T10:00:00.000Z',
+      failedAt: '2026-07-02T10:00:10.000Z',
+    };
+
+    expect(getDeliveryIncidentPhase(assignment, Date.parse('2026-07-02T09:59:59.000Z'))).toBe('pending');
+    expect(getDeliveryIncidentPhase(assignment, Date.parse('2026-07-02T10:00:05.000Z'))).toBe('incident');
+    expect(getDeliveryIncidentPhase(assignment, Date.parse('2026-07-02T10:00:10.000Z'))).toBe('failed');
   });
 });

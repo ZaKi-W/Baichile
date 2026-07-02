@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { AccountSavings, VirtualOrder } from '@baichile/api-contract';
 import { orderService } from '../services/orders';
 import { useAuthStore } from './auth';
+import { getDeliveryIncidentPhase } from '@baichile/domain';
 
 const orderKey = (ownerId: string) => `baichile:orders:${ownerId}`;
 const emptySavings = (): AccountSavings => ({
@@ -12,6 +13,7 @@ const emptySavings = (): AccountSavings => ({
 
 function savingsFromOrders(orders: VirtualOrder[], now = Date.now()): AccountSavings {
   return orders.reduce<AccountSavings>((summary, order) => {
+    if (order.incident && getDeliveryIncidentPhase(order.incident, now) === 'failed') return summary;
     const completed = now - new Date(order.startedAt).getTime() >= 83_000 + order.durationMs;
     if (!completed) return summary;
     summary.savedMoneyCents += order.totalCents;

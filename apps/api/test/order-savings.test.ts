@@ -13,4 +13,14 @@ describe('account savings summary', () => {
       completedOrderCount: 2,
     });
   });
+
+  it('does not count failed orders as savings', () => {
+    expect(summarizeCompletedOrders([
+      { completed: false, totalCents: 6600, itemsTotalCaloriesKcal: 1200 },
+    ])).toEqual({
+      savedMoneyCents: 0,
+      savedCaloriesKcal: 0,
+      completedOrderCount: 0,
+    });
+  });
 });

@@ -92,6 +92,39 @@ describe('order store ownership', () => {
     });
   });
 
+  it('does not derive savings from a cached failed incident', async () => {
+    storage.set('baichile:account', {
+      accountId: 'account_me',
+      accessToken: 'account.token',
+      provider: 'wechat',
+      profile: { avatarUrl: 'avatar', nickname: '我' },
+    });
+    storage.set('baichile:orders:account_me', [{
+      id: 'failed',
+      startedAt: new Date(Date.now() - 200_000).toISOString(),
+      durationMs: 1_000,
+      totalCents: 2400,
+      itemsTotalCaloriesKcal: 560,
+      incident: {
+        key: 'alien_abduction',
+        startedAt: new Date(Date.now() - 20_000).toISOString(),
+        failedAt: new Date(Date.now() - 10_000).toISOString(),
+      },
+    }]);
+    listOrders.mockRejectedValue(new Error('offline'));
+    loadSavings.mockRejectedValue(new Error('offline'));
+    const { useOrderStore } = await import('./orders');
+    const orders = useOrderStore();
+
+    await orders.load();
+
+    expect(orders.savings).toEqual({
+      savedMoneyCents: 0,
+      savedCaloriesKcal: 0,
+      completedOrderCount: 0,
+    });
+  });
+
   it('does not expose cached orders before login', async () => {
     storage.set('baichile:orders', [{ id: 'order_from_another_user' }]);
     const { useOrderStore } = await import('./orders');

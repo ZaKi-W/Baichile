@@ -120,13 +120,17 @@ export class AppController {
   @Get('accounts/me/wallet')
   async myWallet(@Headers('authorization') authorization?: string) {
     const identity = await this.auth.resolvePersistedIdentity(authorization);
-    return this.wallet.summary(this.requireAccount(identity.accountId));
+    const accountId = this.requireAccount(identity.accountId);
+    await this.orders.settleFailedOrders(accountId);
+    return this.wallet.summary(accountId);
   }
 
   @Get('accounts/me/wallet/transactions')
   async myWalletTransactions(@Headers('authorization') authorization?: string) {
     const identity = await this.auth.resolvePersistedIdentity(authorization);
-    return this.wallet.listTransactions(this.requireAccount(identity.accountId));
+    const accountId = this.requireAccount(identity.accountId);
+    await this.orders.settleFailedOrders(accountId);
+    return this.wallet.listTransactions(accountId);
   }
 
   @Post('accounts/me/check-in')

@@ -6,6 +6,10 @@ import type { WalletTransactionType } from '@baichile/api-contract';
   unique: true,
   where: `"type" = 'daily_checkin'`,
 })
+@Index('wallet_transactions_order_refund_unique', ['orderId'], {
+  unique: true,
+  where: `"type" = 'order_refund'`,
+})
 export class WalletTransactionEntity {
   @PrimaryColumn('uuid') id!: string;
   @Index() @Column({ name: 'account_id', type: 'text' }) accountId!: string;

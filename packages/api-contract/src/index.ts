@@ -1,4 +1,5 @@
 import type { SpecGroup } from '@baichile/domain';
+import type { DeliveryIncidentAssignment } from '@baichile/domain';
 import type { DeliveryStatus, VirtualRoute } from '@baichile/map-core';
 
 export type SourceType = 'original' | 'licensed' | 'authorized' | 'derived';
@@ -111,7 +112,8 @@ export type WalletTransactionType =
   | 'initial_grant'
   | 'daily_checkin'
   | 'order_payment'
-  | 'test_credit';
+  | 'test_credit'
+  | 'order_refund';
 
 export interface WalletSummary {
   balanceCents: number;
@@ -139,6 +141,9 @@ export interface VirtualOrder extends OrderQuote {
   durationMs: number;
   seed: string;
   route: VirtualRoute;
+  incident?: DeliveryIncidentAssignment;
+  failedAt?: string;
+  refundStatus?: 'pending' | 'refunded';
 }
 
 export interface GuestSession {

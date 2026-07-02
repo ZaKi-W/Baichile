@@ -6,6 +6,7 @@ import { useAddressStore } from '../../stores/address';
 import { useCartStore } from '../../stores/cart';
 import { useOrderStore } from '../../stores/orders';
 import { getOrderStepIndex, ORDER_STEPS } from '../../utils/order-status';
+import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
 
 const orders = useOrderStore();
 const addressStore = useAddressStore();
@@ -141,24 +142,58 @@ const STEPS = ORDER_STEPS;
 const FINAL_STEP = ORDER_STEPS.length - 1;
 
 const currentStepIndex = ref(0);
+const now = ref(Date.now());
 let stepTimer: ReturnType<typeof setInterval> | undefined;
+let failureRefreshRequested = false;
+
+const incidentPhase = computed(() => order.value?.incident
+  ? getDeliveryIncidentPhase(order.value.incident, now.value)
+  : 'pending');
+const incidentDefinition = computed(() => order.value?.incident
+  ? findDeliveryIncident(order.value.incident.key)
+  : undefined);
+const hasIncident = computed(() => incidentPhase.value === 'incident');
+const hasFailed = computed(() => incidentPhase.value === 'failed');
+const timelineSteps = computed(() => {
+  if (!hasIncident.value && !hasFailed.value) return STEPS;
+  return STEPS.map((step, index) => index === FINAL_STEP
+    ? { ...step, label: hasFailed.value ? '配送失败' : '突发事件' }
+    : step);
+});
 
 function startStepTimer() {
   clearInterval(stepTimer);
   if (!order.value) return;
   const startedAt = new Date(order.value.startedAt).getTime();
   // Immediately set step based on elapsed time (supports re-entering)
-  currentStepIndex.value = getOrderStepIndex(startedAt, order.value.durationMs);
+  updateDeliveryState(startedAt);
   // If already at final step, no need for interval
-  if (currentStepIndex.value >= FINAL_STEP) return;
+  if (hasFailed.value || (!order.value.incident && currentStepIndex.value >= FINAL_STEP)) return;
   // Otherwise poll every second until we reach final step
   stepTimer = setInterval(() => {
-    currentStepIndex.value = getOrderStepIndex(startedAt, order.value!.durationMs);
-    if (currentStepIndex.value >= FINAL_STEP) clearInterval(stepTimer);
+    now.value = Date.now();
+    updateDeliveryState(startedAt);
+    if (hasFailed.value || (!order.value?.incident && currentStepIndex.value >= FINAL_STEP)) {
+      clearInterval(stepTimer);
+    }
   }, 1000);
 }
 
-const statusText = computed(() => STEPS[currentStepIndex.value]?.statusText || '配送中');
+function updateDeliveryState(startedAt: number) {
+  currentStepIndex.value = hasIncident.value || hasFailed.value
+    ? FINAL_STEP
+    : getOrderStepIndex(startedAt, order.value!.durationMs, now.value);
+  if (hasFailed.value && !failureRefreshRequested) {
+    failureRefreshRequested = true;
+    void orders.load();
+  }
+}
+
+const statusText = computed(() => {
+  if (hasFailed.value) return '配送失败';
+  if (hasIncident.value) return incidentDefinition.value?.activeText || '配送出现突发情况';
+  return STEPS[currentStepIndex.value]?.statusText || '配送中';
+});
 
 /* ── rider name ── */
 const SURNAMES = ['张', '李', '王', '刘', '陈', '杨', '赵', '黄', '周', '吴'];
@@ -170,6 +205,8 @@ const riderName = computed(() => {
 
 /* ── estimated delivery time ── */
 const etaText = computed(() => {
+  if (hasFailed.value) return incidentDefinition.value?.failedText || '本单未能送达';
+  if (hasIncident.value) return '正在确认外卖的下落';
   if (currentStepIndex.value === FINAL_STEP) return '订单已送达';
   const min = order.value ? Math.round(order.value.durationMs / 60_000) : storeDeliveryMinutes.value;
   return `预计 ${min} 分钟送达`;
@@ -177,6 +214,8 @@ const etaText = computed(() => {
 
 /* ── distance display ── */
 const distanceText = computed(() => {
+  if (hasFailed.value) return order.value?.refundStatus === 'refunded' ? '已退款' : '退款处理中';
+  if (hasIncident.value) return '';
   return `距离收货地址约 ${storeDistanceKm.value.toFixed(1)} 公里`;
 });
 
@@ -237,6 +276,11 @@ onBeforeUnmount(() => clearInterval(stepTimer));
 function goBack() {
   uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/home/index' }) });
 }
+
+function goToStore() {
+  if (!order.value) return;
+  uni.redirectTo({ url: `/pages/store/index?id=${order.value.storeId}` });
+}
 </script>
 
 <template>
@@ -279,7 +323,7 @@ function goBack() {
       <!-- 时间轴 -->
       <view class="timeline">
         <view
-          v-for="(step, idx) in STEPS"
+          v-for="(step, idx) in timelineSteps"
           :key="step.key"
           class="step"
         >
@@ -294,6 +338,8 @@ function goBack() {
           <text class="step-label" :class="{ active: idx <= currentStepIndex }">{{ step.label }}</text>
         </view>
       </view>
+
+      <button v-if="hasFailed" class="reorder-button" @tap="goToStore">重新点一单</button>
 
       <!-- 分隔线 -->
       <view class="divider" />
@@ -429,6 +475,15 @@ function goBack() {
   font-size: 24rpx;
   color: #999;
   margin-top: 4rpx;
+}
+.reorder-button {
+  margin: 24rpx 0 4rpx;
+  border: 0;
+  border-radius: 999rpx;
+  background: #ff5b38;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 700;
 }
 
 /* ── 时间轴 ── */

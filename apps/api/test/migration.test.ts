@@ -4,6 +4,7 @@ import { CreatePersistenceTables1760000000000 } from '../src/database/migrations
 import { CreateCatalogAndAnalyticsTables1760000001000 } from '../src/database/migrations/1760000001000-CreateCatalogAndAnalyticsTables';
 import { AddCalories1760000002000 } from '../src/database/migrations/1760000002000-AddCalories';
 import { AddWallet1760000003000 } from '../src/database/migrations/1760000003000-AddWallet';
+import { AddDeliveryIncidents1760000004000 } from '../src/database/migrations/1760000004000-AddDeliveryIncidents';
 
 describe('persistence migration', () => {
   let db: DataSource;
@@ -17,6 +18,7 @@ describe('persistence migration', () => {
         CreateCatalogAndAnalyticsTables1760000001000,
         AddCalories1760000002000,
         AddWallet1760000003000,
+        AddDeliveryIncidents1760000004000,
       ],
     });
     await db.initialize();
@@ -76,5 +78,21 @@ describe('persistence migration', () => {
 
     expect(columns).toHaveLength(1);
     expect(tables).toHaveLength(1);
+  });
+
+  it('adds delivery incident lifecycle columns and unique refunds', async () => {
+    const columns = await db.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'virtual_orders'
+         AND column_name = ANY($1)`,
+      [['incident_key', 'incident_started_at', 'failed_at', 'refunded_at']],
+    ) as Array<{ column_name: string }>;
+    const indexes = await db.query(
+      `SELECT indexname FROM pg_indexes
+       WHERE schemaname = 'public' AND indexname = 'wallet_transactions_order_refund_unique'`,
+    ) as Array<{ indexname: string }>;
+
+    expect(columns).toHaveLength(4);
+    expect(indexes).toHaveLength(1);
   });
 });

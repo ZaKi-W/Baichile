@@ -29,7 +29,9 @@ export type DeliveryStatus =
   | 'picked_up'
   | 'delivering'
   | 'virtual_arrived'
-  | 'completed';
+  | 'completed'
+  | 'incident'
+  | 'failed';
 
 const statusStops: Array<[number, DeliveryStatus]> = [
   [0.04, 'created'],

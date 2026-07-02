@@ -4,14 +4,21 @@ import { onHide, onShow } from '@dcloudio/uni-app';
 import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { getOrderStep } from '../../utils/order-status';
+import { getDeliveryIncidentPhase } from '@baichile/domain';
+import type { VirtualOrder } from '@baichile/api-contract';
 const auth = useAuthStore();
 const orders = useOrderStore();
 const now = ref(Date.now());
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 const openOrder = (id: string) => uni.navigateTo({ url: `/pages/delivery/index?id=${id}` });
 const openLogin = () => uni.switchTab({ url: '/pages/profile/index' });
-const statusLabel = (startedAt: string, durationMs: number) => {
-  const step = getOrderStep(new Date(startedAt).getTime(), durationMs, now.value);
+const statusLabel = (order: VirtualOrder) => {
+  if (order.incident) {
+    const phase = getDeliveryIncidentPhase(order.incident, now.value);
+    if (phase === 'failed') return '配送失败';
+    if (phase === 'incident') return '突发事件';
+  }
+  const step = getOrderStep(new Date(order.startedAt).getTime(), order.durationMs, now.value);
   return step.listLabel || step.label;
 };
 const isCompleted = (startedAt: string, durationMs: number) =>
@@ -35,9 +42,13 @@ onHide(() => clearInterval(statusTimer));
       <view class="row">
         <view class="order-heading">
           <text>虚拟订单</text>
-          <text class="status-badge">{{ statusLabel(order.startedAt, order.durationMs) }}</text>
+          <text class="status-badge">{{ statusLabel(order) }}</text>
         </view>
-        <view v-if="isCompleted(order.startedAt, order.durationMs)" class="savings">
+        <view v-if="order.status === 'failed' || (order.incident && getDeliveryIncidentPhase(order.incident, now) === 'failed')" class="savings failed-refund">
+          <text>{{ order.refundStatus === 'refunded' ? '已退款' : '退款处理中' }}</text>
+          <text class="calorie-saving">¥{{ (order.totalCents / 100).toFixed(2) }}</text>
+        </view>
+        <view v-else-if="isCompleted(order.startedAt, order.durationMs)" class="savings">
           <text>省 ¥{{ (order.totalCents / 100).toFixed(2) }}</text>
           <text class="calorie-saving">约省 {{ order.itemsTotalCaloriesKcal || 0 }} 千卡</text>
         </view>
@@ -56,6 +67,7 @@ onHide(() => clearInterval(statusTimer));
 .status-badge { padding: 5rpx 12rpx; border-radius: 999rpx; background: #fff0eb; color: #ff5b38; font-size: 22rpx; font-weight: 600; }
 .savings { display: flex; flex-direction: column; align-items: flex-end; color: #ff5b38; }
 .calorie-saving { margin-top: 4rpx; color: #7b8c38; font-size: 22rpx; font-weight: 500; }
+.failed-refund { color: #777; }
 .login-button { margin-top: 20rpx; }
 .tab-spacer { height: 120rpx; }
 </style>

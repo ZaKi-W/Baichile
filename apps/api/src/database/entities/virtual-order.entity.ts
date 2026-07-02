@@ -18,5 +18,9 @@ export class VirtualOrderEntity {
   @Column({ name: 'items_total_calories_kcal', type: 'integer' }) itemsTotalCaloriesKcal!: number;
   @Column('jsonb') lines!: unknown[];
   @Column('jsonb') route!: unknown;
+  @Column({ name: 'incident_key', type: 'text', nullable: true }) incidentKey!: string | null;
+  @Column({ name: 'incident_started_at', type: 'timestamptz', nullable: true }) incidentStartedAt!: Date | null;
+  @Column({ name: 'failed_at', type: 'timestamptz', nullable: true }) failedAt!: Date | null;
+  @Column({ name: 'refunded_at', type: 'timestamptz', nullable: true }) refundedAt!: Date | null;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt!: Date;
 }

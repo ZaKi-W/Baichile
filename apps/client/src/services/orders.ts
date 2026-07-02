@@ -4,6 +4,7 @@ import { catalogService } from './catalog';
 import { useAuthStore } from '../stores/auth';
 import { API_BASE } from '../config/api';
 import { ApiRequestError, requestApi } from './http';
+import { getDeliveryIncidentPhase } from '@baichile/domain';
 
 function post<T>(path: string, data: unknown, headers: Record<string, string> = {}): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -89,6 +90,7 @@ export const orderService = {
     }
     const orders = (uni.getStorageSync(`baichile:orders:${auth.accountId}`) || []) as VirtualOrder[];
     return orders.reduce<AccountSavings>((summary, order) => {
+      if (order.incident && getDeliveryIncidentPhase(order.incident) === 'failed') return summary;
       const completed = Date.now() - new Date(order.startedAt).getTime() >= 83_000 + order.durationMs;
       if (!completed) return summary;
       summary.savedMoneyCents += order.totalCents;

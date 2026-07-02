@@ -1,11 +1,14 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { AccountSavings, OrderQuote, QuoteRequest, VirtualOrder } from '@baichile/api-contract';
+import type { DeliveryIncidentKey } from '@baichile/domain';
 import {
   calculateLineCalories,
   calculateLineTotal,
   calculateOrderTotal,
   validateSelections,
+  getDeliveryIncidentPhase,
+  selectDeliveryIncident,
 } from '@baichile/domain';
 import type { DeliveryStatus, GeoPoint, VirtualRoute } from '@baichile/map-core';
 import { CatalogService } from './catalog.service';
@@ -13,6 +16,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { VirtualOrderEntity } from './database/entities/virtual-order.entity';
 import { WalletService } from './wallet.service';
+import { WalletTransactionEntity } from './database/entities/wallet-transaction.entity';
+import { AccountEntity } from './database/entities/account.entity';
 
 export function summarizeCompletedOrders(
   orders: Array<{
@@ -84,6 +89,8 @@ export class OrderService {
     const quote = await this.quote(request);
     const store = await this.catalog.find(request.storeId);
     const id = randomUUID();
+    const startedAt = new Date();
+    const incident = selectDeliveryIncident(id.slice(0, 8), store.virtualDeliveryMinutes, startedAt.getTime());
     const route = this.route(id, request.virtualDestinationPoint);
     const order: VirtualOrder = {
       ...quote,
@@ -92,10 +99,13 @@ export class OrderService {
       accountId,
       virtualDestinationId: request.virtualDestinationId,
       status: 'created',
-      startedAt: new Date().toISOString(),
+      startedAt: startedAt.toISOString(),
       durationMs: store.virtualDeliveryMinutes * 60_000,
       seed: id.slice(0, 8),
       route,
+      incident,
+      failedAt: incident?.failedAt,
+      refundStatus: incident ? 'pending' : undefined,
     };
     await this.dataSource.transaction(async (manager) => {
       await manager.getRepository(VirtualOrderEntity).save(manager.getRepository(VirtualOrderEntity).create({
@@ -115,6 +125,10 @@ export class OrderService {
         itemsTotalCaloriesKcal: order.itemsTotalCaloriesKcal,
         lines: order.lines,
         route: order.route,
+        incidentKey: incident?.key ?? null,
+        incidentStartedAt: incident ? new Date(incident.startedAt) : null,
+        failedAt: incident ? new Date(incident.failedAt) : null,
+        refundedAt: null,
       }));
       await this.wallet.debitOrder(manager, accountId, order.totalCents, order.id);
     });
@@ -122,6 +136,7 @@ export class OrderService {
   }
 
   async find(id: string): Promise<VirtualOrder> {
+    await this.settleFailedOrders(undefined, id);
     const order = await this.orders.findOneBy({ id });
     if (!order) throw new NotFoundException('订单不存在');
     return this.toOrder(order);
@@ -129,6 +144,7 @@ export class OrderService {
 
   async list(visitorId?: string, accountId?: string) {
     if (!visitorId && !accountId) return [];
+    await this.settleFailedOrders(accountId);
     const rows = await this.orders.find({
       where: accountId ? { accountId } : { visitorId },
       order: { createdAt: 'DESC' },
@@ -146,6 +162,7 @@ export class OrderService {
     if (!accountId) {
       return { savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0 };
     }
+    await this.settleFailedOrders(accountId);
     const rows = await this.orders.findBy({ accountId });
     return summarizeCompletedOrders(rows.map((row) => ({
       completed: this.currentStatus(row) === 'completed',
@@ -155,6 +172,11 @@ export class OrderService {
   }
 
   private toOrder(row: VirtualOrderEntity): VirtualOrder {
+    const incident = row.incidentKey && row.incidentStartedAt && row.failedAt ? {
+      key: row.incidentKey as DeliveryIncidentKey,
+      startedAt: row.incidentStartedAt.toISOString(),
+      failedAt: row.failedAt.toISOString(),
+    } : undefined;
     return {
       id: row.id,
       isVirtual: true,
@@ -173,10 +195,21 @@ export class OrderService {
       itemsTotalCaloriesKcal: row.itemsTotalCaloriesKcal,
       lines: row.lines as VirtualOrder['lines'],
       route: row.route as VirtualRoute,
+      incident,
+      failedAt: row.failedAt?.toISOString(),
+      refundStatus: incident ? (row.refundedAt ? 'refunded' : 'pending') : undefined,
     };
   }
 
   private currentStatus(row: VirtualOrderEntity): DeliveryStatus {
+    if (row.incidentKey && row.incidentStartedAt && row.failedAt) {
+      const phase = getDeliveryIncidentPhase({
+        key: row.incidentKey as DeliveryIncidentKey,
+        startedAt: row.incidentStartedAt.toISOString(),
+        failedAt: row.failedAt.toISOString(),
+      });
+      if (phase === 'incident' || phase === 'failed') return phase;
+    }
     const elapsed = Date.now() - row.startedAt.getTime();
     if (elapsed >= 83_000 + row.durationMs) return 'completed';
     if (elapsed >= 83_000) return 'delivering';
@@ -185,6 +218,44 @@ export class OrderService {
     if (elapsed >= 8_000) return 'preparing';
     if (elapsed >= 3_000) return 'merchant_accepted';
     return 'created';
+  }
+
+  async settleFailedOrders(accountId?: string, orderId?: string): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const query = manager.getRepository(VirtualOrderEntity)
+        .createQueryBuilder('order')
+        .setLock('pessimistic_write')
+        .where('order.failed_at IS NOT NULL')
+        .andWhere('order.failed_at <= :now', { now: new Date() })
+        .andWhere('order.refunded_at IS NULL');
+      if (accountId) query.andWhere('order.account_id = :accountId', { accountId });
+      if (orderId) query.andWhere('order.id = :orderId', { orderId });
+      const failedOrders = await query.getMany();
+
+      for (const order of failedOrders) {
+        if (!order.accountId) continue;
+        const account = await manager.getRepository(AccountEntity).createQueryBuilder('account')
+          .setLock('pessimistic_write')
+          .where('account.id = :accountId', { accountId: order.accountId })
+          .getOne();
+        if (!account) continue;
+        account.balanceCents += order.totalCents;
+        await manager.save(account);
+        await manager.getRepository(WalletTransactionEntity).insert({
+          id: randomUUID(),
+          accountId: order.accountId,
+          type: 'order_refund',
+          amountCents: order.totalCents,
+          balanceAfterCents: account.balanceCents,
+          orderId: order.id,
+          description: '配送失败退款',
+          businessDate: null,
+        });
+        order.status = 'failed';
+        order.refundedAt = new Date();
+        await manager.save(order);
+      }
+    });
   }
 
   private route(id: string, requestedDestination?: GeoPoint): VirtualRoute {
