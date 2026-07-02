@@ -148,23 +148,17 @@ function startStepTimer() {
   if (!order.value) return;
   const startedAt = new Date(order.value.startedAt).getTime();
   // Immediately set step based on elapsed time (supports re-entering)
-  currentStepIndex.value = getOrderStepIndex(startedAt);
+  currentStepIndex.value = getOrderStepIndex(startedAt, order.value.durationMs);
   // If already at final step, no need for interval
   if (currentStepIndex.value >= FINAL_STEP) return;
   // Otherwise poll every second until we reach final step
   stepTimer = setInterval(() => {
-    currentStepIndex.value = getOrderStepIndex(startedAt);
+    currentStepIndex.value = getOrderStepIndex(startedAt, order.value!.durationMs);
     if (currentStepIndex.value >= FINAL_STEP) clearInterval(stepTimer);
   }, 1000);
 }
 
 const statusText = computed(() => STEPS[currentStepIndex.value]?.statusText || '配送中');
-
-/* ── progress bar: maps step to percentage (0→0%, 5→70%, stays at 70%) ── */
-const progressPercent = computed(() => {
-  const pct = (currentStepIndex.value / FINAL_STEP) * 70;
-  return Math.min(pct, 70);
-});
 
 /* ── rider name ── */
 const SURNAMES = ['张', '李', '王', '刘', '陈', '杨', '赵', '黄', '周', '吴'];
@@ -176,8 +170,9 @@ const riderName = computed(() => {
 
 /* ── estimated delivery time ── */
 const etaText = computed(() => {
-  const min = storeDeliveryMinutes.value;
-  return `预计 ${min}~${min + 10} 分钟送达`;
+  if (currentStepIndex.value === FINAL_STEP) return '订单已送达';
+  const min = order.value ? Math.round(order.value.durationMs / 60_000) : storeDeliveryMinutes.value;
+  return `预计 ${min} 分钟送达`;
 });
 
 /* ── distance display ── */
@@ -281,29 +276,24 @@ function goBack() {
         <text class="distance-text">{{ distanceText }}</text>
       </view>
 
-      <!-- 进度条 -->
-      <view class="progress-track">
-        <view class="progress-fill" :style="{ width: `${progressPercent}%` }" />
-      </view>
-
       <!-- 时间轴 -->
-      <scroll-view scroll-x class="timeline-scroll">
-        <view class="timeline">
-          <view
-            v-for="(step, idx) in STEPS"
-            :key="step.key"
-            class="step"
-          >
+      <view class="timeline">
+        <view
+          v-for="(step, idx) in STEPS"
+          :key="step.key"
+          class="step"
+        >
+          <view class="step-node">
             <view v-if="idx > 0" class="step-line" :class="{ active: idx <= currentStepIndex }" />
             <view class="step-dot" :class="{
               done: idx < currentStepIndex,
               current: idx === currentStepIndex,
               pending: idx > currentStepIndex,
             }" />
-            <text class="step-label" :class="{ active: idx <= currentStepIndex }">{{ step.label }}</text>
           </view>
+          <text class="step-label" :class="{ active: idx <= currentStepIndex }">{{ step.label }}</text>
         </view>
-      </scroll-view>
+      </view>
 
       <!-- 分隔线 -->
       <view class="divider" />
@@ -441,43 +431,32 @@ function goBack() {
   margin-top: 4rpx;
 }
 
-/* ── 进度条 ── */
-.progress-track {
-  height: 8rpx;
-  background: #f0f0f0;
-  border-radius: 4rpx;
-  overflow: hidden;
-  margin-bottom: 28rpx;
-}
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #ff5b38, #ff8a65);
-  border-radius: 4rpx;
-  transition: width 0.6s ease;
-}
-
 /* ── 时间轴 ── */
-.timeline-scroll {
-  white-space: nowrap;
-  margin: 0 -8rpx;
-  margin-bottom: 24rpx;
-}
 .timeline {
+  width: 100%;
   display: flex;
   align-items: flex-start;
-  padding: 0 8rpx;
+  margin: 8rpx 0 28rpx;
 }
 .step {
+  position: relative;
+  min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+.step-node {
   position: relative;
-  min-width: 88rpx;
-  flex-shrink: 0;
+  width: 100%;
+  height: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .step-line {
   position: absolute;
-  top: 9rpx;
+  top: 12rpx;
   right: 50%;
   width: 100%;
   height: 4rpx;
@@ -491,8 +470,9 @@ function goBack() {
   width: 20rpx;
   height: 20rpx;
   border-radius: 50%;
+  border: 4rpx solid #fff;
+  box-sizing: border-box;
   z-index: 1;
-  margin-bottom: 10rpx;
   flex-shrink: 0;
 }
 .step-dot.done {
@@ -500,18 +480,20 @@ function goBack() {
 }
 .step-dot.current {
   background: #ff5b38;
-  width: 24rpx;
-  height: 24rpx;
+  width: 28rpx;
+  height: 28rpx;
   box-shadow: 0 0 0 6rpx rgba(255, 91, 56, 0.2);
 }
 .step-dot.pending {
   background: #e8e8e8;
 }
 .step-label {
+  width: 100%;
+  margin-top: 10rpx;
   font-size: 20rpx;
+  line-height: 1.2;
   color: #bbb;
   text-align: center;
-  white-space: nowrap;
 }
 .step-label.active {
   color: #333;

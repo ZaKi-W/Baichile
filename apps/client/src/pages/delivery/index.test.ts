@@ -10,4 +10,14 @@ describe('delivery page status initialization', () => {
       onLoadBody.indexOf('await resolveStoreInfo();'),
     );
   });
+
+  it('uses one full-width aligned node timeline', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('class="progress-track"');
+    expect(source).not.toContain('<scroll-view scroll-x class="timeline-scroll">');
+    expect(source).toContain('class="step-node"');
+    expect(source).toContain('.step {');
+    expect(source).toContain('flex: 1;');
+  });
 });

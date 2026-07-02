@@ -82,12 +82,14 @@ export const orderService = {
       });
     }
     const quote = await localQuote(request);
+    const store = await catalogService.store(request.storeId);
     const id = `local_${Date.now()}`;
     return {
       ...quote, id, isVirtual: true, visitorId: auth.visitorId,
       virtualDestinationId: request.virtualDestinationId, status: 'created',
       accountId: auth.accountId || undefined,
-      startedAt: new Date().toISOString(), durationMs: 60_000, seed: id, route: localRoute(id, request.virtualDestinationPoint),
+      startedAt: new Date().toISOString(), durationMs: store.virtualDeliveryMinutes * 60_000,
+      seed: id, route: localRoute(id, request.virtualDestinationPoint),
     };
   },
   async list(): Promise<VirtualOrder[]> {
