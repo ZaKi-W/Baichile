@@ -18,6 +18,9 @@ import { AdminUserEntity } from './entities/admin-user.entity';
 import { AdminSessionEntity } from './entities/admin-session.entity';
 import { AdminAuditLogEntity } from './entities/admin-audit-log.entity';
 import { AddAdminConsole1760000005000 } from './migrations/1760000005000-AddAdminConsole';
+import { ShareConfigEntity } from './entities/share-config.entity';
+import { ShareInviteEntity } from './entities/share-invite.entity';
+import { AddShareRewards1760000006000 } from './migrations/1760000006000-AddShareRewards';
 
 export function createDatabaseOptions(): PostgresConnectionOptions {
   const url = process.env.DATABASE_URL;
@@ -34,6 +37,7 @@ export function createDatabaseOptions(): PostgresConnectionOptions {
       CategoryEntity, StoreEntity, StoreSubCategoryEntity, MenuItemEntity, AnalyticsEventEntity,
       WalletTransactionEntity,
       AdminUserEntity, AdminSessionEntity, AdminAuditLogEntity,
+      ShareConfigEntity, ShareInviteEntity,
     ],
     migrations: [
       CreatePersistenceTables1760000000000,
@@ -42,6 +46,7 @@ export function createDatabaseOptions(): PostgresConnectionOptions {
       AddWallet1760000003000,
       AddDeliveryIncidents1760000004000,
       AddAdminConsole1760000005000,
+      AddShareRewards1760000006000,
     ],
   };
 }

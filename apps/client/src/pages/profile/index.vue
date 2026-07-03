@@ -6,6 +6,7 @@ import { useOrderStore } from '../../stores/orders';
 import { useAddressStore } from '../../stores/address';
 import { useWalletStore } from '../../stores/wallet';
 import { CODE_VERSION } from '../../config/code-version';
+import { shareService } from '../../services/shares';
 
 interface ChooseAvatarEvent {
   detail: {
@@ -22,6 +23,7 @@ const avatarUrl = ref('');
 const nickname = ref('');
 const loading = ref(false);
 const walletAction = ref<'check-in' | 'credit' | ''>('');
+const preparingShare = ref(false);
 
 onShow(() => {
   void orders.load();
@@ -42,6 +44,25 @@ function openAddresses() {
 
 function openWallet() {
   uni.navigateTo({ url: '/pages/wallet/index' });
+}
+
+async function prepareTimelineShare(kind: 'achievement' | 'invitation' = 'invitation') {
+  if (!auth.accountId) {
+    openLogin();
+    return;
+  }
+  if (preparingShare.value) return;
+  preparingShare.value = true;
+  try {
+    const card = await shareService.create({ kind });
+    uni.navigateTo({
+      url: `${card.path}&share=1&reward=${card.initiatedRewardGranted ? card.initiatedRewardCents : 0}`,
+    });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' });
+  } finally {
+    preparingShare.value = false;
+  }
 }
 
 async function checkIn() {
@@ -181,6 +202,16 @@ async function login() {
 
     <!-- Menu section -->
     <view class="menu-card">
+      <view
+        v-if="auth.accountId && orders.savings.completedOrderCount >= 5 && orders.savings.completedOrderCount % 5 === 0"
+        class="menu-item"
+        @tap="prepareTimelineShare('achievement')"
+      >
+        <text class="menu-icon">🏆</text>
+        <text class="menu-text">晒晒我的白吃战绩</text>
+        <text class="menu-arrow">›</text>
+      </view>
+      <view v-if="auth.accountId && orders.savings.completedOrderCount >= 5 && orders.savings.completedOrderCount % 5 === 0" class="menu-divider" />
       <view v-if="auth.accountId" class="menu-item" @tap="openWallet">
         <text class="menu-icon">👛</text>
         <text class="menu-text">我的钱包</text>
@@ -190,6 +221,12 @@ async function login() {
       <view class="menu-item">
         <text class="menu-icon">📦</text>
         <text class="menu-text">我的订单</text>
+        <text class="menu-arrow">›</text>
+      </view>
+      <view class="menu-divider" />
+      <view class="menu-item" @tap="prepareTimelineShare('invitation')">
+        <text class="menu-icon">🎁</text>
+        <text class="menu-text">请朋友白吃一顿</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-divider" />

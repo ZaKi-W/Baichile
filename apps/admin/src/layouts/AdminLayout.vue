@@ -5,10 +5,10 @@ import {
   Avatar,
   Coin,
   DataAnalysis,
-  Dish,
   Document,
   Goods,
   List,
+  Setting,
   SwitchButton,
   UserFilled,
 } from '@element-plus/icons-vue';
@@ -20,9 +20,9 @@ const auth = useAuthStore();
 const menu = computed(() => [
   { path: '/', label: '运营概览', icon: DataAnalysis, permission: 'dashboard:read' as const },
   { path: '/stores', label: '商家管理', icon: Goods, permission: 'catalog:read' as const },
-  { path: '/menu-items', label: '菜品管理', icon: Dish, permission: 'catalog:read' as const },
   { path: '/accounts', label: '用户与货币', icon: Coin, permission: 'accounts:read' as const },
   { path: '/orders', label: '订单管理', icon: List, permission: 'orders:read' as const },
+  { path: '/share-rewards', label: '分享奖励', icon: Setting, permission: 'wallet:read' as const },
   { path: '/admins', label: '管理员', icon: UserFilled, permission: 'admins:manage' as const },
   { path: '/audit', label: '审计日志', icon: Document, permission: 'audit:read' as const },
 ].filter((item) => auth.has(item.permission)));

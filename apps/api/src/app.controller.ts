@@ -1,5 +1,11 @@
 import { Body, Controller, Get, Headers, Inject, Param, Post, Query, UnauthorizedException } from '@nestjs/common';
-import type { Address, QuoteRequest, WechatMiniLoginRequest } from '@baichile/api-contract';
+import type {
+  Address,
+  QuoteRequest,
+  WechatMiniLoginRequest,
+  WechatPhoneRequest,
+  ShareCreateRequest,
+} from '@baichile/api-contract';
 import { AuthService } from './auth.service';
 import { CatalogService } from './catalog.service';
 import { OrderService } from './order.service';
@@ -8,6 +14,7 @@ import { AddressService } from './address.service';
 import { DataSource } from 'typeorm';
 import { AnalyticsService } from './analytics.service';
 import { WalletService } from './wallet.service';
+import { ShareService } from './share/share.service';
 
 @Controller('v1')
 export class AppController {
@@ -20,6 +27,7 @@ export class AppController {
     @Inject(DataSource) private readonly dataSource: DataSource,
     @Inject(AnalyticsService) private readonly analyticsService: AnalyticsService,
     @Inject(WalletService) private readonly wallet: WalletService,
+    @Inject(ShareService) private readonly shares: ShareService,
   ) {}
 
   @Get('health')
@@ -35,6 +43,11 @@ export class AppController {
       await this.mergeIdentity(body.visitorId, session.accountId);
     }
     return session;
+  }
+
+  @Post('auth/wechat-phone')
+  wechatPhone(@Body() body: WechatPhoneRequest) {
+    return this.auth.getWechatPhoneNumber(body?.code);
   }
 
   @Post('auth/merge-visitor')
@@ -143,6 +156,20 @@ export class AppController {
   async testCredit(@Headers('authorization') authorization?: string) {
     const identity = await this.auth.resolvePersistedIdentity(authorization);
     return this.wallet.testCredit(this.requireAccount(identity.accountId));
+  }
+
+  @Post('shares')
+  async createShare(
+    @Body() body: ShareCreateRequest,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const identity = await this.auth.resolvePersistedIdentity(authorization);
+    return this.shares.create(this.requireAccount(identity.accountId), body);
+  }
+
+  @Get('shares/:token')
+  shareLanding(@Param('token') token: string) {
+    return this.shares.landing(token);
   }
 
   @Get('orders/:orderId')

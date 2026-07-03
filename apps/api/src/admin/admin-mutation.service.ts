@@ -24,7 +24,7 @@ import { StoreEntity } from '../database/entities/store.entity';
 import { VirtualOrderEntity } from '../database/entities/virtual-order.entity';
 import { WalletTransactionEntity } from '../database/entities/wallet-transaction.entity';
 import { AdminAuditService } from './admin-audit.service';
-import { AdminAuthService } from './admin-auth.service';
+import { AdminAuthService, validateAdminPassword } from './admin-auth.service';
 import type { AuthenticatedAdmin } from './admin.types';
 import { hashAdminPassword } from './admin.types';
 
@@ -135,8 +135,11 @@ export class AdminMutationService {
     return saved;
   }
 
-  async createMenuItem(value: unknown, actor: AuthenticatedAdmin, ipAddress?: string) {
-    const input = await this.parseMenuItem(value);
+  async createMenuItem(storeId: string, value: unknown, actor: AuthenticatedAdmin, ipAddress?: string) {
+    await this.requireStore(storeId);
+    const body = object(value);
+    if ('storeId' in body) throw new BadRequestException('菜品归属由路径中的商家确定');
+    const input = this.parseMenuItem({ ...body, storeId });
     if (await this.menuItems.existsBy({ id: input.id })) {
       throw new ConflictException({ code: 'MENU_ITEM_EXISTS', message: '菜品 ID 已存在' });
     }
@@ -147,15 +150,46 @@ export class AdminMutationService {
     return row;
   }
 
-  async updateMenuItem(id: string, value: unknown, actor: AuthenticatedAdmin, ipAddress?: string) {
-    const row = await this.menuItems.findOneBy({ id });
+  async updateMenuItem(storeId: string, id: string, value: unknown, actor: AuthenticatedAdmin, ipAddress?: string) {
+    await this.requireStore(storeId);
+    const row = await this.menuItems.findOneBy({ id, storeId });
     if (!row) throw new NotFoundException({ code: 'MENU_ITEM_NOT_FOUND', message: '菜品不存在' });
     const before = { ...row };
-    const input = await this.parseMenuItem({ ...row, ...object(value), id });
+    const body = object(value);
+    if ('storeId' in body) throw new BadRequestException('普通编辑不能修改菜品所属商家');
+    const input = this.parseMenuItem({ ...row, ...body, id, storeId });
     const saved = await this.menuItems.save(this.menuItems.merge(row, input));
     await this.audit.record(actor, {
       action: 'menu_item.update', resourceType: 'menu_item', resourceId: id,
       beforeData: before, afterData: saved, ipAddress,
+    });
+    return saved;
+  }
+
+  async transferMenuItem(
+    storeId: string,
+    id: string,
+    value: unknown,
+    actor: AuthenticatedAdmin,
+    ipAddress?: string,
+  ) {
+    await this.requireStore(storeId);
+    const row = await this.menuItems.findOneBy({ id, storeId });
+    if (!row) throw new NotFoundException({ code: 'MENU_ITEM_NOT_FOUND', message: '菜品不存在' });
+    const targetStoreId = string(object(value).targetStoreId, '目标商家 ID', 80);
+    if (targetStoreId === storeId) {
+      throw new BadRequestException({ code: 'SAME_STORE', message: '目标商家不能与当前商家相同' });
+    }
+    await this.requireStore(targetStoreId);
+    row.storeId = targetStoreId;
+    const saved = await this.menuItems.save(row);
+    await this.audit.record(actor, {
+      action: 'menu_item.transfer',
+      resourceType: 'menu_item',
+      resourceId: id,
+      beforeData: { storeId },
+      afterData: { storeId: targetStoreId },
+      ipAddress,
     });
     return saved;
   }
@@ -267,7 +301,7 @@ export class AdminMutationService {
     const row = await this.adminUsers.findOneBy({ id });
     if (!row) throw new NotFoundException({ code: 'ADMIN_NOT_FOUND', message: '管理员不存在' });
     const password = string(object(value).password, '密码', 200);
-    if (password.length < 10) throw new BadRequestException('密码至少 10 位');
+    validateAdminPassword(password);
     row.passwordHash = await hashAdminPassword(password);
     await this.adminUsers.save(row);
     await this.sessions.update({ adminUserId: id }, { revokedAt: new Date() });
@@ -302,12 +336,9 @@ export class AdminMutationService {
     };
   }
 
-  private async parseMenuItem(value: unknown) {
+  private parseMenuItem(value: unknown) {
     const input = object(value);
     const storeId = string(input.storeId, '商家 ID', 80);
-    if (!(await this.stores.existsBy({ id: storeId }))) {
-      throw new BadRequestException({ code: 'STORE_NOT_FOUND', message: '所属商家不存在' });
-    }
     if (!Array.isArray(input.specGroups)) throw new BadRequestException('规格组必须是数组');
     const status = input.status === 'inactive' ? 'inactive' : 'active';
     return {
@@ -327,6 +358,12 @@ export class AdminMutationService {
       sortOrder: integer(input.sortOrder, '排序'),
       status: status as ManagedContentStatus,
     };
+  }
+
+  private async requireStore(id: string) {
+    if (!(await this.stores.existsBy({ id }))) {
+      throw new NotFoundException({ code: 'STORE_NOT_FOUND', message: '商家不存在' });
+    }
   }
 
   private parseRole(value: unknown): AdminRole {

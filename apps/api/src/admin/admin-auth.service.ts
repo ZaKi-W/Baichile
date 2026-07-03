@@ -19,6 +19,15 @@ import {
 
 const SESSION_MS = 8 * 60 * 60 * 1000;
 
+export function validateAdminPassword(password: string, environment = process.env.NODE_ENV): void {
+  if (environment === 'production' && password.length < 10) {
+    throw new ConflictException({ code: 'WEAK_PASSWORD', message: '密码至少 10 位' });
+  }
+  if (!password) {
+    throw new ConflictException({ code: 'WEAK_PASSWORD', message: '密码不能为空' });
+  }
+}
+
 @Injectable()
 export class AdminAuthService {
   constructor(
@@ -81,9 +90,7 @@ export class AdminAuthService {
     nextPassword: string,
     currentToken: string,
   ): Promise<{ success: true }> {
-    if (nextPassword.length < 10) {
-      throw new ConflictException({ code: 'WEAK_PASSWORD', message: '密码至少 10 位' });
-    }
+    validateAdminPassword(nextPassword);
     const user = await this.users.findOneByOrFail({ id: actor.id });
     if (!(await verifyAdminPassword(currentPassword, user.passwordHash))) {
       throw new UnauthorizedException({ code: 'PASSWORD_INCORRECT', message: '当前密码错误' });
@@ -110,9 +117,7 @@ export class AdminAuthService {
     password: string;
     role: AdminRole;
   }): Promise<AdminUserEntity> {
-    if (input.password.length < 10) {
-      throw new ConflictException({ code: 'WEAK_PASSWORD', message: '密码至少 10 位' });
-    }
+    validateAdminPassword(input.password);
     const username = input.username.trim().toLowerCase();
     if (!/^[a-z0-9._-]{3,40}$/.test(username)) {
       throw new ConflictException({ code: 'INVALID_USERNAME', message: '用户名格式不正确' });
@@ -128,6 +133,23 @@ export class AdminAuthService {
       status: 'active',
       lastLoginAt: null,
     }));
+  }
+
+  async ensureDevelopmentAdmin(): Promise<AdminUserEntity> {
+    const existing = await this.users.findOne({ where: { username: 'admin' } });
+    if (existing) {
+      existing.displayName = '开发管理员';
+      existing.passwordHash = await hashAdminPassword('admin');
+      existing.role = 'super_admin';
+      existing.status = 'active';
+      return this.users.save(existing);
+    }
+    return this.createAdmin({
+      username: 'admin',
+      displayName: '开发管理员',
+      password: 'admin',
+      role: 'super_admin',
+    });
   }
 
   private toAdmin(user: AdminUserEntity): AuthenticatedAdmin {

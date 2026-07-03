@@ -7,12 +7,14 @@ import { useCartStore } from '../../stores/cart';
 import { useOrderStore } from '../../stores/orders';
 import { getOrderStepIndex, ORDER_STEPS } from '../../utils/order-status';
 import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
+import { shareService } from '../../services/shares';
 
 const orders = useOrderStore();
 const addressStore = useAddressStore();
 const cart = useCartStore();
 
 const orderId = ref('');
+const preparingShare = ref(false);
 const storeName = ref('商家');
 const storeDistanceKm = ref(3);
 const storeDeliveryMinutes = ref(30);
@@ -281,6 +283,21 @@ function goToStore() {
   if (!order.value) return;
   uni.redirectTo({ url: `/pages/store/index?id=${order.value.storeId}` });
 }
+
+async function prepareTimelineShare() {
+  if (!order.value || preparingShare.value) return;
+  preparingShare.value = true;
+  try {
+    const card = await shareService.create({ kind: 'order', orderId: order.value.id });
+    uni.navigateTo({
+      url: `${card.path}&share=1&reward=${card.initiatedRewardGranted ? card.initiatedRewardCents : 0}`,
+    });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' });
+  } finally {
+    preparingShare.value = false;
+  }
+}
 </script>
 
 <template>
@@ -340,6 +357,12 @@ function goToStore() {
       </view>
 
       <button v-if="hasFailed" class="reorder-button" @tap="goToStore">重新点一单</button>
+      <button
+        v-else-if="currentStepIndex === FINAL_STEP"
+        class="share-button"
+        :loading="preparingShare"
+        @tap="prepareTimelineShare"
+      >生成朋友圈分享</button>
 
       <!-- 分隔线 -->
       <view class="divider" />
@@ -445,6 +468,7 @@ function goToStore() {
   max-height: 58vh;
   overflow-y: auto;
 }
+.share-button { margin-top: 18rpx; border: 0; border-radius: 999rpx; color: #fff; background: #ff6b3d; font-size: 27rpx; }
 .sheet-handle {
   width: 64rpx;
   height: 8rpx;

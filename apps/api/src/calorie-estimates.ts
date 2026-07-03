@@ -26,6 +26,13 @@ const CATEGORY_DEFAULTS: Record<string, number> = {
   tea: 320,
   dessert: 430,
   night: 520,
+  western: 560,
+  coffee: 180,
+  mexican: 620,
+  japanese: 540,
+  chinese: 560,
+  korean: 590,
+  healthy: 420,
 };
 
 const KEYWORD_ESTIMATES: Array<[RegExp, number]> = [

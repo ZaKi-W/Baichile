@@ -23,6 +23,8 @@ describe('store page cart interaction', () => {
 
     expect(source).toContain('const menuGroups = computed');
     expect(source).toContain('class="merchant-hero"');
+    expect(source).toContain('v-if="store.coverUrl"');
+    expect(source).toContain('class="merchant-cover"');
     expect(source).toContain('class="service-strip"');
     expect(source).toContain('class="menu-layout"');
     expect(source).toContain('class="category-sidebar"');

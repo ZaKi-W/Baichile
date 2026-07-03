@@ -19,11 +19,12 @@ export const router = createRouter({
       children: [
         { path: '', name: 'dashboard', component: () => import('./pages/DashboardPage.vue'), meta: { title: '运营概览', permission: 'dashboard:read' } },
         { path: 'stores', name: 'stores', component: () => import('./pages/StoresPage.vue'), meta: { title: '商家管理', permission: 'catalog:read' } },
-        { path: 'menu-items', name: 'menu-items', component: () => import('./pages/MenuItemsPage.vue'), meta: { title: '菜品管理', permission: 'catalog:read' } },
+        { path: 'stores/:storeId', name: 'store-detail', component: () => import('./pages/StoreDetailPage.vue'), meta: { title: '商家详情', permission: 'catalog:read' } },
         { path: 'accounts', name: 'accounts', component: () => import('./pages/AccountsPage.vue'), meta: { title: '用户管理', permission: 'accounts:read' } },
         { path: 'accounts/:id', name: 'account-detail', component: () => import('./pages/AccountDetailPage.vue'), meta: { title: '用户详情', permission: 'accounts:read' } },
         { path: 'orders', name: 'orders', component: () => import('./pages/OrdersPage.vue'), meta: { title: '订单管理', permission: 'orders:read' } },
         { path: 'orders/:id', name: 'order-detail', component: () => import('./pages/OrderDetailPage.vue'), meta: { title: '订单详情', permission: 'orders:read' } },
+        { path: 'share-rewards', name: 'share-rewards', component: () => import('./pages/ShareRewardsPage.vue'), meta: { title: '分享奖励', permission: 'wallet:read' } },
         { path: 'admins', name: 'admins', component: () => import('./pages/AdminUsersPage.vue'), meta: { title: '管理员', permission: 'admins:manage' } },
         { path: 'audit', name: 'audit', component: () => import('./pages/AuditLogsPage.vue'), meta: { title: '审计日志', permission: 'audit:read' } },
       ],

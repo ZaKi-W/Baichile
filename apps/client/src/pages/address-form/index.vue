@@ -3,7 +3,9 @@ import { ref, watch } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import type { PlaceSuggestion } from '@baichile/api-contract';
 import { nearbyPlaces, reverseGeocode, suggestPlaces } from '../../services/location';
+import { exchangeWechatPhoneCode, wechatPhoneFailureMessage } from '../../services/wechat-phone';
 import { useAddressStore } from '../../stores/address';
+import { locationSelection, placeSelection } from './location-state';
 
 const addressStore = useAddressStore();
 
@@ -15,6 +17,7 @@ const tag = ref('家');
 const isDefault = ref(false);
 const tags = ['家', '公司', '学校', '其他'];
 const saving = ref(false);
+const fetchingPhone = ref(false);
 
 /* ── GPS & nearby ── */
 const currentLat = ref(0);
@@ -27,10 +30,22 @@ const nearbyLoading = ref(false);
 const searchResults = ref<PlaceSuggestion[]>([]);
 const searching = ref(false);
 const showResults = ref(false);
+const searchError = ref('');
+const currentCity = ref('');
 let timer: ReturnType<typeof setTimeout>;
+let internalAddressValue: string | null = null;
 
 let selectedLat = 31.2304;
 let selectedLng = 121.4737;
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function setSelectedAddress(value: string) {
+  internalAddressValue = value;
+  addressText.value = value;
+}
 
 /* ── 获取当前定位 ── */
 async function locateMe() {
@@ -42,6 +57,19 @@ async function locateMe() {
     });
     currentLat.value = res.latitude;
     currentLng.value = res.longitude;
+    selectedLat = res.latitude;
+    selectedLng = res.longitude;
+
+    try {
+      const area = await reverseGeocode(res.latitude, res.longitude);
+      const selection = locationSelection(res, area);
+      currentCity.value = area.city;
+      setSelectedAddress(selection.address);
+      uni.showToast({ title: '已获取当前位置', icon: 'success' });
+    } catch (error) {
+      uni.showToast({ title: errorMessage(error, '已定位，但地址解析失败'), icon: 'none' });
+    }
+
     await loadNearby(res.latitude, res.longitude);
   } catch (err: any) {
     if (err?.errMsg?.includes('auth') || err?.errMsg?.includes('deny')) {
@@ -64,8 +92,9 @@ async function loadNearby(lat: number, lng: number) {
   nearbyLoading.value = true;
   try {
     nearbyList.value = await nearbyPlaces(lat, lng);
-  } catch {
+  } catch (error) {
     nearbyList.value = [];
+    uni.showToast({ title: errorMessage(error, '附近地点加载失败'), icon: 'none' });
   } finally {
     nearbyLoading.value = false;
   }
@@ -84,7 +113,7 @@ async function pickOnMap() {
     });
     selectedLat = res.latitude;
     selectedLng = res.longitude;
-    addressText.value = res.name || res.address || '';
+    setSelectedAddress(res.name || res.address || '');
     showResults.value = false;
     searchResults.value = [];
     // Update nearby list centered on picked location
@@ -101,6 +130,12 @@ async function pickOnMap() {
 /* ── keyword search ── */
 watch(addressText, (val) => {
   clearTimeout(timer);
+  searchError.value = '';
+  if (internalAddressValue !== null) {
+    const isInternalUpdate = val === internalAddressValue;
+    internalAddressValue = null;
+    if (isInternalUpdate) return;
+  }
   if (!val.trim() || val.length < 2) {
     searchResults.value = [];
     showResults.value = false;
@@ -110,9 +145,10 @@ watch(addressText, (val) => {
   showResults.value = true;
   timer = setTimeout(async () => {
     try {
-      searchResults.value = await suggestPlaces(val.trim());
-    } catch {
+      searchResults.value = await suggestPlaces(val.trim(), currentCity.value || undefined);
+    } catch (error) {
       searchResults.value = [];
+      searchError.value = errorMessage(error, '地点搜索失败，请稍后重试');
     } finally {
       searching.value = false;
     }
@@ -121,11 +157,41 @@ watch(addressText, (val) => {
 
 /* ── pick a place from list ── */
 function pickPlace(place: PlaceSuggestion) {
-  addressText.value = place.title;
-  selectedLat = place.lat;
-  selectedLng = place.lng;
+  const selection = placeSelection(place);
+  setSelectedAddress(selection.address);
+  selectedLat = selection.lat;
+  selectedLng = selection.lng;
+  nearbyList.value = selection.nearbyList;
   showResults.value = false;
   searchResults.value = [];
+}
+
+async function useWechatPhone(event: { detail?: { code?: string; errMsg?: string } }) {
+  const code = event.detail?.code;
+  if (!code) {
+    uni.showToast({
+      title: wechatPhoneFailureMessage(event.detail?.errMsg),
+      icon: 'none',
+    });
+    return;
+  }
+  fetchingPhone.value = true;
+  try {
+    phone.value = await exchangeWechatPhoneCode(code);
+    uni.showToast({ title: '手机号已填写', icon: 'success' });
+  } catch (error) {
+    uni.showToast({ title: errorMessage(error, '获取手机号失败，请手动填写'), icon: 'none' });
+  } finally {
+    fetchingPhone.value = false;
+  }
+}
+
+function wechatPhoneTapped() {
+  uni.showToast({ title: '正在请求微信授权', icon: 'loading', duration: 800 });
+}
+
+function setDefaultAddress(event: Event) {
+  isDefault.value = Boolean((event as Event & { detail?: { value?: boolean } }).detail?.value);
 }
 
 /* ── validate & save ── */
@@ -199,6 +265,7 @@ onLoad(() => {
       <!-- 搜索结果下拉 -->
       <view v-if="showResults" class="dropdown">
         <view v-if="searching" class="dropdown-hint">搜索中...</view>
+        <view v-else-if="searchError" class="dropdown-hint">{{ searchError }}</view>
         <view v-else-if="!searchResults.length" class="dropdown-hint">无结果，请尝试其他关键词</view>
         <view v-for="place in searchResults" :key="place.id" class="place-item" @tap="pickPlace(place)">
           <text class="place-title">{{ place.title }}</text>
@@ -228,7 +295,19 @@ onLoad(() => {
       </view>
       <view class="field">
         <text class="label">手机号</text>
-        <input class="input" v-model="phone" type="number" placeholder="手机号码" maxlength="11" />
+        <view class="phone-control">
+          <input class="input phone-input" v-model="phone" type="number" placeholder="手机号码" maxlength="11" />
+          <!-- #ifdef MP-WEIXIN -->
+          <button
+            class="wechat-phone-btn"
+            open-type="getPhoneNumber"
+            :loading="fetchingPhone"
+            :disabled="fetchingPhone"
+            @tap="wechatPhoneTapped"
+            @getphonenumber="useWechatPhone"
+          >微信手机号</button>
+          <!-- #endif -->
+        </view>
       </view>
       <view class="field">
         <text class="label">门牌号</text>
@@ -252,7 +331,7 @@ onLoad(() => {
       </view>
       <view class="field switch-field">
         <text class="label">设为默认地址</text>
-        <switch :checked="isDefault" @change="isDefault = $event.detail.value" color="#dff75a" />
+        <switch :checked="isDefault" @change="setDefaultAddress" color="#dff75a" />
       </view>
     </view>
 
@@ -419,6 +498,29 @@ onLoad(() => {
   font-size: 28rpx;
   color: #151515;
 }
+.phone-control {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 12rpx;
+}
+.phone-input {
+  width: 0;
+}
+.wechat-phone-btn {
+  flex: 0 0 auto;
+  height: 56rpx;
+  margin: 0;
+  padding: 0 20rpx;
+  border-radius: 28rpx;
+  color: #171717;
+  background: #dff75a;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 56rpx;
+}
+.wechat-phone-btn::after { border: 0; }
 
 /* ── 标签 ── */
 .tag-field { flex-wrap: wrap; }

@@ -91,4 +91,13 @@ button, input, textarea { font: inherit; }
 .login-footnote { margin: 22px 0 0; color: #8a928e; font-size: 11px; text-align: center; }
 .dialog-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .dialog-form-grid .wide { grid-column: 1 / -1; }
+.detail-heading { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.detail-heading div { min-width: 0; }
+.detail-heading h2 { margin: 0; font-size: 18px; }
+.detail-heading span { display: block; margin-top: 4px; color: var(--ink-muted); font-size: 12px; }
+.store-detail-surface > .el-tabs > .el-tabs__header { margin: 0; padding: 0 22px; }
+.store-detail-pane { min-height: 240px; padding: 22px; }
+.store-menu-toolbar { padding: 18px 20px 2px; }
+.form-actions { display: flex; justify-content: flex-end; padding-top: 6px; }
+.dialog-form { margin-top: 18px; }
 .el-button--primary { --el-button-bg-color: var(--brand); --el-button-border-color: var(--brand); --el-button-hover-bg-color: var(--brand-dark); --el-button-hover-border-color: var(--brand-dark); }

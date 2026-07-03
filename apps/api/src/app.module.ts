@@ -23,6 +23,9 @@ import { AdminUserEntity } from './database/entities/admin-user.entity';
 import { AdminSessionEntity } from './database/entities/admin-session.entity';
 import { AdminAuditLogEntity } from './database/entities/admin-audit-log.entity';
 import { AdminModule } from './admin/admin.module';
+import { ShareConfigEntity } from './database/entities/share-config.entity';
+import { ShareInviteEntity } from './database/entities/share-invite.entity';
+import { ShareService } from './share/share.service';
 
 @Module({
   imports: [
@@ -32,10 +35,11 @@ import { AdminModule } from './admin/admin.module';
       CategoryEntity, StoreEntity, StoreSubCategoryEntity, MenuItemEntity, AnalyticsEventEntity,
       WalletTransactionEntity,
       AdminUserEntity, AdminSessionEntity, AdminAuditLogEntity,
+      ShareConfigEntity, ShareInviteEntity,
     ]),
     AdminModule,
   ],
   controllers: [AppController],
-  providers: [AuthService, CatalogService, OrderService, MapService, AddressService, AnalyticsService, WalletService],
+  providers: [AuthService, CatalogService, OrderService, MapService, AddressService, AnalyticsService, WalletService, ShareService],
 })
 export class AppModule {}

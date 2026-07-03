@@ -3,6 +3,7 @@ import type {
   AdminPermission,
   AdminRole,
   AdminUserStatus,
+  ShareRewardConfig,
 } from '@baichile/api-contract';
 import { api, toQuery } from './http';
 
@@ -98,6 +99,18 @@ export interface WalletTransactionRecord {
   createdAt: string;
 }
 
+export function menuItemCollectionPath(storeId: string): string {
+  return `/v1/admin/stores/${encodeURIComponent(storeId)}/menu-items`;
+}
+
+export function menuItemPath(storeId: string, itemId: string): string {
+  return `${menuItemCollectionPath(storeId)}/${encodeURIComponent(itemId)}`;
+}
+
+export function menuItemTransferPath(storeId: string, itemId: string): string {
+  return `${menuItemPath(storeId, itemId)}/transfer`;
+}
+
 export const adminApi = {
   login: (username: string, password: string) =>
     api<{ accessToken: string; admin: AdminIdentity; expiresAt: string }>('/v1/admin/auth/login', {
@@ -110,17 +123,27 @@ export const adminApi = {
 
   listStores: (query: Record<string, any>) =>
     api<AdminPage<StoreRecord>>(`/v1/admin/stores${toQuery(query)}`),
+  store: (id: string) => api<StoreRecord>(`/v1/admin/stores/${id}`),
   saveStore: (record: StoreRecord, create: boolean) =>
     api<StoreRecord>(create ? '/v1/admin/stores' : `/v1/admin/stores/${record.id}`, {
       method: create ? 'POST' : 'PATCH',
       body: JSON.stringify(record),
     }),
-  listMenuItems: (query: Record<string, any>) =>
-    api<AdminPage<MenuItemRecord>>(`/v1/admin/menu-items${toQuery(query)}`),
-  saveMenuItem: (record: MenuItemRecord, create: boolean) =>
-    api<MenuItemRecord>(create ? '/v1/admin/menu-items' : `/v1/admin/menu-items/${record.id}`, {
+  listMenuItems: (storeId: string, query: Record<string, any>) =>
+    api<AdminPage<MenuItemRecord>>(`${menuItemCollectionPath(storeId)}${toQuery(query)}`),
+  saveMenuItem: (storeId: string, record: MenuItemRecord, create: boolean) =>
+    api<MenuItemRecord>(create
+      ? menuItemCollectionPath(storeId)
+      : menuItemPath(storeId, record.id), {
       method: create ? 'POST' : 'PATCH',
-      body: JSON.stringify(record),
+      body: JSON.stringify(Object.fromEntries(
+        Object.entries(record).filter(([key]) => key !== 'storeId'),
+      )),
+    }),
+  transferMenuItem: (storeId: string, itemId: string, targetStoreId: string) =>
+    api<MenuItemRecord>(menuItemTransferPath(storeId, itemId), {
+      method: 'POST',
+      body: JSON.stringify({ targetStoreId }),
     }),
   listAccounts: (query: Record<string, any>) =>
     api<AdminPage<AccountRecord>>(`/v1/admin/accounts${toQuery(query)}`),
@@ -154,4 +177,10 @@ export const adminApi = {
     }),
   auditLogs: (query: Record<string, any>) =>
     api<AdminPage<Record<string, any>>>(`/v1/admin/audit-logs${toQuery(query)}`),
+  shareRewardConfig: () => api<ShareRewardConfig>('/v1/admin/share-rewards/config'),
+  updateShareRewardConfig: (config: ShareRewardConfig) =>
+    api<ShareRewardConfig>('/v1/admin/share-rewards/config', {
+      method: 'PATCH',
+      body: JSON.stringify(config),
+    }),
 };

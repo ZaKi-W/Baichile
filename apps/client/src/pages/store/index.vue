@@ -42,13 +42,14 @@ const storeInitial = computed(() => store.value?.name.slice(-1) || '食');
 function measureSections() {
   uni.createSelectorQuery()
     .selectAll('.menu-section')
-    .boundingClientRect((rects: any[]) => {
-      if (!rects?.length) return;
+    .boundingClientRect((result) => {
+      const rects = Array.isArray(result) ? result : [result];
+      if (!rects.length) return;
       sectionOffsets.clear();
-      const firstTop = rects[0].top;
+      const firstTop = rects[0]?.top ?? 0;
       rects.forEach((rect: any) => {
         const id = rect.id?.replace('cat-', '');
-        if (id) sectionOffsets.set(id, rect.top - firstTop);
+        if (id) sectionOffsets.set(id, (rect.top ?? firstTop) - firstTop);
       });
     })
     .exec();
@@ -96,9 +97,14 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
 <template>
   <view v-if="store" class="page store-page">
     <view class="merchant-hero">
+      <image v-if="store.coverUrl" class="merchant-cover" :src="store.coverUrl" mode="aspectFill" />
+      <view v-if="store.coverUrl" class="merchant-cover-shade" />
       <view class="hero-decoration">{{ storeInitial }}</view>
       <view class="merchant-content">
-        <view class="store-logo">{{ storeInitial }}</view>
+        <view class="store-logo">
+          <image v-if="store.coverUrl" :src="store.coverUrl" mode="aspectFill" />
+          <text v-else>{{ storeInitial }}</text>
+        </view>
         <view class="merchant-main">
           <view class="merchant-title-row">
             <text class="merchant-name">{{ store.name }}</text>
@@ -235,6 +241,8 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
   transform: rotate(28deg);
   box-shadow: inset 0 0 0 60rpx rgba(255, 255, 255, .025);
 }
+.merchant-cover { position: absolute; inset: 0; width: 100%; height: 100%; }
+.merchant-cover-shade { position: absolute; inset: 0; background: linear-gradient(110deg, rgba(10, 16, 13, .92), rgba(10, 16, 13, .62) 60%, rgba(10, 16, 13, .34)); }
 .hero-decoration {
   position: absolute;
   right: 18rpx;
@@ -270,6 +278,7 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
   font-weight: 900;
   transform: rotate(-3deg);
 }
+.store-logo image { width: 100%; height: 100%; border-radius: inherit; }
 .merchant-main { min-width: 0; flex: 1; padding-top: 4rpx; }
 .merchant-title-row { display: flex; align-items: center; gap: 10rpx; min-width: 0; }
 .merchant-name {

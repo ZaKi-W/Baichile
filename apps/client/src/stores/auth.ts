@@ -5,6 +5,7 @@ import { API_BASE } from '../config/api';
 const VISITOR_KEY = 'baichile:visitor';
 const ACCOUNT_KEY = 'baichile:account';
 const EMPTY_PROFILE: UserProfile = { avatarUrl: '', nickname: '' };
+const REFERRAL_KEY = 'baichile:referral-token';
 
 function errorMessage(value: unknown, fallback: string): string {
   if (value instanceof Error) return value.message || fallback;
@@ -74,6 +75,7 @@ export const useAuthStore = defineStore('auth', {
           avatarUrl: profile.avatarUrl.trim(),
           nickname: profile.nickname.trim(),
         },
+        referralToken: uni.getStorageSync(REFERRAL_KEY) || undefined,
       };
       const session = await new Promise<AccountSession>((resolve, reject) => {
         uni.request({
@@ -92,6 +94,10 @@ export const useAuthStore = defineStore('auth', {
       });
       this.applyAccount(session);
       this.persistAccount();
+      uni.removeStorageSync(REFERRAL_KEY);
+    },
+    rememberReferral(token: string) {
+      if (token && !this.accountId) uni.setStorageSync(REFERRAL_KEY, token);
     },
     setUserProfile(profile: UserProfile) {
       this.userProfile = {

@@ -5,6 +5,7 @@ interface TencentGeocoderResponse {
   status: number;
   message: string;
   result?: {
+    address?: string;
     ad_info: { adcode: string };
     address_component: { province: string; city: string; district: string };
   };
@@ -47,6 +48,7 @@ export class MapService {
       province,
       city,
       district,
+      address: body.result.address,
       adcode,
       cityCode: `${adcode.slice(0, 4)}00`,
       districtCode: adcode,
@@ -116,4 +118,3 @@ export class MapService {
     }));
   }
 }
-

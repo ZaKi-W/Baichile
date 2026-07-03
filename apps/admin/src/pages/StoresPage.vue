@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Search } from '@element-plus/icons-vue';
 import { adminApi, type StoreRecord } from '../api/admin';
@@ -7,6 +8,7 @@ import { centsToYuan, yuanToCents } from '../utils';
 import { useAuthStore } from '../stores/auth';
 
 const auth = useAuthStore();
+const router = useRouter();
 const loading = ref(false);
 const items = ref<StoreRecord[]>([]);
 const total = ref(0);
@@ -24,9 +26,9 @@ async function load() {
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '商家加载失败'); }
   finally { loading.value = false; }
 }
-function open(record?: StoreRecord) {
-  creating.value = !record;
-  Object.assign(form, record ? { ...record, tagsText: record.tags.join('，'), deliveryFeeYuan: centsToYuan(record.deliveryFeeCents), packingFeeYuan: centsToYuan(record.packingFeeCents), minimumOrderYuan: centsToYuan(record.minimumOrderCents) } : { ...blank(), tagsText: '', deliveryFeeYuan: '0.00', packingFeeYuan: '0.00', minimumOrderYuan: '0.00' });
+function open() {
+  creating.value = true;
+  Object.assign(form, { ...blank(), tagsText: '', deliveryFeeYuan: '0.00', packingFeeYuan: '0.00', minimumOrderYuan: '0.00' });
   dialog.value = true;
 }
 async function save() {
@@ -58,11 +60,11 @@ onMounted(load);
       <el-table-column prop="monthlySales" label="月销量" width="100" />
       <el-table-column prop="rating" label="评分" width="80" />
       <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'info'" effect="plain">{{ row.status === 'active' ? '上架' : '下架' }}</el-tag></template></el-table-column>
-      <el-table-column label="操作" width="160" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="open(row)">编辑</el-button><el-button v-if="auth.has('catalog:write')" link :type="row.status === 'active' ? 'danger' : 'success'" @click="toggle(row)">{{ row.status === 'active' ? '下架' : '上架' }}</el-button></template></el-table-column>
+      <el-table-column label="操作" width="170" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="router.push({ name: 'store-detail', params: { storeId: row.id } })">管理</el-button><el-button v-if="auth.has('catalog:write')" link :type="row.status === 'active' ? 'danger' : 'success'" @click="toggle(row)">{{ row.status === 'active' ? '下架' : '上架' }}</el-button></template></el-table-column>
     </el-table>
     <div class="pagination"><el-pagination v-model:current-page="filters.page" v-model:page-size="filters.pageSize" layout="total, prev, pager, next" :total="total" @current-change="load" /></div>
   </div>
-  <el-dialog v-model="dialog" :title="creating ? '新增商家' : '编辑商家'" width="720px">
+  <el-dialog v-model="dialog" title="新增商家" width="720px">
     <el-form label-position="top"><div class="dialog-form-grid">
       <el-form-item label="商家 ID"><el-input v-model="form.id" :disabled="!creating" /></el-form-item>
       <el-form-item label="所属分类"><el-input v-model="form.categoryId" /></el-form-item>

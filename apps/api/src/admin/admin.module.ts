@@ -16,6 +16,9 @@ import { AdminAuthController, AdminController } from './admin.controller';
 import { AdminMutationService } from './admin-mutation.service';
 import { AdminPermissionGuard } from './admin-permission.guard';
 import { AdminQueryService } from './admin-query.service';
+import { ShareConfigEntity } from '../database/entities/share-config.entity';
+import { ShareInviteEntity } from '../database/entities/share-invite.entity';
+import { ShareService } from '../share/share.service';
 
 @Module({
   imports: [
@@ -28,6 +31,8 @@ import { AdminQueryService } from './admin-query.service';
       StoreEntity,
       VirtualOrderEntity,
       WalletTransactionEntity,
+      ShareConfigEntity,
+      ShareInviteEntity,
     ]),
   ],
   controllers: [AdminAuthController, AdminController],
@@ -39,6 +44,7 @@ import { AdminQueryService } from './admin-query.service';
     AdminMutationService,
     AdminPermissionGuard,
     AdminQueryService,
+    ShareService,
   ],
 })
 export class AdminModule {}

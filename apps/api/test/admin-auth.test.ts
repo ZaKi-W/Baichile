@@ -6,6 +6,7 @@ import {
   hashAdminToken,
   verifyAdminPassword,
 } from '../src/admin/admin.types';
+import { validateAdminPassword } from '../src/admin/admin-auth.service';
 
 describe('admin authentication primitives', () => {
   it('maps sensitive permissions only to authorized roles', () => {
@@ -31,5 +32,12 @@ describe('admin authentication primitives', () => {
     expect(hashAdminToken('secret-token')).toMatch(/^[a-f0-9]{64}$/);
     expect(hashAdminToken('secret-token')).toBe(hashAdminToken('secret-token'));
     expect(hashAdminToken('another-token')).not.toBe(hashAdminToken('secret-token'));
+  });
+
+  it('allows simple admin credentials only outside production', () => {
+    expect(() => validateAdminPassword('admin', 'development')).not.toThrow();
+    expect(() => validateAdminPassword('admin', 'test')).not.toThrow();
+    expect(() => validateAdminPassword('admin', 'production')).toThrow('密码至少 10 位');
+    expect(() => validateAdminPassword('strong-password', 'production')).not.toThrow();
   });
 });

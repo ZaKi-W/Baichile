@@ -18,7 +18,10 @@ const visibleTags = computed(() => props.store.tags.slice(0, 2));
 
 <template>
   <view class="store-card" :class="`tone-${index % 5}`" @tap="$emit('open')">
-    <view class="merchant-avatar" aria-hidden="true"><text>{{ avatar }}</text></view>
+    <view class="merchant-avatar" aria-hidden="true">
+      <image v-if="store.coverUrl" class="merchant-cover" :src="store.coverUrl" mode="aspectFill" />
+      <text v-else>{{ avatar }}</text>
+    </view>
     <view class="store-body">
       <view class="store-topline">
         <text class="store-name">{{ store.name }}</text>
@@ -54,6 +57,7 @@ const visibleTags = computed(() => props.store.tags.slice(0, 2));
 .tone-4 .merchant-avatar { background: #f4e4ff; }
 .merchant-avatar::before { content: ""; position: absolute; width: 176rpx; height: 62rpx; bottom: -28rpx; border-radius: 50%; background: rgba(255, 255, 255, .58); }
 .merchant-avatar text { z-index: 1; transform: translateY(-4rpx); filter: drop-shadow(0 10rpx 8rpx rgba(0, 0, 0, .12)); }
+.merchant-cover { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; }
 .store-body { position: relative; z-index: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 .store-topline { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .store-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 30rpx; line-height: 1.15; font-weight: 800; letter-spacing: -1rpx; }

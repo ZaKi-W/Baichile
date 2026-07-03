@@ -12,6 +12,9 @@ describe('StoreCard homepage design', () => {
     expect(source).toContain('store.virtualDeliveryMinutes');
     expect(source).toContain('store.monthlySales');
     expect(source).toContain('class="merchant-avatar"');
+    expect(source).toContain('v-if="store.coverUrl"');
+    expect(source).toContain(':src="store.coverUrl"');
+    expect(source).toContain('mode="aspectFill"');
     expect(source).toContain('class="score"');
     expect(source).toContain('class="tag-row"');
     expect(source).toContain('text-overflow: ellipsis');

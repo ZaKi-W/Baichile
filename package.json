@@ -10,6 +10,7 @@
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @baichile/api db:migrate",
     "db:seed": "pnpm --filter @baichile/api db:seed",
+    "db:import-catalog": "pnpm --filter @baichile/api db:import-catalog",
     "db:up": "docker compose up -d postgres",
     "dev": "pnpm --parallel --filter @baichile/api --filter @baichile/client dev",
     "dev:admin": "pnpm --filter @baichile/admin dev",

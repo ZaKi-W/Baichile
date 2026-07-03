@@ -6,12 +6,18 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import type { AccountSession, GuestSession, WechatMiniLoginRequest } from '@baichile/api-contract';
+import type {
+  AccountSession,
+  GuestSession,
+  WechatMiniLoginRequest,
+  WechatPhoneResult,
+} from '@baichile/api-contract';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { AccountEntity } from './database/entities/account.entity';
 import { VisitorSessionEntity } from './database/entities/visitor-session.entity';
 import { WalletService } from './wallet.service';
+import { ShareService } from './share/share.service';
 
 interface WechatCodeSession {
   openid?: string;
@@ -20,12 +26,29 @@ interface WechatCodeSession {
   errmsg?: string;
 }
 
+interface WechatAccessTokenResponse {
+  access_token?: string;
+  expires_in?: number;
+  errcode?: number;
+  errmsg?: string;
+}
+
+interface WechatPhoneResponse {
+  errcode?: number;
+  errmsg?: string;
+  phone_info?: WechatPhoneResult;
+}
+
 @Injectable()
 export class AuthService {
+  private wechatAccessToken = '';
+  private wechatAccessTokenExpiresAt = 0;
+
   constructor(
     @InjectRepository(AccountEntity) private readonly accounts: Repository<AccountEntity>,
     @InjectRepository(VisitorSessionEntity) private readonly visitors: Repository<VisitorSessionEntity>,
     @Inject(WalletService) private readonly wallet: WalletService,
+    @Inject(ShareService) private readonly shares: ShareService,
   ) {}
 
   resolveIdentity(authorization?: string): { visitorId?: string; accountId?: string } {
@@ -105,6 +128,7 @@ export class AuthService {
         }));
         await this.wallet.initializeAccount(session.accountId, manager);
       });
+      await this.shares.completeReferral(session.accountId, input.referralToken);
       return session;
     }
 
@@ -130,12 +154,31 @@ export class AuthService {
       }));
       await this.wallet.initializeAccount(accountId, manager);
     });
+    if (!existing) await this.shares.completeReferral(accountId, input.referralToken);
     return {
       accountId,
       accessToken: `account.${digest}`,
       provider: 'wechat',
       profile,
     };
+  }
+
+  async getWechatPhoneNumber(code: string): Promise<WechatPhoneResult> {
+    if (!code?.trim()) throw new BadRequestException('手机号授权凭证不能为空');
+    const accessToken = await this.getWechatAccessToken();
+    const response = await fetch(
+      `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${encodeURIComponent(accessToken)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim() }),
+      },
+    );
+    const body = await response.json() as WechatPhoneResponse;
+    if (!response.ok || body.errcode || !body.phone_info?.phoneNumber) {
+      throw new BadRequestException('微信手机号授权已失效，请重试');
+    }
+    return body.phone_info;
   }
 
   async linkVisitorToAccount(visitorId: string, accountId: string, manager?: EntityManager) {
@@ -150,5 +193,32 @@ export class AuthService {
       throw new BadRequestException('登录资料不完整');
     }
     return { avatarUrl, nickname };
+  }
+
+  private async getWechatAccessToken(): Promise<string> {
+    if (this.wechatAccessToken && Date.now() < this.wechatAccessTokenExpiresAt) {
+      return this.wechatAccessToken;
+    }
+    const appId = process.env.WECHAT_MINI_APP_ID;
+    const appSecret = process.env.WECHAT_MINI_APP_SECRET;
+    if (!appId || !appSecret) throw new ServiceUnavailableException('微信手机号能力配置缺失');
+
+    const response = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'client_credential',
+        appid: appId,
+        secret: appSecret,
+        force_refresh: false,
+      }),
+    });
+    const body = await response.json() as WechatAccessTokenResponse;
+    if (!response.ok || body.errcode || !body.access_token) {
+      throw new ServiceUnavailableException('微信手机号服务暂不可用');
+    }
+    this.wechatAccessToken = body.access_token;
+    this.wechatAccessTokenExpiresAt = Date.now() + Math.max(60, (body.expires_in ?? 7200) - 300) * 1000;
+    return this.wechatAccessToken;
   }
 }

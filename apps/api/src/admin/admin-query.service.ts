@@ -112,22 +112,24 @@ export class AdminQueryService {
     return item;
   }
 
-  async listMenuItems(query: AdminListQuery) {
+  async listMenuItems(storeId: string, query: AdminListQuery) {
+    await this.store(storeId);
     const { page, pageSize, skip } = normalizeAdminPage(query);
-    const builder = this.menuItems.createQueryBuilder('item');
+    const builder = this.menuItems.createQueryBuilder('item')
+      .where('item.store_id = :storeId', { storeId });
     if (query.keyword?.trim()) {
       builder.andWhere('item.name ILIKE :keyword', { keyword: `%${query.keyword.trim()}%` });
     }
     if (query.status) builder.andWhere('item.status = :status', { status: query.status });
-    if (query.storeId) builder.andWhere('item.store_id = :storeId', { storeId: query.storeId });
     if (query.categoryId) builder.andWhere('item.category_id = :categoryId', { categoryId: query.categoryId });
     const [items, total] = await builder.orderBy('item.sort_order', 'ASC')
       .addOrderBy('item.name', 'ASC').skip(skip).take(pageSize).getManyAndCount();
     return pageResult(items, total, page, pageSize);
   }
 
-  async menuItem(id: string) {
-    const item = await this.menuItems.findOneBy({ id });
+  async menuItem(storeId: string, id: string) {
+    await this.store(storeId);
+    const item = await this.menuItems.findOneBy({ id, storeId });
     if (!item) throw new NotFoundException({ code: 'MENU_ITEM_NOT_FOUND', message: '菜品不存在' });
     return item;
   }

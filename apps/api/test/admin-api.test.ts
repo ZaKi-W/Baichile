@@ -23,7 +23,7 @@ describe('admin API', () => {
     await database.query('TRUNCATE admin_audit_logs, admin_sessions, admin_users CASCADE');
     await database.query(`DELETE FROM menu_items WHERE id = 'admin-test-item'`);
     await database.query(`DELETE FROM virtual_orders WHERE store_id = 'admin-test-store'`);
-    await database.query(`DELETE FROM stores WHERE id = 'admin-test-store'`);
+    await database.query(`DELETE FROM stores WHERE id IN ('admin-test-store', 'admin-target-store')`);
     await database.destroy();
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -127,11 +127,10 @@ describe('admin API', () => {
 
     const menuItem = await app.inject({
       method: 'POST',
-      url: '/v1/admin/menu-items',
+      url: '/v1/admin/stores/admin-test-store/menu-items',
       headers,
       payload: {
         id: 'admin-test-item',
-        storeId: 'admin-test-store',
         categoryId,
         subCategoryId: null,
         name: '后台测试菜品',
@@ -148,6 +147,81 @@ describe('admin API', () => {
       },
     });
     expect(menuItem.statusCode).toBe(201);
+    expect(menuItem.json().storeId).toBe('admin-test-store');
+
+    const menuItems = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/stores/admin-test-store/menu-items?page=1&pageSize=10',
+      headers,
+    });
+    expect(menuItems.statusCode).toBe(200);
+    expect(menuItems.json().items).toEqual([
+      expect.objectContaining({ id: 'admin-test-item', storeId: 'admin-test-store' }),
+    ]);
+
+    const forbiddenRebind = await app.inject({
+      method: 'PATCH',
+      url: '/v1/admin/stores/admin-test-store/menu-items/admin-test-item',
+      headers,
+      payload: { storeId: 'another-store' },
+    });
+    expect(forbiddenRebind.statusCode).toBe(400);
+
+    const wrongStoreUpdate = await app.inject({
+      method: 'PATCH',
+      url: `/v1/admin/stores/${menuItems.json().items[0].storeId}-other/menu-items/admin-test-item`,
+      headers,
+      payload: { name: '不应更新' },
+    });
+    expect(wrongStoreUpdate.statusCode).toBe(404);
+
+    const targetStore = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/stores',
+      headers,
+      payload: {
+        ...store.json(),
+        id: 'admin-target-store',
+        name: '迁移目标商家',
+      },
+    });
+    expect(targetStore.statusCode).toBe(201);
+
+    const transfer = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/stores/admin-test-store/menu-items/admin-test-item/transfer',
+      headers,
+      payload: { targetStoreId: 'admin-target-store' },
+    });
+    expect(transfer.statusCode).toBe(201);
+    expect(transfer.json().storeId).toBe('admin-target-store');
+
+    const sameStoreTransfer = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/stores/admin-target-store/menu-items/admin-test-item/transfer',
+      headers,
+      payload: { targetStoreId: 'admin-target-store' },
+    });
+    expect(sameStoreTransfer.statusCode).toBe(400);
+
+    const retiredGlobalEndpoint = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/menu-items',
+      headers,
+    });
+    expect(retiredGlobalEndpoint.statusCode).toBe(404);
+
+    const transferAudit = await app.get(DataSource).query(
+      `SELECT action, before_data, after_data
+       FROM admin_audit_logs
+       WHERE resource_id = 'admin-test-item' AND action = 'menu_item.transfer'
+       ORDER BY created_at DESC LIMIT 1`,
+    );
+    expect(transferAudit[0]).toMatchObject({
+      action: 'menu_item.transfer',
+      before_data: { storeId: 'admin-test-store' },
+      after_data: { storeId: 'admin-target-store' },
+    });
 
     const login = await app.inject({
       method: 'POST',

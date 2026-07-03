@@ -17,6 +17,7 @@ import { AdminMutationService } from './admin-mutation.service';
 import { AdminPermissionGuard } from './admin-permission.guard';
 import { RequireAdminPermission } from './admin-permission.decorator';
 import { AdminQueryService, type AdminListQuery } from './admin-query.service';
+import { ShareService } from '../share/share.service';
 
 @Controller('v1/admin/auth')
 export class AdminAuthController {
@@ -49,6 +50,7 @@ export class AdminController {
     @Inject(AdminAuditService) private readonly audit: AdminAuditService,
     @Inject(AdminQueryService) private readonly query: AdminQueryService,
     @Inject(AdminMutationService) private readonly mutation: AdminMutationService,
+    @Inject(ShareService) private readonly shares: ShareService,
   ) {}
 
   @Get('auth/me')
@@ -110,28 +112,44 @@ export class AdminController {
     return this.mutation.updateStore(id, body, request.admin!, request.ip);
   }
 
-  @Get('menu-items')
+  @Get('stores/:storeId/menu-items')
   @RequireAdminPermission('catalog:read')
-  menuItems(@Query() query: AdminListQuery) {
-    return this.query.listMenuItems(query);
+  menuItems(@Param('storeId') storeId: string, @Query() query: AdminListQuery) {
+    return this.query.listMenuItems(storeId, query);
   }
 
-  @Get('menu-items/:id')
+  @Get('stores/:storeId/menu-items/:id')
   @RequireAdminPermission('catalog:read')
-  menuItem(@Param('id') id: string) {
-    return this.query.menuItem(id);
+  menuItem(@Param('storeId') storeId: string, @Param('id') id: string) {
+    return this.query.menuItem(storeId, id);
   }
 
-  @Post('menu-items')
+  @Post('stores/:storeId/menu-items')
   @RequireAdminPermission('catalog:write')
-  createMenuItem(@Body() body: unknown, @Req() request: AdminRequest) {
-    return this.mutation.createMenuItem(body, request.admin!, request.ip);
+  createMenuItem(@Param('storeId') storeId: string, @Body() body: unknown, @Req() request: AdminRequest) {
+    return this.mutation.createMenuItem(storeId, body, request.admin!, request.ip);
   }
 
-  @Patch('menu-items/:id')
+  @Patch('stores/:storeId/menu-items/:id')
   @RequireAdminPermission('catalog:write')
-  updateMenuItem(@Param('id') id: string, @Body() body: unknown, @Req() request: AdminRequest) {
-    return this.mutation.updateMenuItem(id, body, request.admin!, request.ip);
+  updateMenuItem(
+    @Param('storeId') storeId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: AdminRequest,
+  ) {
+    return this.mutation.updateMenuItem(storeId, id, body, request.admin!, request.ip);
+  }
+
+  @Post('stores/:storeId/menu-items/:id/transfer')
+  @RequireAdminPermission('catalog:write')
+  transferMenuItem(
+    @Param('storeId') storeId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: AdminRequest,
+  ) {
+    return this.mutation.transferMenuItem(storeId, id, body, request.admin!, request.ip);
   }
 
   @Get('accounts')
@@ -210,5 +228,27 @@ export class AdminController {
   @RequireAdminPermission('audit:read')
   auditLogs(@Query() query: AdminListQuery) {
     return this.query.listAuditLogs(query);
+  }
+
+  @Get('share-rewards/config')
+  @RequireAdminPermission('wallet:read')
+  shareRewardConfig() {
+    return this.shares.config();
+  }
+
+  @Patch('share-rewards/config')
+  @RequireAdminPermission('wallet:adjust')
+  async updateShareRewardConfig(@Body() body: unknown, @Req() request: AdminRequest) {
+    const before = await this.shares.config();
+    const after = await this.shares.updateConfig(body);
+    await this.audit.record(request.admin!, {
+      action: 'share_reward_config.update',
+      resourceType: 'share_reward_config',
+      resourceId: 'default',
+      beforeData: before,
+      afterData: after,
+      ipAddress: request.ip,
+    });
+    return after;
   }
 }

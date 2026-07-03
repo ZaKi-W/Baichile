@@ -115,7 +115,50 @@ export type WalletTransactionType =
   | 'order_payment'
   | 'test_credit'
   | 'order_refund'
-  | 'admin_adjustment';
+  | 'admin_adjustment'
+  | 'share_initiated'
+  | 'referral_inviter'
+  | 'referral_invitee';
+
+export type ShareKind = 'order' | 'achievement' | 'invitation';
+
+export interface ShareRewardConfig {
+  enabled: boolean;
+  initiatedRewardCents: number;
+  inviterRewardCents: number;
+  inviteeRewardCents: number;
+  dailyInitiatedLimit: number;
+  orderTitles: string[];
+  achievementTitles: string[];
+  invitationTitles: string[];
+}
+
+export interface ShareCreateRequest {
+  kind: ShareKind;
+  orderId?: string;
+}
+
+export interface ShareCard {
+  token: string;
+  kind: ShareKind;
+  title: string;
+  path: string;
+  imageUrl?: string;
+  initiatedRewardCents: number;
+  initiatedRewardGranted: boolean;
+}
+
+export interface ShareLanding {
+  active: boolean;
+  kind?: ShareKind;
+  title?: string;
+  dishNames: string[];
+  savedMoneyCents: number;
+  savedCaloriesKcal: number;
+  completedOrderCount: number;
+  inviteeRewardCents: number;
+  benefitText: string;
+}
 
 export interface WalletSummary {
   balanceCents: number;
@@ -163,6 +206,7 @@ export interface WechatMiniLoginRequest {
   code: string;
   visitorId?: string;
   profile: UserProfile;
+  referralToken?: string;
 }
 
 export interface AccountSession {
@@ -172,10 +216,21 @@ export interface AccountSession {
   profile: UserProfile;
 }
 
+export interface WechatPhoneRequest {
+  code: string;
+}
+
+export interface WechatPhoneResult {
+  phoneNumber: string;
+  purePhoneNumber: string;
+  countryCode: string;
+}
+
 export interface AdministrativeArea {
   province: string;
   city: string;
   district: string;
+  address?: string;
   adcode: string;
   cityCode: string;
   districtCode: string;

@@ -3,12 +3,24 @@ import { API_BASE } from '../config/api';
 
 const TENCENT_MAP_KEY = import.meta.env.VITE_TENCENT_MAP_KEY || '';
 
+function mapErrorMessage(data: unknown): string {
+  const message = data && typeof data === 'object' && 'message' in data
+    ? String((data as { message?: unknown }).message ?? '')
+    : '';
+  if (/每日调用量已达到上限|quota|limit/i.test(message)) {
+    return '地图服务今日额度已用完，请稍后再试';
+  }
+  return message || '地图服务请求失败';
+}
+
 function get<T>(url: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     uni.request({
       url,
-      success: (response) => response.statusCode < 400 ? resolve(response.data as T) : reject(new Error('请求失败')),
-      fail: reject,
+      success: (response) => response.statusCode < 400
+        ? resolve(response.data as T)
+        : reject(new Error(mapErrorMessage(response.data))),
+      fail: () => reject(new Error('网络连接失败')),
     });
   });
 }
@@ -21,12 +33,19 @@ export async function reverseGeocode(lat: number, lng: number): Promise<Administ
   const body = await get<{
     status: number;
     message: string;
-    result?: { ad_info: { adcode: string }; address_component: { province: string; city: string; district: string } };
+    result?: {
+      address?: string;
+      ad_info: { adcode: string };
+      address_component: { province: string; city: string; district: string };
+    };
   }>(`https://apis.map.qq.com/ws/geocoder/v1/?location=${lat},${lng}&key=${TENCENT_MAP_KEY}&get_poi=0`);
   if (body.status !== 0 || !body.result) throw new Error(body.message || '行政区解析失败');
   const { province, city, district } = body.result.address_component;
   const adcode = body.result.ad_info.adcode;
-  return { province, city, district, adcode, cityCode: `${adcode.slice(0, 4)}00`, districtCode: adcode };
+  return {
+    province, city, district, address: body.result.address, adcode,
+    cityCode: `${adcode.slice(0, 4)}00`, districtCode: adcode,
+  };
 }
 
 export async function nearbyPlaces(lat: number, lng: number): Promise<PlaceSuggestion[]> {

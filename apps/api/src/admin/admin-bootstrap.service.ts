@@ -8,6 +8,11 @@ export class AdminBootstrapService implements OnApplicationBootstrap {
   constructor(@Inject(AdminAuthService) private readonly auth: AdminAuthService) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    if (process.env.NODE_ENV !== 'production') {
+      await this.auth.ensureDevelopmentAdmin();
+      this.logger.log('开发环境后台账号：admin / admin');
+      return;
+    }
     if (await this.auth.countUsers()) return;
     const username = process.env.ADMIN_BOOTSTRAP_USERNAME?.trim();
     const password = process.env.ADMIN_BOOTSTRAP_PASSWORD;
