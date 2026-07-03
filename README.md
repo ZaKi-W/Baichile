@@ -1,5 +1,43 @@
 # 白吃了
 
+## 内部运营后台
+
+后台是仓库内独立的 Vue Web 应用，服务端接口统一位于 `/v1/admin`。第一阶段仅供内部管理员使用，角色分为超级管理员、运营和客服。
+
+首次启动前设置：
+
+```bash
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/baichile
+export ADMIN_BOOTSTRAP_USERNAME=root_admin
+export ADMIN_BOOTSTRAP_PASSWORD='请设置至少10位的强密码'
+export ADMIN_BOOTSTRAP_DISPLAY_NAME='超级管理员'
+```
+
+可选配置：
+
+```bash
+# 多个来源用英文逗号分隔；未设置时沿用开发环境的宽松 CORS
+export ADMIN_ALLOWED_ORIGIN='https://admin.example.com'
+# 管理端与 API 分域部署时配置
+export VITE_API_BASE_URL='https://api.example.com'
+```
+
+初始化数据库并启动 API：
+
+```bash
+pnpm db:up
+pnpm db:migrate
+pnpm dev:api
+```
+
+另开终端启动后台：
+
+```bash
+pnpm dev:admin
+```
+
+默认访问 `http://localhost:5174`。初始超级管理员只会在数据库中尚无管理员时创建，密码不会写入仓库或日志。后台支持商家、菜品、用户、用户货币、订单、管理员和审计日志管理；货币调整会同时生成不可变流水和审计记录。
+
 外卖平台风格的虚拟消费 MVP。订单仅扣除账号内虚拟余额，不涉及真钱支付，也不会真实发货；地图路线与骑手位置均为虚拟演示。
 
 ## 当前能力

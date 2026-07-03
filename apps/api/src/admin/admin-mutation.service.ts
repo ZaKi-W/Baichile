@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -103,9 +104,9 @@ export class AdminMutationService {
     @InjectRepository(VirtualOrderEntity) private readonly orders: Repository<VirtualOrderEntity>,
     @InjectRepository(AdminUserEntity) private readonly adminUsers: Repository<AdminUserEntity>,
     @InjectRepository(AdminSessionEntity) private readonly sessions: Repository<AdminSessionEntity>,
-    private readonly dataSource: DataSource,
-    private readonly auth: AdminAuthService,
-    private readonly audit: AdminAuditService,
+    @Inject(DataSource) private readonly dataSource: DataSource,
+    @Inject(AdminAuthService) private readonly auth: AdminAuthService,
+    @Inject(AdminAuditService) private readonly audit: AdminAuditService,
   ) {}
 
   async createStore(value: unknown, actor: AuthenticatedAdmin, ipAddress?: string) {

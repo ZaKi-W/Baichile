@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -16,7 +17,7 @@ export interface AdminRequest {
 
 @Injectable()
 export class AdminAuthGuard implements CanActivate {
-  constructor(private readonly auth: AdminAuthService) {}
+  constructor(@Inject(AdminAuthService) private readonly auth: AdminAuthService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AdminRequest>();

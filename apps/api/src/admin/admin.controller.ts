@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
   Param,
   Patch,
   Post,
@@ -20,8 +21,8 @@ import { AdminQueryService, type AdminListQuery } from './admin-query.service';
 @Controller('v1/admin/auth')
 export class AdminAuthController {
   constructor(
-    private readonly auth: AdminAuthService,
-    private readonly audit: AdminAuditService,
+    @Inject(AdminAuthService) private readonly auth: AdminAuthService,
+    @Inject(AdminAuditService) private readonly audit: AdminAuditService,
   ) {}
 
   @Post('login')
@@ -44,10 +45,10 @@ export class AdminAuthController {
 @UseGuards(AdminAuthGuard, AdminPermissionGuard)
 export class AdminController {
   constructor(
-    private readonly auth: AdminAuthService,
-    private readonly audit: AdminAuditService,
-    private readonly query: AdminQueryService,
-    private readonly mutation: AdminMutationService,
+    @Inject(AdminAuthService) private readonly auth: AdminAuthService,
+    @Inject(AdminAuditService) private readonly audit: AdminAuditService,
+    @Inject(AdminQueryService) private readonly query: AdminQueryService,
+    @Inject(AdminMutationService) private readonly mutation: AdminMutationService,
   ) {}
 
   @Get('auth/me')

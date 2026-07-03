@@ -12,6 +12,7 @@
     "db:seed": "pnpm --filter @baichile/api db:seed",
     "db:up": "docker compose up -d postgres",
     "dev": "pnpm --parallel --filter @baichile/api --filter @baichile/client dev",
+    "dev:admin": "pnpm --filter @baichile/admin dev",
     "dev:api": "pnpm --filter @baichile/api dev",
     "dev:h5": "pnpm --filter @baichile/client dev:h5",
     "dev:mp-weixin": "pnpm --filter @baichile/client dev:mp-weixin",

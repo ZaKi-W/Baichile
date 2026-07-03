@@ -27,7 +27,7 @@ export class AddAdminConsole1760000005000 implements MigrationInterface {
           CHECK (admin_status IN ('normal', 'following_up', 'resolved'));
 
       CREATE TABLE admin_users (
-        id uuid PRIMARY KEY,
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         username text NOT NULL UNIQUE,
         display_name text NOT NULL,
         password_hash text NOT NULL,
@@ -38,7 +38,7 @@ export class AddAdminConsole1760000005000 implements MigrationInterface {
         updated_at timestamptz NOT NULL DEFAULT now()
       );
       CREATE TABLE admin_sessions (
-        id uuid PRIMARY KEY,
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         admin_user_id uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
         token_hash text NOT NULL UNIQUE,
         expires_at timestamptz NOT NULL,
@@ -47,7 +47,7 @@ export class AddAdminConsole1760000005000 implements MigrationInterface {
       );
       CREATE INDEX admin_sessions_admin_user_id_idx ON admin_sessions(admin_user_id);
       CREATE TABLE admin_audit_logs (
-        id uuid PRIMARY KEY,
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         admin_user_id uuid NOT NULL REFERENCES admin_users(id),
         action text NOT NULL,
         resource_type text NOT NULL,

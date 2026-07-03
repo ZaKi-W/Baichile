@@ -1,11 +1,11 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { AdminAuthService } from './admin-auth.service';
 
 @Injectable()
 export class AdminBootstrapService implements OnApplicationBootstrap {
   private readonly logger = new Logger(AdminBootstrapService.name);
 
-  constructor(private readonly auth: AdminAuthService) {}
+  constructor(@Inject(AdminAuthService) private readonly auth: AdminAuthService) {}
 
   async onApplicationBootstrap(): Promise<void> {
     if (await this.auth.countUsers()) return;
