@@ -32,7 +32,7 @@ export class CatalogService {
 
   async list(categoryId?: string, query?: string): Promise<StoreDetail[]> {
     const rows = await this.stores.find({
-      where: categoryId ? { categoryId } : {},
+      where: categoryId ? { categoryId, status: 'active' } : { status: 'active' },
       order: { sortOrder: 'ASC' },
     });
     const details = await this.assemble(rows);
@@ -44,7 +44,7 @@ export class CatalogService {
   }
 
   async find(storeId: string): Promise<StoreDetail> {
-    const row = await this.stores.findOneBy({ id: storeId });
+    const row = await this.stores.findOneBy({ id: storeId, status: 'active' });
     if (!row) throw new NotFoundException('店铺不存在');
     return (await this.assemble([row]))[0];
   }
@@ -53,7 +53,7 @@ export class CatalogService {
     if (!rows.length) return [];
     const ids = rows.map(({ id }) => id);
     const [items, subs] = await Promise.all([
-      this.menuItems.find({ where: { storeId: In(ids) }, order: { sortOrder: 'ASC' } }),
+      this.menuItems.find({ where: { storeId: In(ids), status: 'active' }, order: { sortOrder: 'ASC' } }),
       this.subCategories.find({ where: { storeId: In(ids) }, order: { sortOrder: 'ASC' } }),
     ]);
     return rows.map((store) => ({

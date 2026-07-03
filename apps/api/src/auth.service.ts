@@ -1,4 +1,10 @@
-import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type { AccountSession, GuestSession, WechatMiniLoginRequest } from '@baichile/api-contract';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -37,17 +43,23 @@ export class AuthService {
 
   async resolvePersistedIdentity(authorization?: string): Promise<{ visitorId?: string; accountId?: string }> {
     const identity = this.resolveIdentity(authorization);
-    if (identity.accountId && !await this.accounts.existsBy({ id: identity.accountId })) {
-      await this.accounts.manager.transaction(async (manager) => {
-        await manager.getRepository(AccountEntity).insert({
-          id: identity.accountId!,
-          wechatOpenIdHash: null,
-          nickname: null,
-          avatarUrl: null,
-          balanceCents: 0,
+    if (identity.accountId) {
+      const account = await this.accounts.findOneBy({ id: identity.accountId });
+      if (account?.status === 'disabled') {
+        throw new UnauthorizedException({ code: 'ACCOUNT_DISABLED', message: '账号已被禁用' });
+      }
+      if (!account) {
+        await this.accounts.manager.transaction(async (manager) => {
+          await manager.getRepository(AccountEntity).insert({
+            id: identity.accountId!,
+            wechatOpenIdHash: null,
+            nickname: null,
+            avatarUrl: null,
+            balanceCents: 0,
+          });
+          await this.wallet.initializeAccount(identity.accountId!, manager);
         });
-        await this.wallet.initializeAccount(identity.accountId!, manager);
-      });
+      }
     }
     return identity;
   }

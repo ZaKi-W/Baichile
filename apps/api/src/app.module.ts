@@ -22,6 +22,7 @@ import { WalletService } from './wallet.service';
 import { AdminUserEntity } from './database/entities/admin-user.entity';
 import { AdminSessionEntity } from './database/entities/admin-session.entity';
 import { AdminAuditLogEntity } from './database/entities/admin-audit-log.entity';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AdminAuditLogEntity } from './database/entities/admin-audit-log.entity'
       WalletTransactionEntity,
       AdminUserEntity, AdminSessionEntity, AdminAuditLogEntity,
     ]),
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AuthService, CatalogService, OrderService, MapService, AddressService, AnalyticsService, WalletService],
