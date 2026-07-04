@@ -46,8 +46,14 @@ describe('share rewards', () => {
     const first = await service.create(inviterId, { kind: 'invitation' });
     const second = await service.create(inviterId, { kind: 'invitation' });
 
-    expect(first.initiatedRewardGranted).toBe(true);
+    expect(first.initiatedRewardGranted).toBe(false);
     expect(second.initiatedRewardGranted).toBe(false);
+    const firstReward = await service.rewardInitiatedShare(inviterId, first.token);
+    const duplicateReward = await service.rewardInitiatedShare(inviterId, first.token);
+    const overLimitReward = await service.rewardInitiatedShare(inviterId, second.token);
+    expect(firstReward).toMatchObject({ granted: true, amountCents: 500 });
+    expect(duplicateReward).toMatchObject({ granted: false, amountCents: 0 });
+    expect(overLimitReward).toMatchObject({ granted: false, amountCents: 0 });
     const inviter = await database.getRepository(AccountEntity).findOneByOrFail({ id: inviterId });
     expect(inviter.balanceCents).toBe(500);
   });

@@ -1,4 +1,4 @@
-import type { ShareCard, ShareCreateRequest, ShareLanding } from '@baichile/api-contract';
+import type { ShareCard, ShareCreateRequest, ShareLanding, ShareRewardResult } from '@baichile/api-contract';
 import { useAuthStore } from '../stores/auth';
 import { requestApi } from './http';
 
@@ -9,5 +9,13 @@ export const shareService = {
   },
   landing(token: string) {
     return requestApi<ShareLanding>('GET', `/v1/shares/${encodeURIComponent(token)}`, '');
+  },
+  reward(token: string) {
+    const auth = useAuthStore();
+    return requestApi<ShareRewardResult>(
+      'POST',
+      `/v1/shares/${encodeURIComponent(token)}/initiated-reward`,
+      auth.accessToken,
+    );
   },
 };

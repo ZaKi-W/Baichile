@@ -290,7 +290,7 @@ async function prepareTimelineShare() {
   try {
     const card = await shareService.create({ kind: 'order', orderId: order.value.id });
     uni.navigateTo({
-      url: `${card.path}&share=1&reward=${card.initiatedRewardGranted ? card.initiatedRewardCents : 0}`,
+      url: `${card.path}&share=1&reward=${card.initiatedRewardCents}`,
     });
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' });

@@ -56,7 +56,7 @@ async function prepareTimelineShare(kind: 'achievement' | 'invitation' = 'invita
   try {
     const card = await shareService.create({ kind });
     uni.navigateTo({
-      url: `${card.path}&share=1&reward=${card.initiatedRewardGranted ? card.initiatedRewardCents : 0}`,
+      url: `${card.path}&share=1&reward=${card.initiatedRewardCents}`,
     });
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' });
@@ -190,6 +190,14 @@ async function login() {
           {{ wallet.summary.checkedInToday ? '今日已签到' : '签到领 ¥100' }}
         </button>
         <button
+          class="wallet-action share-reward"
+          :loading="preparingShare"
+          :disabled="preparingShare"
+          @tap="prepareTimelineShare('invitation')"
+        >
+          分享领饭钱
+        </button>
+        <button
           class="wallet-action test-credit"
           :loading="walletAction === 'credit'"
           :disabled="!!walletAction"
@@ -226,7 +234,7 @@ async function login() {
       <view class="menu-divider" />
       <view class="menu-item" @tap="prepareTimelineShare('invitation')">
         <text class="menu-icon">🎁</text>
-        <text class="menu-text">请朋友白吃一顿</text>
+        <text class="menu-text">分享朋友圈，领虚拟饭钱</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-divider" />
@@ -522,6 +530,11 @@ async function login() {
 .wallet-action.test-credit {
   color: #fff;
   background: rgba(255, 255, 255, 0.14);
+}
+
+.wallet-action.share-reward {
+  color: #fff;
+  background: #ff7145;
 }
 
 .wallet-action[disabled] {

@@ -3,6 +3,7 @@ import type {
   ShareCard,
   ShareCreateRequest,
   ShareLanding,
+  ShareRewardResult,
   ShareRewardConfig,
   WalletTransactionType,
 } from '@baichile/api-contract';
@@ -66,29 +67,53 @@ export class ShareService {
         initiatedRewardGranted: false,
       });
       await manager.save(invite);
-      const account = await manager.getRepository(AccountEntity).findOneOrFail({
-        where: { id: accountId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      const grantedToday = await manager.getRepository(ShareInviteEntity)
-        .createQueryBuilder('invite')
-        .where('invite.inviter_account_id = :accountId', { accountId })
-        .andWhere('invite.initiated_reward_granted = true')
-        .andWhere('invite.created_at >= :today', { today: `${shanghaiBusinessDate()}T00:00:00+08:00` })
-        .getCount();
-      const grant = grantedToday < config.dailyInitiatedLimit && config.initiatedRewardCents > 0;
-      if (grant) {
-        await this.credit(manager, account, config.initiatedRewardCents, 'share_initiated', '发起分享奖励（虚拟饭钱，不可提现）');
-        invite.initiatedRewardGranted = true;
-        await manager.save(invite);
-      }
       return {
         token,
         kind: input.kind,
         title,
         path: buildSharePath(token),
-        initiatedRewardCents: grant ? config.initiatedRewardCents : 0,
-        initiatedRewardGranted: grant,
+        initiatedRewardCents: config.initiatedRewardCents,
+        initiatedRewardGranted: false,
+      };
+    });
+  }
+
+  async rewardInitiatedShare(accountId: string, token: string): Promise<ShareRewardResult> {
+    return this.dataSource.transaction(async (manager) => {
+      const config = await this.config(manager);
+      const invite = await manager.getRepository(ShareInviteEntity).findOne({
+        where: { token, inviterAccountId: accountId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const account = await manager.getRepository(AccountEntity).findOneOrFail({
+        where: { id: accountId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!config.enabled || !invite || invite.initiatedRewardGranted || invite.expiresAt.getTime() <= Date.now()) {
+        return { granted: false, amountCents: 0, balanceCents: account.balanceCents };
+      }
+      const grantedToday = await manager.getRepository(ShareInviteEntity)
+        .createQueryBuilder('shareInvite')
+        .where('shareInvite.inviter_account_id = :accountId', { accountId })
+        .andWhere('shareInvite.initiated_reward_granted = true')
+        .andWhere('shareInvite.created_at >= :today', { today: `${shanghaiBusinessDate()}T00:00:00+08:00` })
+        .getCount();
+      if (grantedToday >= config.dailyInitiatedLimit || config.initiatedRewardCents <= 0) {
+        return { granted: false, amountCents: 0, balanceCents: account.balanceCents };
+      }
+      await this.credit(
+        manager,
+        account,
+        config.initiatedRewardCents,
+        'share_initiated',
+        '朋友圈分享奖励（虚拟饭钱，不可提现）',
+      );
+      invite.initiatedRewardGranted = true;
+      await manager.save(invite);
+      return {
+        granted: true,
+        amountCents: config.initiatedRewardCents,
+        balanceCents: account.balanceCents,
       };
     });
   }

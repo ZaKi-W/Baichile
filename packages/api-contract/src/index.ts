@@ -148,6 +148,12 @@ export interface ShareCard {
   initiatedRewardGranted: boolean;
 }
 
+export interface ShareRewardResult {
+  granted: boolean;
+  amountCents: number;
+  balanceCents: number;
+}
+
 export interface ShareLanding {
   active: boolean;
   kind?: ShareKind;

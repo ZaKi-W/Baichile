@@ -14,7 +14,7 @@ export interface SharePosterModel {
 export function buildSharePosterModel(data: ShareLanding): SharePosterModel {
   if (data.kind === 'achievement') {
     return {
-      background: '/static/share/achievement-report-bg.jpg',
+      background: '/static/share/achievement-cover.jpg',
       eyebrow: '白吃战报',
       title: data.title ?? '嘴上没亏待自己，肚子也没为难自己',
       primary: `累计白吃 ${data.completedOrderCount} 顿`,
@@ -26,7 +26,7 @@ export function buildSharePosterModel(data: ShareLanding): SharePosterModel {
   }
   if (data.kind === 'invitation') {
     return {
-      background: '/static/share/invitation-ticket-bg.jpg',
+      background: '/static/share/invitation-cover-v2.jpg',
       eyebrow: '朋友请客券',
       title: data.title ?? '送你一笔饭钱，放心，是假的',
       primary: `送你 ¥${wholeMoney(data.inviteeRewardCents)} 虚拟饭钱`,
@@ -37,7 +37,7 @@ export function buildSharePosterModel(data: ShareLanding): SharePosterModel {
     };
   }
   return {
-    background: '/static/share/order-receipt-bg.jpg',
+    background: '/static/share/order-cover.jpg',
     eyebrow: '本单已送达到想象里',
     title: data.title ?? '这顿我点了，但没真吃',
     primary: `省下 ¥${money(data.savedMoneyCents)}`,

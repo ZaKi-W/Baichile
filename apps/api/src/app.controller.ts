@@ -172,6 +172,15 @@ export class AppController {
     return this.shares.landing(token);
   }
 
+  @Post('shares/:token/initiated-reward')
+  async rewardInitiatedShare(
+    @Param('token') token: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const identity = await this.auth.resolvePersistedIdentity(authorization);
+    return this.shares.rewardInitiatedShare(this.requireAccount(identity.accountId), token);
+  }
+
   @Get('orders/:orderId')
   order(@Param('orderId') orderId: string) { return this.orders.find(orderId); }
 
