@@ -11,6 +11,7 @@ describe('auth store WeChat login', () => {
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn((key: string) => storage.get(key) ?? ''),
       setStorageSync: vi.fn((key: string, value: unknown) => storage.set(key, value)),
+      removeStorageSync: vi.fn((key: string) => storage.delete(key)),
       login: vi.fn(({ success }: { success: (result: { code: string }) => void }) => {
         success({ code: 'wx-login-code' });
       }),

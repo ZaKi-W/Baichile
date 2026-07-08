@@ -1,15 +1,22 @@
 import type { Category, MenuItem, MenuSubCategory, StoreDetail } from '@baichile/api-contract';
 import type { SpecGroup } from '@baichile/domain';
 import { estimateCalories, withCalorieDeltas } from './calorie-estimates';
+import { choutuanCategories, choutuanStores } from './catalog.choutuan';
 
 /* ═══════════════════════════════════════════════
    Categories
    ═══════════════════════════════════════════════ */
-export const categories: Category[] = [
+const baseCategories: Category[] = [
   ['bbq', '烧烤', 'bbq'], ['fried', '炸鸡', 'friedChicken'], ['burger', '汉堡', 'burger'],
   ['noodles', '粉面', 'noodles'], ['rice', '盖饭', 'rice'], ['tea', '奶茶', 'milkTea'],
   ['dessert', '甜品', 'dessert'], ['night', '夜宵', 'lateNight'],
 ].map(([id, name, icon]) => ({ id, name, icon }));
+
+export const categories: Category[] = [
+  ...choutuanCategories,
+  ...baseCategories.filter((category) =>
+    !choutuanCategories.some((choutuanCategory) => choutuanCategory.id === category.id)),
+];
 
 /* ═══════════════════════════════════════════════
    Helpers
@@ -1200,4 +1207,7 @@ const rawStores: RawStore[] = [
 /* ═══════════════════════════════════════════════
    Build & Export
    ═══════════════════════════════════════════════ */
-export const stores: StoreDetail[] = rawStores.map(buildStore);
+export const stores: StoreDetail[] = [
+  ...choutuanStores,
+  ...rawStores.map(buildStore),
+];
