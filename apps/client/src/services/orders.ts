@@ -2,7 +2,7 @@ import type { AccountSavings, OrderQuote, QuoteRequest, VirtualOrder } from '@ba
 import { calculateLineCalories, calculateOrderTotal } from '@baichile/domain';
 import { catalogService } from './catalog';
 import { useAuthStore } from '../stores/auth';
-import { API_BASE } from '../config/api';
+import { API_BASE, USE_CLOUDBASE_API } from '../config/api';
 import { ApiRequestError, requestApi } from './http';
 import { getDeliveryIncidentPhase } from '@baichile/domain';
 
@@ -59,12 +59,13 @@ async function localQuote(request: QuoteRequest): Promise<OrderQuote> {
 
 export const orderService = {
   async quote(request: QuoteRequest): Promise<OrderQuote> {
+    if (USE_CLOUDBASE_API) return requestApi<OrderQuote>('POST', '/v1/orders/quote', '', request);
     if (!API_BASE) return localQuote(request);
     return post<OrderQuote>('/v1/orders/quote', request);
   },
   async create(request: QuoteRequest): Promise<VirtualOrder> {
     const auth = useAuthStore();
-    if (API_BASE) {
+    if (API_BASE || USE_CLOUDBASE_API) {
       return requestApi<VirtualOrder>('POST', '/v1/orders/virtual', auth.accessToken, request);
     }
     throw new ApiRequestError('服务未配置，暂时无法创建订单');
@@ -72,6 +73,9 @@ export const orderService = {
   async list(): Promise<VirtualOrder[]> {
     const auth = useAuthStore();
     if (!auth.accountId) return [];
+    if (USE_CLOUDBASE_API) {
+      return requestApi<VirtualOrder[]>('GET', '/v1/orders/me', auth.accessToken);
+    }
     if (!API_BASE) {
       return (uni.getStorageSync(`baichile:orders:${auth.accountId}`) || []) as VirtualOrder[];
     }
@@ -83,6 +87,9 @@ export const orderService = {
     const auth = useAuthStore();
     const empty = { savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0 };
     if (!auth.accountId) return empty;
+    if (USE_CLOUDBASE_API) {
+      return requestApi<AccountSavings>('GET', '/v1/accounts/me/savings', auth.accessToken);
+    }
     if (API_BASE) {
       return get<AccountSavings>('/v1/accounts/me/savings', {
         Authorization: `Bearer ${auth.accessToken}`,

@@ -1,5 +1,6 @@
 import type { AdministrativeArea, PlaceSuggestion } from '@baichile/api-contract';
-import { API_BASE } from '../config/api';
+import { API_BASE, USE_CLOUDBASE_API } from '../config/api';
+import { requestApi } from './http';
 
 const TENCENT_MAP_KEY = import.meta.env.VITE_TENCENT_MAP_KEY || '';
 
@@ -26,6 +27,9 @@ function get<T>(url: string): Promise<T> {
 }
 
 export async function reverseGeocode(lat: number, lng: number): Promise<AdministrativeArea> {
+  if (USE_CLOUDBASE_API) {
+    return requestApi<AdministrativeArea>('GET', `/v1/map/reverse-geocode?lat=${lat}&lng=${lng}`, '');
+  }
   if (API_BASE) {
     return get<AdministrativeArea>(`${API_BASE}/v1/map/reverse-geocode?lat=${lat}&lng=${lng}`);
   }
@@ -49,6 +53,9 @@ export async function reverseGeocode(lat: number, lng: number): Promise<Administ
 }
 
 export async function nearbyPlaces(lat: number, lng: number): Promise<PlaceSuggestion[]> {
+  if (USE_CLOUDBASE_API) {
+    return requestApi<PlaceSuggestion[]>('GET', `/v1/map/nearby?lat=${lat}&lng=${lng}`, '');
+  }
   if (API_BASE) {
     return get<PlaceSuggestion[]>(`${API_BASE}/v1/map/nearby?lat=${lat}&lng=${lng}`);
   }
@@ -89,6 +96,11 @@ export async function nearbyPlaces(lat: number, lng: number): Promise<PlaceSugge
 
 export async function suggestPlaces(keyword: string, region?: string): Promise<PlaceSuggestion[]> {
   if (!keyword?.trim()) return [];
+  if (USE_CLOUDBASE_API) {
+    const params = new URLSearchParams({ keyword: keyword.trim() });
+    if (region) params.set('region', region);
+    return requestApi<PlaceSuggestion[]>('GET', `/v1/map/suggest?${params.toString()}`, '');
+  }
   if (API_BASE) {
     const params = new URLSearchParams({ keyword: keyword.trim() });
     if (region) params.set('region', region);

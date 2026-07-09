@@ -1,8 +1,10 @@
 import type { HomeResponse, StoreDetail } from '@baichile/api-contract';
 import { mockCategories, mockStores } from '../mock/catalog';
-import { API_BASE } from '../config/api';
+import { API_BASE, USE_CLOUDBASE_API } from '../config/api';
+import { requestApi } from './http';
 
 async function request<T>(path: string): Promise<T> {
+  if (USE_CLOUDBASE_API) return requestApi<T>('GET', path, '');
   if (!API_BASE) throw new Error('mock');
   return new Promise<T>((resolve, reject) => {
     uni.request({

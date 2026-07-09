@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import type { AccountSession, UserProfile, WechatMiniLoginRequest } from '@baichile/api-contract';
-import { API_BASE } from '../config/api';
+import { API_BASE, USE_CLOUDBASE_API } from '../config/api';
+import { requestApi } from '../services/http';
 
 const VISITOR_KEY = 'baichile:visitor';
 const ACCOUNT_KEY = 'baichile:account';
@@ -35,15 +36,9 @@ export const useAuthStore = defineStore('auth', {
         if (!account) this.accessToken = saved.accessToken;
         return;
       }
-      if (API_BASE) {
+      if (API_BASE || USE_CLOUDBASE_API) {
         try {
-          const data = await new Promise<{ visitorId: string; accessToken: string }>((resolve, reject) => {
-            uni.request({
-              method: 'POST', url: `${API_BASE}/v1/auth/guest`,
-              success: (response) => resolve(response.data as { visitorId: string; accessToken: string }),
-              fail: reject,
-            });
-          });
+          const data = await requestApi<{ visitorId: string; accessToken: string }>('POST', '/v1/auth/guest', '');
           this.visitorId = data.visitorId;
           this.accessToken = data.accessToken;
         } catch {
@@ -77,21 +72,10 @@ export const useAuthStore = defineStore('auth', {
         },
         referralToken: uni.getStorageSync(REFERRAL_KEY) || undefined,
       };
-      const session = await new Promise<AccountSession>((resolve, reject) => {
-        uni.request({
-          method: 'POST',
-          url: `${API_BASE}/v1/auth/wechat-mini`,
-          data: payload,
-          success: (response) => {
-            if (response.statusCode && response.statusCode >= 400) {
-              reject(new Error(errorMessage(response.data, '微信登录失败')));
-              return;
-            }
-            resolve(response.data as AccountSession);
-          },
-          fail: (error) => reject(new Error(errorMessage(error, '网络连接失败'))),
+      const session = await requestApi<AccountSession>('POST', '/v1/auth/wechat-mini', '', payload)
+        .catch((error) => {
+          throw new Error(errorMessage(error, '微信登录失败'));
         });
-      });
       this.applyAccount(session);
       this.persistAccount();
       uni.removeStorageSync(REFERRAL_KEY);
@@ -133,12 +117,8 @@ export const useAuthStore = defineStore('auth', {
       if (import.meta.env.PROD) throw new Error('生产环境不可使用模拟微信登录');
       this.accountId = `account_dev_${Date.now()}`;
       this.provider = 'dev-mock';
-      if (API_BASE) {
-        await uni.request({
-          method: 'POST',
-          url: `${API_BASE}/v1/auth/merge-visitor`,
-          data: { visitorId: this.visitorId, accountId: this.accountId },
-        });
+      if (API_BASE || USE_CLOUDBASE_API) {
+        await requestApi('POST', '/v1/auth/merge-visitor', '', { visitorId: this.visitorId, accountId: this.accountId });
       }
     },
   },

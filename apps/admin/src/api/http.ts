@@ -1,4 +1,5 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+const CLOUDBASE_HTTP_API_URL = import.meta.env.VITE_CLOUDBASE_HTTP_API_URL ?? '';
 const TOKEN_KEY = 'baichile_admin_token';
 
 export class ApiRequestError extends Error {
@@ -32,6 +33,7 @@ export function toQuery(
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (CLOUDBASE_HTTP_API_URL) return cloudbaseApi<T>(path, init);
   const token = getToken();
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -51,4 +53,38 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     );
   }
   return body as T;
+}
+
+async function cloudbaseApi<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  const method = (init.method ?? 'GET').toUpperCase();
+  const url = new URL(path, 'https://example.invalid');
+  const query = Object.fromEntries(url.searchParams.entries());
+  const response = await fetch(CLOUDBASE_HTTP_API_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      method,
+      path: `${url.pathname}${url.search}`,
+      query,
+      data: init.body ? JSON.parse(String(init.body)) : undefined,
+      authorization: token ? `Bearer ${token}` : '',
+    }),
+  });
+  const body = await response.json().catch(() => ({})) as {
+    ok?: boolean;
+    status?: number;
+    data?: T;
+    code?: string;
+    message?: string;
+  };
+  if (!response.ok || !body.ok) {
+    if (body.status === 401) setToken('');
+    throw new ApiRequestError(
+      body.status ?? response.status,
+      body.code ?? 'REQUEST_FAILED',
+      body.message ?? '请求失败，请稍后重试',
+    );
+  }
+  return body.data as T;
 }

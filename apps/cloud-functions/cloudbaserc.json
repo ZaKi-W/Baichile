@@ -1,0 +1,30 @@
+{
+  "envId": "{{CLOUDBASE_ENV_ID}}",
+  "framework": {
+    "name": "baichile-cloudbase",
+    "plugins": {
+      "client": {
+        "use": "@cloudbase/framework-plugin-website",
+        "inputs": {
+          "outputPath": "../admin/dist",
+          "cloudPath": "/admin"
+        }
+      },
+      "api": {
+        "use": "@cloudbase/framework-plugin-function",
+        "inputs": {
+          "functionRootPath": "./functions",
+          "functions": [
+            {
+              "name": "api",
+              "timeout": 20,
+              "runtime": "Nodejs18.15",
+              "installDependency": true,
+              "handler": "index.main"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

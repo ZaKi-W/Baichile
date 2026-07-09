@@ -1,5 +1,6 @@
 import type { DataSource } from 'typeorm';
 import { categories, stores } from '../catalog.seed';
+import { resolveCatalogImageUrl } from '../catalog-images';
 import { CategoryEntity } from './entities/category.entity';
 import { MenuItemEntity } from './entities/menu-item.entity';
 import { StoreEntity } from './entities/store.entity';
@@ -18,7 +19,7 @@ export async function seedCatalog(dataSource: DataSource) {
         categoryId: store.categoryId,
         name: store.name,
         description: store.description,
-        coverUrl: store.coverUrl ?? null,
+        coverUrl: resolveCatalogImageUrl(store.coverUrl),
         tags: store.tags,
         deliveryFeeCents: store.deliveryFeeCents,
         packingFeeCents: store.packingFeeCents,
@@ -57,7 +58,7 @@ export async function seedCatalog(dataSource: DataSource) {
         subCategoryId: item.subCategoryId ?? null,
         name: item.name,
         subtitle: item.subtitle ?? null,
-        imageUrl: item.imageUrl ?? null,
+        imageUrl: resolveCatalogImageUrl(item.imageUrl),
         basePriceCents: item.basePriceCents,
         caloriesKcal: item.caloriesKcal,
         calorieSource: item.calorieSource,

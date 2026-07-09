@@ -1,0 +1,27 @@
+{
+  "name": "@baichile/cloud-functions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare:deploy": "pnpm run build && node scripts/prepare-deploy-package.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "export:postgres": "ts-node scripts/export-postgres.ts",
+    "import:cloudbase": "ts-node scripts/import-cloudbase.ts",
+    "verify:cloudbase": "ts-node scripts/verify-cloudbase.ts",
+    "migrate:catalog-images": "ts-node scripts/migrate-catalog-images.ts"
+  },
+  "dependencies": {
+    "@baichile/api-contract": "workspace:*",
+    "@baichile/domain": "workspace:*",
+    "@baichile/map-core": "workspace:*",
+    "@cloudbase/node-sdk": "^2.11.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHashHistory } from 'vue-router';
 import type { AdminPermission } from '@baichile/api-contract';
 import { useAuthStore } from './stores/auth';
 
@@ -10,7 +10,7 @@ declare module 'vue-router' {
 }
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes: [
     { path: '/login', name: 'login', component: () => import('./pages/LoginPage.vue') },
     {
