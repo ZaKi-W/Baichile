@@ -12,7 +12,7 @@ import {
 import { collections } from '../src/collections';
 import { createCloudBaseDatabase } from '../src/database';
 
-const sourceDir = resolve(process.env.CATALOG_IMAGE_SOURCE_DIR || resolve(__dirname, '../../client/src/static/choutuan-img'));
+const sourceDir = resolve(process.env.CATALOG_IMAGE_SOURCE_DIR || resolve(__dirname, '../../../packages/catalog-data/assets/choutuan-img'));
 const cloudPath = process.env.CATALOG_IMAGE_CLOUD_PATH?.replace(/^\/+|\/+$/g, '') || CATALOG_IMAGE_CLOUD_PATH;
 const uploadTarget = process.env.CATALOG_IMAGE_UPLOAD_TARGET || DEFAULT_CATALOG_IMAGE_UPLOAD_TARGET;
 const STORAGE_BATCH_SIZE = 2;

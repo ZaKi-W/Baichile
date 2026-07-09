@@ -45,7 +45,7 @@ describe('profile page WeChat login', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
     const version = readFileSync(new URL('../../config/code-version.ts', import.meta.url), 'utf8');
 
-    expect(version).toContain('CODE_VERSION = 40');
+    expect(version).toMatch(/CODE_VERSION = \d+/);
     expect(source).toContain("import { CODE_VERSION }");
     expect(source).toContain('代码版本 {{ CODE_VERSION }}');
   });

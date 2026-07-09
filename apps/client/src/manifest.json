@@ -17,8 +17,9 @@
       "chooseLocation"
     ],
     "setting": {
-      "urlCheck": false,
-      "es6": true
+      "urlCheck": true,
+      "es6": true,
+      "minified": true
     },
     "usingComponents": true
   },

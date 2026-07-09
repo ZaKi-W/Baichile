@@ -6,8 +6,8 @@ export const DEFAULT_CATALOG_IMAGE_UPLOAD_TARGET = 'hosting';
 export function normalizeCatalogImageBaseUrl(value = process.env.CATALOG_IMAGE_BASE_URL): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
-  if (!/^https?:\/\//.test(trimmed)) {
-    throw new Error('CATALOG_IMAGE_BASE_URL 必须是 http(s) URL');
+  if (!/^(https?:\/\/|cloud:\/\/)/.test(trimmed)) {
+    throw new Error('CATALOG_IMAGE_BASE_URL 必须是 http(s) URL 或 cloud:// 文件前缀');
   }
   return trimmed.replace(/\/+$/, '');
 }

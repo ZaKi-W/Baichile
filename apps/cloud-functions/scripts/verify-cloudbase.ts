@@ -7,8 +7,8 @@ import { createCloudBaseDatabase, type CollectionStore } from '../src/database';
 const PAGE_SIZE = 100;
 
 async function main() {
-  const input = resolve(process.env.CLOUDBASE_EXPORT_FILE || 'tmp/cloudbase-export.json');
-  const expected = existsSync(input)
+  const input = process.env.CLOUDBASE_EXPORT_FILE ? resolve(process.env.CLOUDBASE_EXPORT_FILE) : '';
+  const expected = input && existsSync(input)
     ? JSON.parse(readFileSync(input, 'utf8')) as Record<string, Array<Record<string, unknown>>>
     : expectedFromCatalogSeed();
   const db = createCloudBaseDatabase();

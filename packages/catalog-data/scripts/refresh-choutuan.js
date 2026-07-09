@@ -234,8 +234,7 @@ async function downloadImages(stores) {
 function imageTargetDirs() {
   const root = path.resolve(__dirname, '../../..');
   return [
-    path.join(root, 'apps/client/src/static/choutuan-img'),
-    path.join(root, 'apps/client/static/choutuan-img'),
+    path.join(root, 'packages/catalog-data/assets/choutuan-img'),
   ];
 }
 
