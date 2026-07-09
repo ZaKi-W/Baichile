@@ -1,9 +1,7 @@
 /// <reference types="@dcloudio/types" />
 
 interface ImportMetaEnv {
-  readonly VITE_API_BASE_URL?: string;
   readonly VITE_CLOUDBASE_ENV_ID?: string;
-  readonly VITE_USE_CLOUDBASE_API?: string;
   readonly VITE_CLOUDBASE_API_FUNCTION?: string;
   readonly VITE_TENCENT_MAP_KEY?: string;
 }

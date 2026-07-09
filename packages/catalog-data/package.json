@@ -1,0 +1,14 @@
+{
+  "name": "@baichile/catalog-data",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "refresh:choutuan": "node scripts/refresh-choutuan.js"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@baichile/api-contract": "workspace:*",
+    "@baichile/domain": "workspace:*"
+  }
+}

@@ -6,27 +6,23 @@ describe('requestApi', () => {
     vi.unstubAllGlobals();
   });
 
-  it('uses a non-JSON content type for a POST without input data', async () => {
-    let requestOptions: UniApp.RequestOptions | undefined;
-    vi.stubGlobal('uni', {
-      request(options: UniApp.RequestOptions) {
-        requestOptions = options;
-        options.success?.({
-          data: { ok: true },
-          statusCode: 200,
-          header: {},
-          cookies: [],
-          errMsg: 'request:ok',
-        });
-      },
+  it('calls the configured CloudBase function', async () => {
+    const callFunction = vi.fn().mockResolvedValue({ result: { ok: true, data: { checkedIn: true } } });
+    vi.stubGlobal('wx', {
+      cloud: { callFunction },
     });
 
-    await requestApi('POST', '/v1/accounts/me/check-in', 'account-token');
+    await expect(requestApi('POST', '/v1/accounts/me/check-in', 'account-token'))
+      .resolves.toEqual({ checkedIn: true });
 
-    expect(requestOptions?.data).toBeUndefined();
-    expect(requestOptions?.header).toMatchObject({
-      Authorization: 'Bearer account-token',
-      'Content-Type': 'application/x-www-form-urlencoded',
+    expect(callFunction).toHaveBeenCalledWith({
+      name: 'api',
+      data: {
+        method: 'POST',
+        path: '/v1/accounts/me/check-in',
+        data: undefined,
+        authorization: 'Bearer account-token',
+      },
     });
   });
 });

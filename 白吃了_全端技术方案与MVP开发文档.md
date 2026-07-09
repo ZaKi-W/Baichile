@@ -1,5 +1,7 @@
 # 白吃了｜全端技术方案与微信小程序 MVP 开发文档
 
+> 注意：本文中的 NestJS、TypeORM、PostgreSQL、Docker Compose 相关后端方案是历史设计记录，不再作为当前实现依据。当前后端架构以 `docs/腾讯云开发迁移方案.md` 为准：微信小程序 + CloudBase `api` 云函数 + 云开发文档数据库。
+
 > 项目名称：**白吃了**  
 > 首发形态：**微信小程序**  
 > 长期形态：微信小程序 + H5 + iOS / Android App  

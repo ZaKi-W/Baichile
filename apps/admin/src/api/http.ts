@@ -1,4 +1,3 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 const CLOUDBASE_HTTP_API_URL = import.meta.env.VITE_CLOUDBASE_HTTP_API_URL ?? '';
 const TOKEN_KEY = 'baichile_admin_token';
 
@@ -34,25 +33,7 @@ export function toQuery(
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (CLOUDBASE_HTTP_API_URL) return cloudbaseApi<T>(path, init);
-  const token = getToken();
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      'content-type': 'application/json',
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  });
-  const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-  if (!response.ok) {
-    if (response.status === 401) setToken('');
-    throw new ApiRequestError(
-      response.status,
-      typeof body.code === 'string' ? body.code : 'REQUEST_FAILED',
-      typeof body.message === 'string' ? body.message : '请求失败，请稍后重试',
-    );
-  }
-  return body as T;
+  throw new ApiRequestError(500, 'CLOUDBASE_API_MISSING', '缺少 VITE_CLOUDBASE_HTTP_API_URL');
 }
 
 async function cloudbaseApi<T>(path: string, init: RequestInit = {}): Promise<T> {

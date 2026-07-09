@@ -1,1 +1,1 @@
-export { categories as mockCategories, stores as mockStores } from '../../../../apps/api/src/catalog.seed';
+export { categories as mockCategories, stores as mockStores } from '@baichile/catalog-data';

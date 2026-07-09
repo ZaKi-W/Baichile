@@ -1,146 +1,135 @@
 # 白吃了
 
+外卖平台风格的虚拟消费 MVP。订单只扣除账号内虚拟余额，不涉及真钱支付，也不会真实发货；地图路线与骑手位置均为虚拟演示。
+
+## 当前架构
+
+- 客户端：uni-app Vue 3，当前以微信小程序为优先目标。
+- 后端：腾讯云开发 CloudBase `api` 云函数，统一承载 `/v1/*` 与 `/v1/admin/*`。
+- 数据库：腾讯云开发文档数据库 collections。
+- 目录源数据：`@baichile/catalog-data`，通过 `cloudbase:seed` 同步到云开发库。
+- 共享契约：`@baichile/api-contract` 继续作为小程序、后台和云函数之间的类型契约。
+
+项目不再使用本地 NestJS API、Docker Compose 或 PostgreSQL 作为开发/运行链路。
+
+## 本地运行
+
+需要 Node.js 20+ 与 pnpm 11+。
+
+```bash
+pnpm install
+pnpm dev
+```
+
+`pnpm dev` 只启动微信小程序增量编译。首次在微信开发者工具中导入：
+
+```text
+apps/client/dist/dev/mp-weixin
+```
+
+日常保存代码后保持 `pnpm dev` 运行即可自动同步。发布构建使用：
+
+```bash
+pnpm build:mp-weixin
+```
+
+发布构建输出目录是：
+
+```text
+apps/client/dist/build/mp-weixin
+```
+
+## CloudBase 配置
+
+小程序默认通过 `wx.cloud.callFunction` 调用云函数，不再回退到本地 HTTP API。
+
+`apps/client/.env` 至少需要：
+
+```bash
+VITE_CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10
+VITE_CLOUDBASE_API_FUNCTION=api
+```
+
+云函数运行环境需要：
+
+```bash
+CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10
+WECHAT_MINI_APP_ID=...
+WECHAT_MINI_APP_SECRET=...
+TENCENT_MAP_KEY=...
+ADMIN_BOOTSTRAP_USERNAME=...
+ADMIN_BOOTSTRAP_PASSWORD=...
+ADMIN_BOOTSTRAP_DISPLAY_NAME=...
+```
+
+## 数据维护
+
+店铺、分类和菜单的本地源数据位于 `packages/catalog-data`。改完店铺名或菜单后，同步到腾讯云开发库：
+
+```bash
+CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10 pnpm cloudbase:seed
+CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10 pnpm cloudbase:verify
+pnpm build:mp-weixin
+```
+
+如需导入历史迁移 JSON：
+
+```bash
+CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10 pnpm cloudbase:import
+```
+
+图片迁移到云存储/CDN 后，更新 CloudBase catalog 图片 URL：
+
+```bash
+CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10 \
+CATALOG_IMAGE_BASE_URL=https://example.com/choutuan-img \
+pnpm catalog-images:migrate
+```
+
+## 云函数部署
+
+```bash
+pnpm cloudbase:build
+pnpm cloudbase:prepare-deploy
+```
+
+`apps/cloud-functions/cloudbaserc.json` 定义了 `api` 云函数和后台静态站点部署配置。实际部署前确认 CloudBase CLI/MCP 已登录到目标环境。
+
 ## 内部运营后台
 
-后台是仓库内独立的 Vue Web 应用，服务端接口统一位于 `/v1/admin`。第一阶段仅供内部管理员使用，角色分为超级管理员、运营和客服。
+后台是仓库内独立的 Vue Web 应用，接口统一走 `/v1/admin` 云函数路由。开发命令：
 
-开发环境启动后会自动保证以下超级管理员可用：
+```bash
+pnpm dev:admin
+```
+
+默认访问 `http://localhost:5174`。本地调后台时需要配置能访问 `api` 云函数的 HTTP 网关地址：
+
+```bash
+VITE_CLOUDBASE_HTTP_API_URL=https://your-cloudbase-function-gateway
+```
+
+开发环境初始账号由云函数启动时保证：
 
 ```bash
 账号：admin
 密码：admin
 ```
 
-生产环境首次启动前必须设置：
-
-```bash
-export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/baichile
-export NODE_ENV=production
-export ADMIN_BOOTSTRAP_USERNAME=root_admin
-export ADMIN_BOOTSTRAP_PASSWORD='请设置至少10位的强密码'
-export ADMIN_BOOTSTRAP_DISPLAY_NAME='超级管理员'
-```
-
-其他可选配置：
-
-```bash
-# 多个来源用英文逗号分隔；未设置时沿用开发环境的宽松 CORS
-export ADMIN_ALLOWED_ORIGIN='https://admin.example.com'
-# 管理端与 API 分域部署时配置
-export VITE_API_BASE_URL='https://api.example.com'
-```
-
-初始化数据库并启动 API：
-
-```bash
-pnpm db:up
-pnpm db:migrate
-pnpm dev:api
-```
-
-另开终端启动后台：
-
-```bash
-pnpm dev:admin
-```
-
-默认访问 `http://localhost:5174`。开发环境固定使用 `admin / admin`；生产环境的初始超级管理员只会在数据库中尚无管理员时创建，且密码至少 10 位。后台支持商家、菜品、用户、用户货币、订单、管理员和审计日志管理；货币调整会同时生成不可变流水和审计记录。
-
-外卖平台风格的虚拟消费 MVP。订单仅扣除账号内虚拟余额，不涉及真钱支付，也不会真实发货；地图路线与骑手位置均为虚拟演示。
-
-## 当前能力
-
-- uni-app Vue 3 客户端：微信小程序、H5、App 构建入口。
-- 首页、搜索、分类、店铺、SKU、单店购物车、结算、配送、完成、订单、个人页和钱包。
-- 12 家原创虚拟店铺、156 道菜；客户端无 API 时自动使用本地 Mock。
-- NestJS/Fastify API：游客、开发态登录、目录、搜索、报价、虚拟订单、虚拟钱包、每日签到、订单查询、游客合并和埋点。
-- 共享金额/SKU/地图/配送状态逻辑，PostgreSQL/PostGIS 初始化结构与候选数据隔离表。
-
-## 本地运行
-
-需要 Node.js 20+、pnpm 11+ 与 Docker Desktop。首次运行：
-
-```bash
-pnpm install
-cp .env.example apps/api/.env
-pnpm db:up
-pnpm db:migrate
-pnpm db:seed
-pnpm dev
-```
-
-`pnpm dev` 会同时启动 API 和微信小程序增量编译。开发者工具模拟器默认通过
-`http://127.0.0.1:3000` 访问本机 API。
-
-需要调试 H5 时使用：
-
-```bash
-VITE_API_BASE_URL=http://localhost:3000 pnpm dev:h5
-```
-
-## 微信开发者工具
-
-日常开发先启动 API 和持续编译：
-
-```bash
-pnpm dev
-```
-
-首次在微信开发者工具中导入以下目录，之后保持开发命令运行即可自动同步代码，无需重新导入：
-
-```text
-apps/client/dist/dev/mp-weixin
-```
-
-`pnpm build:mp-weixin` 仅用于生成发布构建，输出目录是 `apps/client/dist/build/mp-weixin`，不要将它作为日常开发目录。
-
-真机预览无法访问电脑的 `127.0.0.1`，需要使用电脑当前局域网 IP，例如：
-
-```bash
-VITE_API_BASE_URL=http://10.3.0.219:3000 pnpm dev
-```
-
-目前没有正式 AppID。申请小程序后：
-
-1. 把 AppID 写入 `apps/client/src/manifest.json` 的 `mp-weixin.appid`。
-2. 在小程序后台配置合法 request 域名；本地联调可暂时关闭域名校验。
-3. 配置后端的 `WECHAT_MINI_APP_ID` 与 `WECHAT_MINI_APP_SECRET`。
-4. 将开发态模拟登录替换为真实 `wx.login` code 交换；生产环境已禁止模拟登录。
-
-## 腾讯位置服务
-
-1. 注册腾讯位置服务并创建适用于微信小程序的 Key。
-2. 将 Key 配置为 `VITE_TENCENT_MAP_KEY`。
-   - 推荐同时在 API 环境配置 `TENCENT_MAP_KEY`，客户端通过 `/v1/map/reverse-geocode` 获取市/区县信息，避免暴露服务端 Key。
-3. 在微信小程序后台添加地图服务所需域名。
-4. 接入前配送页会明确显示“开发预览 · 预设 GCJ-02 路线”，不会伪装成真实地图。
-
-## PostgreSQL
-
-```bash
-pnpm db:up
-pnpm db:migrate
-pnpm db:seed
-```
-
-数据库由 Docker Desktop 运行，数据保存在 Docker volume 中。游客身份、账号、地址和虚拟订单已经通过 TypeORM 持久化；停止 API 或重启电脑不会丢失。需要停止数据库时运行 `pnpm db:down`。
-
-商品目录与埋点事件也存储在 PostgreSQL。`catalog.seed.ts` 仅作为可重复执行的初始化数据源，应用实际查询来自数据库；应用表结构由 TypeORM migration 管理。
+生产环境首次启动前必须设置安全的 `ADMIN_BOOTSTRAP_*` 环境变量。
 
 ## 验证
 
+按项目规则默认只做轻量验证，不进行深度测试或视觉化对比：
+
 ```bash
-pnpm test
-pnpm typecheck
-pnpm build:h5
+pnpm --filter @baichile/cloud-functions typecheck
+pnpm --filter @baichile/client typecheck
 pnpm build:mp-weixin
 ```
 
-按项目规则默认只执行以上轻量验证，不进行深度测试或视觉化对比。
-
 ## 已知边界
 
-- 当前内容是精简种子数据，尚未扩充到 60–80 店、800+ 菜。
-- 未配置微信、腾讯地图和 COS 凭证；相关 adapter 与配置入口已预留。
-- 视觉仅完成必要布局，等待 HTML 设计稿后再统一实现。
-- App 原生地图、登录与分享仍需在 HBuilderX/真机和正式凭证环境中联调。
+- H5/App 不再支持本地 `127.0.0.1:3000` API fallback；后续如需调试，应接入 CloudBase 兼容调用路径。
+- CloudBase collections 需要在云环境中存在；首次部署环境应先按 `apps/cloud-functions/src/collections.ts` 创建集合和索引。
+- 图片仍可本地打包进小程序，生产应逐步迁到云存储/CDN 以降低包体。

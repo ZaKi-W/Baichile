@@ -12,6 +12,7 @@
     "baseUrl": ".",
     "paths": {
       "@baichile/api-contract": ["packages/api-contract/src/index.ts"],
+      "@baichile/catalog-data": ["packages/catalog-data/src/index.ts"],
       "@baichile/domain": ["packages/domain/src/index.ts"],
       "@baichile/icon-registry": ["packages/icon-registry/src/index.ts"],
       "@baichile/map-core": ["packages/map-core/src/index.ts"],
@@ -20,4 +21,3 @@
     }
   }
 }
-

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@baichile/api-contract": "workspace:*",
+    "@baichile/catalog-data": "workspace:*",
     "@baichile/domain": "workspace:*",
     "@baichile/icon-registry": "workspace:*",
     "@baichile/map-core": "workspace:*",

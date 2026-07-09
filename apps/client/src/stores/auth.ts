@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia';
 import type { AccountSession, UserProfile, WechatMiniLoginRequest } from '@baichile/api-contract';
-import { API_BASE, USE_CLOUDBASE_API } from '../config/api';
 import { requestApi } from '../services/http';
 
 const VISITOR_KEY = 'baichile:visitor';
@@ -36,24 +35,12 @@ export const useAuthStore = defineStore('auth', {
         if (!account) this.accessToken = saved.accessToken;
         return;
       }
-      if (API_BASE || USE_CLOUDBASE_API) {
-        try {
-          const data = await requestApi<{ visitorId: string; accessToken: string }>('POST', '/v1/auth/guest', '');
-          this.visitorId = data.visitorId;
-          this.accessToken = data.accessToken;
-        } catch {
-          this.createLocalGuest();
-        }
-      } else {
-        this.createLocalGuest();
-      }
+      const data = await requestApi<{ visitorId: string; accessToken: string }>('POST', '/v1/auth/guest', '');
+      this.visitorId = data.visitorId;
+      this.accessToken = data.accessToken;
       const guestAccessToken = this.accessToken;
       uni.setStorageSync(VISITOR_KEY, { visitorId: this.visitorId, accessToken: guestAccessToken });
       if (account) this.applyAccount(account);
-    },
-    createLocalGuest() {
-      this.visitorId = `visitor_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      this.accessToken = `local.${this.visitorId}`;
     },
     async wechatLogin(profile: UserProfile) {
       const code = await new Promise<string>((resolve, reject) => {
@@ -117,9 +104,7 @@ export const useAuthStore = defineStore('auth', {
       if (import.meta.env.PROD) throw new Error('生产环境不可使用模拟微信登录');
       this.accountId = `account_dev_${Date.now()}`;
       this.provider = 'dev-mock';
-      if (API_BASE || USE_CLOUDBASE_API) {
-        await requestApi('POST', '/v1/auth/merge-visitor', '', { visitorId: this.visitorId, accountId: this.accountId });
-      }
+      await requestApi('POST', '/v1/auth/merge-visitor', '', { visitorId: this.visitorId, accountId: this.accountId });
     },
   },
 });

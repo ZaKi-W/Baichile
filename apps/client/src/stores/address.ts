@@ -6,7 +6,6 @@ import { useAuthStore } from './auth';
 export type { Address } from '@baichile/api-contract';
 
 const selectedKey = (ownerId: string) => `baichile:selected-address:${ownerId}`;
-const cacheKey = (ownerId: string) => `baichile:addresses:${ownerId}`;
 
 export const useAddressStore = defineStore('address', {
   state: () => ({
@@ -30,12 +29,7 @@ export const useAddressStore = defineStore('address', {
         this.selectedId = '';
         return;
       }
-      try {
-        this.addresses = await addressService.list();
-        uni.setStorageSync(cacheKey(ownerId), this.addresses);
-      } catch {
-        this.addresses = (uni.getStorageSync(cacheKey(ownerId)) || []) as Address[];
-      }
+      this.addresses = await addressService.list();
       const savedId = uni.getStorageSync(selectedKey(ownerId)) as string;
       this.selectedId = this.addresses.some((address) => address.id === savedId)
         ? savedId
@@ -58,7 +52,6 @@ export const useAddressStore = defineStore('address', {
       if (index >= 0) this.addresses[index] = saved;
       else this.addresses.push(saved);
       if (!this.selectedId || saved.isDefault) this.select(saved.id);
-      this.persistCache();
     },
     async remove(id: string) {
       await addressService.remove(id);
@@ -67,12 +60,6 @@ export const useAddressStore = defineStore('address', {
         this.selectedId = this.addresses.find((address) => address.isDefault)?.id || this.addresses[0]?.id || '';
         if (this.selectedId) this.select(this.selectedId);
       }
-      this.persistCache();
-    },
-    persistCache() {
-      const auth = useAuthStore();
-      const ownerId = auth.accountId || auth.visitorId;
-      if (ownerId) uni.setStorageSync(cacheKey(ownerId), this.addresses);
     },
   },
 });

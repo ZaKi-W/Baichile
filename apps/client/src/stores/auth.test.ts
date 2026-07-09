@@ -15,32 +15,49 @@ describe('auth store WeChat login', () => {
       login: vi.fn(({ success }: { success: (result: { code: string }) => void }) => {
         success({ code: 'wx-login-code' });
       }),
-      request: vi.fn(({ url, data, success }: {
-        url: string;
-        data: unknown;
-        success: (response: { data: unknown }) => void;
-      }) => {
-        expect(url).toBe('http://127.0.0.1:3000/v1/auth/wechat-mini');
-        expect(data).toEqual({
-          code: 'wx-login-code',
-          visitorId: 'visitor_existing',
-          profile: {
-            avatarUrl: 'https://example.com/avatar.png',
-            nickname: '小白',
-          },
-        });
-        success({
+    });
+    vi.stubGlobal('wx', {
+      cloud: {
+        callFunction: vi.fn(({ name, data }: {
+          name: string;
           data: {
-            accountId: 'account_wechat',
-            accessToken: 'account.token',
-            provider: 'wechat',
-            profile: {
-              avatarUrl: 'https://example.com/avatar.png',
-              nickname: '小白',
+            method: string;
+            path: string;
+            data: unknown;
+            authorization: string;
+          };
+        }) => {
+          expect(name).toBe('api');
+          expect(data).toEqual({
+            method: 'POST',
+            path: '/v1/auth/wechat-mini',
+            data: {
+              code: 'wx-login-code',
+              visitorId: 'visitor_existing',
+              profile: {
+                avatarUrl: 'https://example.com/avatar.png',
+                nickname: '小白',
+              },
+              referralToken: undefined,
             },
-          },
-        });
-      }),
+            authorization: '',
+          });
+          return Promise.resolve({
+            result: {
+              ok: true,
+              data: {
+                accountId: 'account_wechat',
+                accessToken: 'account.token',
+                provider: 'wechat',
+                profile: {
+                  avatarUrl: 'https://example.com/avatar.png',
+                  nickname: '小白',
+                },
+              },
+            },
+          });
+        }),
+      },
     });
   });
 
@@ -86,12 +103,10 @@ describe('auth store WeChat login', () => {
   });
 
   it('surfaces the API error message when WeChat rejects login', async () => {
-    vi.mocked(uni.request).mockImplementation((options) => {
-      options.success?.({
-        statusCode: 400,
-        data: { message: '微信登录凭证无效' },
-      } as never);
-      return undefined as never;
+    const cloud = wx?.cloud;
+    if (!cloud) throw new Error('wx.cloud not stubbed');
+    vi.mocked(cloud.callFunction).mockResolvedValue({
+      result: { ok: false, status: 400, message: '微信登录凭证无效' },
     });
     const auth = useAuthStore();
 

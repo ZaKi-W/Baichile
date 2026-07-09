@@ -50,6 +50,7 @@ import type {
   WalletTransactionDoc,
 } from './models';
 import { buildSharePath, chooseShareTitle, DEFAULT_SHARE_REWARD_CONFIG, parseShareRewardConfig } from './share-domain';
+import { resolveCloudFileUrls } from './storage';
 
 interface AnalyticsEventDoc {
   _id: string;
@@ -274,7 +275,8 @@ export class CatalogService {
         orderBy: [['sortOrder', 'asc']],
       }),
     ]);
-    const stores = storeRows.map(toStoreSummary);
+    const imageUrls = await resolveCloudFileUrls(storeRows.map((row) => row.coverUrl));
+    const stores = storeRows.map((row) => toStoreSummary(row, imageUrls));
     return {
       categories: categories.map(({ id, name, icon }) => ({ id, name, icon })),
       featured: stores.slice(0, 3),
@@ -314,12 +316,16 @@ export class CatalogService {
         orderBy: [['sortOrder', 'asc']],
       }),
     ]);
+    const imageUrls = await resolveCloudFileUrls([
+      ...rows.map((row) => row.coverUrl),
+      ...items.map((item) => item.imageUrl),
+    ]);
     return rows.map((store) => ({
       id: store.id,
       name: store.name,
       categoryId: store.categoryId,
       description: store.description,
-      coverUrl: store.coverUrl ?? undefined,
+      coverUrl: resolveImageUrl(store.coverUrl, imageUrls),
       tags: store.tags,
       deliveryFeeCents: store.deliveryFeeCents,
       packingFeeCents: store.packingFeeCents,
@@ -331,7 +337,7 @@ export class CatalogService {
       recentViewers: store.recentViewers,
       systemHeat: store.systemHeat,
       sourceType: store.sourceType as StoreDetail['sourceType'],
-      menu: items.filter((item) => item.storeId === store.id).map(toMenuItem),
+      menu: items.filter((item) => item.storeId === store.id).map((item) => toMenuItem(item, imageUrls)),
       subCategories: subs.filter((item) => item.storeId === store.id).map((item) => ({ id: item.subCategoryId, name: item.name })),
     }));
   }
@@ -911,7 +917,7 @@ function walletTx(
   };
 }
 
-function toMenuItem(item: MenuItemDoc): MenuItem {
+function toMenuItem(item: MenuItemDoc, imageUrls?: Map<string, string>): MenuItem {
   return {
     id: item.id,
     storeId: item.storeId,
@@ -919,7 +925,7 @@ function toMenuItem(item: MenuItemDoc): MenuItem {
     subCategoryId: item.subCategoryId ?? undefined,
     name: item.name,
     subtitle: item.subtitle ?? undefined,
-    imageUrl: item.imageUrl ?? undefined,
+    imageUrl: resolveImageUrl(item.imageUrl, imageUrls),
     basePriceCents: item.basePriceCents,
     caloriesKcal: item.caloriesKcal,
     calorieSource: item.calorieSource as MenuItem['calorieSource'],
@@ -929,13 +935,13 @@ function toMenuItem(item: MenuItemDoc): MenuItem {
   };
 }
 
-function toStoreSummary(store: StoreDoc): StoreSummary {
+function toStoreSummary(store: StoreDoc, imageUrls?: Map<string, string>): StoreSummary {
   return {
     id: store.id,
     name: store.name,
     categoryId: store.categoryId,
     description: store.description,
-    coverUrl: store.coverUrl ?? undefined,
+    coverUrl: resolveImageUrl(store.coverUrl, imageUrls),
     tags: store.tags,
     deliveryFeeCents: store.deliveryFeeCents,
     packingFeeCents: store.packingFeeCents,
@@ -948,6 +954,12 @@ function toStoreSummary(store: StoreDoc): StoreSummary {
     systemHeat: store.systemHeat,
     sourceType: store.sourceType as StoreSummary['sourceType'],
   };
+}
+
+function resolveImageUrl(value: string | null | undefined, imageUrls?: Map<string, string>): string | undefined {
+  if (!value) return undefined;
+  if (value.startsWith('cloud://')) return imageUrls?.get(value) ?? undefined;
+  return value;
 }
 
 function toWalletTransaction(row: WalletTransactionDoc): WalletTransaction {

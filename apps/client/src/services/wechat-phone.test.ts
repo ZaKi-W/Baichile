@@ -7,30 +7,30 @@ describe('WeChat phone service', () => {
   });
 
   it('posts the one-time code and returns the bound phone number', async () => {
-    let requestOptions: UniApp.RequestOptions | undefined;
-    vi.stubGlobal('uni', {
-      request(options: UniApp.RequestOptions) {
-        requestOptions = options;
-        options.success?.({
-          data: {
-            phoneNumber: '13800000000',
-            purePhoneNumber: '13800000000',
-            countryCode: '86',
-          },
-          statusCode: 201,
-          header: {},
-          cookies: [],
-          errMsg: 'request:ok',
-        });
+    const callFunction = vi.fn().mockResolvedValue({
+      result: {
+        ok: true,
+        data: {
+          phoneNumber: '13800000000',
+          purePhoneNumber: '13800000000',
+          countryCode: '86',
+        },
       },
+    });
+    vi.stubGlobal('wx', {
+      cloud: { callFunction },
     });
 
     await expect(exchangeWechatPhoneCode('phone-code')).resolves.toBe('13800000000');
-    expect(requestOptions).toMatchObject({
-      method: 'POST',
-      data: { code: 'phone-code' },
+    expect(callFunction).toHaveBeenCalledWith({
+      name: 'api',
+      data: {
+        method: 'POST',
+        path: '/v1/auth/wechat-phone',
+        data: { code: 'phone-code' },
+        authorization: '',
+      },
     });
-    expect(requestOptions?.url).toContain('/v1/auth/wechat-phone');
   });
 
   it('explains when the user cancels phone authorization', () => {

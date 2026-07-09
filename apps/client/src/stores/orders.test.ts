@@ -25,13 +25,13 @@ describe('order store ownership', () => {
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn((key: string) => storage.get(key) ?? ''),
       setStorageSync: vi.fn((key: string, value: unknown) => storage.set(key, value)),
-      request: vi.fn((options: UniApp.RequestOptions) => {
-        options.success?.({
-          statusCode: 201,
-          data: { visitorId: 'visitor_new', accessToken: 'guest.new' },
-        } as never);
-        return undefined as never;
-      }),
+    });
+    vi.stubGlobal('wx', {
+      cloud: {
+        callFunction: vi.fn().mockResolvedValue({
+          result: { ok: true, data: { visitorId: 'visitor_new', accessToken: 'guest.new' } },
+        }),
+      },
     });
   });
 
@@ -64,7 +64,7 @@ describe('order store ownership', () => {
     });
   });
 
-  it('derives savings from cached completed orders when the API is unavailable', async () => {
+  it('does not use cached completed orders when the CloudBase API is unavailable', async () => {
     storage.set('baichile:account', {
       accountId: 'account_me',
       accessToken: 'account.token',
@@ -83,16 +83,15 @@ describe('order store ownership', () => {
     const { useOrderStore } = await import('./orders');
     const orders = useOrderStore();
 
-    await orders.load();
-
+    await expect(orders.load()).rejects.toThrow('offline');
     expect(orders.savings).toEqual({
-      savedMoneyCents: 2400,
-      savedCaloriesKcal: 560,
-      completedOrderCount: 1,
+      savedMoneyCents: 0,
+      savedCaloriesKcal: 0,
+      completedOrderCount: 0,
     });
   });
 
-  it('does not derive savings from a cached failed incident', async () => {
+  it('does not use cached failed incidents when the CloudBase API is unavailable', async () => {
     storage.set('baichile:account', {
       accountId: 'account_me',
       accessToken: 'account.token',
@@ -116,8 +115,7 @@ describe('order store ownership', () => {
     const { useOrderStore } = await import('./orders');
     const orders = useOrderStore();
 
-    await orders.load();
-
+    await expect(orders.load()).rejects.toThrow('offline');
     expect(orders.savings).toEqual({
       savedMoneyCents: 0,
       savedCaloriesKcal: 0,
@@ -155,6 +153,6 @@ describe('order store ownership', () => {
     await orders.load();
 
     expect(orders.orders).toEqual(mine);
-    expect(storage.get('baichile:orders:account_me')).toEqual(mine);
+    expect(storage.get('baichile:orders:account_me')).toBeUndefined();
   });
 });

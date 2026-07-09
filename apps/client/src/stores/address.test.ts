@@ -22,13 +22,13 @@ describe('address store ownership', () => {
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn((key: string) => storage.get(key) ?? ''),
       setStorageSync: vi.fn((key: string, value: unknown) => storage.set(key, value)),
-      request: vi.fn((options: UniApp.RequestOptions) => {
-        options.success?.({
-          statusCode: 201,
-          data: { visitorId: 'visitor_new', accessToken: 'guest.new' },
-        } as never);
-        return undefined as never;
-      }),
+    });
+    vi.stubGlobal('wx', {
+      cloud: {
+        callFunction: vi.fn().mockResolvedValue({
+          result: { ok: true, data: { visitorId: 'visitor_new', accessToken: 'guest.new' } },
+        }),
+      },
     });
   });
 

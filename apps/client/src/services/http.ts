@@ -1,5 +1,5 @@
 import type { ApiError } from '@baichile/api-contract';
-import { API_BASE, CLOUDBASE_API_FUNCTION, USE_CLOUDBASE_API } from '../config/api';
+import { CLOUDBASE_API_FUNCTION, USE_CLOUDBASE_API } from '../config/api';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -20,27 +20,7 @@ export function requestApi<T>(
   if (canUseCloudBase()) {
     return requestCloudFunction<T>(method, path, accessToken, data);
   }
-  const isBodylessPost = method === 'POST' && data === undefined;
-  return new Promise<T>((resolve, reject) => {
-    uni.request({
-      method: method as UniApp.RequestOptions['method'],
-      url: `${API_BASE}${path}`,
-      data: data as UniApp.RequestOptions['data'],
-      header: {
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        ...(isBodylessPost ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
-      },
-      success: (response) => {
-        if ((response.statusCode ?? 200) < 400) {
-          resolve(response.data as T);
-          return;
-        }
-        const body = response.data as Partial<ApiError> | undefined;
-        reject(new ApiRequestError(body?.message || '接口请求失败', body?.code));
-      },
-      fail: () => reject(new ApiRequestError('网络连接失败')),
-    });
-  });
+  return Promise.reject(new ApiRequestError('云开发环境未初始化'));
 }
 
 function canUseCloudBase(): boolean {
