@@ -11,6 +11,7 @@ const orders = useOrderStore();
 const now = ref(Date.now());
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 const openOrder = (id: string) => uni.navigateTo({ url: `/pages/delivery/index?id=${id}` });
+const openStore = (storeId: string) => uni.navigateTo({ url: `/pages/store/index?id=${storeId}` });
 const openLogin = () => uni.switchTab({ url: '/pages/profile/index' });
 const statusLabel = (order: VirtualOrder) => {
   if (order.incident) {
@@ -30,6 +31,20 @@ const incidentText = (order: VirtualOrder) => {
 };
 const isCompleted = (startedAt: string, durationMs: number) =>
   getOrderStep(new Date(startedAt).getTime(), durationMs, now.value).key === 'completed';
+const isFailed = (order: VirtualOrder) =>
+  order.status === 'failed' || Boolean(order.incident && getDeliveryIncidentPhase(order.incident, now.value) === 'failed');
+const storeName = (order: VirtualOrder) => order.storeName || '白吃了订单';
+const storeThumb = (order: VirtualOrder) => order.lines.find((line) => line.imageUrl)?.imageUrl || '';
+const dishSummary = (order: VirtualOrder) => order.lines
+  .map((line) => `${line.name}${line.optionNames.length ? `（${line.optionNames.join('、')}）` : ''} ×${line.quantity}`)
+  .join('、');
+const itemCount = (order: VirtualOrder) => order.lines.reduce((sum, line) => sum + line.quantity, 0);
+const formatMoney = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
+const formatOrderTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+};
 onShow(() => {
   now.value = Date.now();
   void orders.load();
@@ -45,24 +60,35 @@ onHide(() => clearInterval(statusTimer));
       <text>登录后查看你的订单</text>
       <button class="primary-button login-button" @tap="openLogin">去登录</button>
     </view>
-    <view v-for="order in auth.accountId ? orders.orders : []" :key="order.id" class="card" @tap="openOrder(order.id)">
-      <view class="row">
-        <view class="order-heading">
-          <text>虚拟订单</text>
-          <text class="status-badge">{{ statusLabel(order) }}</text>
+    <view v-for="order in auth.accountId ? orders.orders : []" :key="order.id" class="order-card">
+      <view class="order-main" @tap="openOrder(order.id)">
+        <view class="order-top">
+          <view class="store-block">
+            <image v-if="storeThumb(order)" class="store-thumb" :src="storeThumb(order)" mode="aspectFill" />
+            <view v-else class="store-thumb thumb-fallback">
+              <text>{{ storeName(order).slice(0, 1) }}</text>
+            </view>
+            <text class="store-name">{{ storeName(order) }}</text>
+          </view>
+          <text class="status-text" :class="{ failed: isFailed(order), completed: isCompleted(order.startedAt, order.durationMs) }">
+            {{ statusLabel(order) }}
+          </text>
         </view>
-        <view v-if="order.status === 'failed' || (order.incident && getDeliveryIncidentPhase(order.incident, now) === 'failed')" class="savings failed-refund">
-          <text>{{ order.refundStatus === 'refunded' ? '已退款' : '退款处理中' }}</text>
-          <text class="calorie-saving">¥{{ (order.totalCents / 100).toFixed(2) }}</text>
+        <text class="dish-summary">{{ dishSummary(order) }}</text>
+        <view class="order-meta">
+          <text>{{ formatOrderTime(order.createdAt || order.startedAt) }}</text>
+          <text>· 共{{ itemCount(order) }}件</text>
+          <text>· 实付 </text>
+          <text class="paid-money">{{ formatMoney(order.totalCents) }}</text>
         </view>
-        <view v-else-if="isCompleted(order.startedAt, order.durationMs)" class="savings">
-          <text>省 ¥{{ (order.totalCents / 100).toFixed(2) }}</text>
-          <text class="calorie-saving">约省 {{ order.itemsTotalCaloriesKcal || 0 }} 千卡</text>
-        </view>
-        <text v-else>¥{{ (order.totalCents / 100).toFixed(2) }}</text>
+        <text v-if="incidentText(order)" class="incident-story">{{ incidentText(order) }}</text>
       </view>
-      <text v-if="incidentText(order)" class="incident-story">{{ incidentText(order) }}</text>
-      <text class="muted">{{ new Date(order.startedAt).toLocaleString() }}</text>
+      <view class="order-actions">
+        <button v-if="!isFailed(order) && !isCompleted(order.startedAt, order.durationMs)" class="action-button primary-action" @tap.stop="openOrder(order.id)">查看配送</button>
+        <button v-else-if="isCompleted(order.startedAt, order.durationMs)" class="action-button primary-action" @tap.stop="openOrder(order.id)">确认收货</button>
+        <button class="action-button ghost-action" @tap.stop="openStore(order.storeId)">再来一单</button>
+        <button class="action-button ghost-action" @tap.stop="openOrder(order.id)">订单详情</button>
+      </view>
     </view>
     <view v-if="auth.accountId && !orders.orders.length" class="card muted">还没有虚拟订单，先去首页逛逛吧。</view>
     <view class="tab-spacer" />
@@ -70,13 +96,132 @@ onHide(() => clearInterval(statusTimer));
 </template>
 
 <style scoped>
-.row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12rpx; font-weight: 600; }
-.order-heading { display: flex; align-items: center; gap: 14rpx; }
-.status-badge { padding: 5rpx 12rpx; border-radius: 999rpx; background: #fff0eb; color: #ff5b38; font-size: 22rpx; font-weight: 600; }
-.savings { display: flex; flex-direction: column; align-items: flex-end; color: #ff5b38; }
-.calorie-saving { margin-top: 4rpx; color: #7b8c38; font-size: 22rpx; font-weight: 500; }
-.failed-refund { color: #777; }
-.incident-story { display: block; margin-bottom: 10rpx; color: #ff5b38; font-size: 25rpx; line-height: 1.45; }
+.page {
+  min-height: 100vh;
+  padding: 24rpx 24rpx 0;
+  box-sizing: border-box;
+  background: #f5f5f3;
+}
+.order-card {
+  margin-bottom: 22rpx;
+  overflow: hidden;
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: 0 4rpx 18rpx rgba(0, 0, 0, 0.04);
+}
+.order-main {
+  padding: 26rpx 24rpx 22rpx;
+}
+.order-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 22rpx;
+}
+.store-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+.store-thumb {
+  width: 56rpx;
+  height: 56rpx;
+  flex-shrink: 0;
+  border-radius: 12rpx;
+  background: #ececea;
+}
+.thumb-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #777;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+.store-name {
+  min-width: 0;
+  color: #1f1f1f;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status-text {
+  flex-shrink: 0;
+  color: #ff5b38;
+  font-size: 25rpx;
+  font-weight: 800;
+}
+.status-text.completed {
+  color: #6f7e22;
+}
+.status-text.failed {
+  color: #999;
+}
+.dish-summary {
+  display: block;
+  margin-bottom: 12rpx;
+  color: #666;
+  font-size: 28rpx;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.order-meta {
+  display: flex;
+  align-items: baseline;
+  color: #999;
+  font-size: 25rpx;
+  line-height: 1.35;
+  flex-wrap: wrap;
+}
+.paid-money {
+  color: #1f1f1f;
+  font-size: 27rpx;
+  font-weight: 900;
+}
+.incident-story {
+  display: block;
+  margin-top: 12rpx;
+  color: #ff5b38;
+  font-size: 24rpx;
+  line-height: 1.45;
+}
+.order-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  padding: 18rpx 24rpx 20rpx;
+  border-top: 1rpx solid #f0f0ee;
+}
+.action-button {
+  min-width: 144rpx;
+  height: 60rpx;
+  margin: 0;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  font-size: 25rpx;
+  font-weight: 800;
+  line-height: 60rpx;
+}
+.action-button::after {
+  border: 0;
+}
+.primary-action {
+  color: #1f1f1f;
+  background: #dff75a;
+}
+.ghost-action {
+  color: #666;
+  background: #fff;
+  border: 2rpx solid #deded9;
+}
 .login-button { margin-top: 20rpx; }
 .tab-spacer { height: 120rpx; }
 </style>

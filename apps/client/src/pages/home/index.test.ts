@@ -5,7 +5,9 @@ describe('home page sections', () => {
   it('renders the supplied hierarchy without restoring the removed topic card', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
-    expect(source).toContain('class="topbar"');
+    expect(source).not.toContain('class="topbar"');
+    expect(source).not.toContain('openLocationPicker');
+    expect(source).not.toContain('location.locate()');
     expect(source).toContain('class="search-wrap"');
     expect(source).toContain('class="hero"');
     expect(source).toContain('class="category-grid"');

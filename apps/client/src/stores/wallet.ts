@@ -34,9 +34,6 @@ export const useWalletStore = defineStore('wallet', {
     async checkIn() {
       this.summary = await walletService.checkIn();
     },
-    async addTestCredit() {
-      this.summary = await walletService.testCredit();
-    },
     recordPayment(amountCents: number) {
       this.summary.balanceCents = Math.max(0, this.summary.balanceCents - amountCents);
     },

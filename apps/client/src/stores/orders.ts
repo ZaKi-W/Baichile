@@ -37,5 +37,15 @@ export const useOrderStore = defineStore('orders', {
     find(id: string) {
       return this.orders.find((order) => order.id === id);
     },
+    async fetchDetail(id: string) {
+      const current = this.find(id);
+      if (current) {
+        this.current = current;
+        return current;
+      }
+      const order = await orderService.detail(id);
+      this.save(order);
+      return order;
+    },
   },
 });

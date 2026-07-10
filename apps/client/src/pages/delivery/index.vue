@@ -5,9 +5,10 @@ import { catalogService } from '../../services/catalog';
 import { useAddressStore } from '../../stores/address';
 import { useCartStore } from '../../stores/cart';
 import { useOrderStore } from '../../stores/orders';
-import { getOrderStepIndex, ORDER_STEPS } from '../../utils/order-status';
+import { DELIVERY_START_MS, getOrderStepIndex, ORDER_STEPS } from '../../utils/order-status';
 import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
 import { shareService } from '../../services/shares';
+import { shareLandingUrl } from '../../utils/share-navigation';
 
 const orders = useOrderStore();
 const addressStore = useAddressStore();
@@ -18,6 +19,10 @@ const preparingShare = ref(false);
 const storeName = ref('商家');
 const storeDistanceKm = ref(3);
 const storeDeliveryMinutes = ref(30);
+const sheetExpanded = ref(false);
+const sheetDragStartY = ref<number | null>(null);
+const sheetDragOffset = ref(0);
+const suppressNextSheetTap = ref(false);
 let mapCtx: UniApp.MapContext | null = null;
 const mapReady = ref(false);
 let cameraFramed = false;
@@ -26,13 +31,31 @@ const statusBarHeight = uni.getSystemInfoSync().statusBarHeight ?? 20;
 const safeTopStyle = { paddingTop: `${statusBarHeight + 8}px` };
 
 const order = computed(() => orders.find(orderId.value));
+const displayStoreName = computed(() => order.value?.storeName || storeName.value);
+const storeThumbUrl = computed(() => order.value?.lines.find((line) => line.imageUrl)?.imageUrl || '');
+const sheetStyle = computed(() => ({
+  transform: `translateY(${sheetDragOffset.value}px)`,
+}));
 
 /* ── delivery address ── */
 const deliveryAddress = computed(() => {
   if (!order.value) return '';
+  if (order.value.deliveryAddress) {
+    const { address, detail } = order.value.deliveryAddress;
+    return `${address}${detail ? ' ' + detail : ''}`;
+  }
   const addr = addressStore.addresses.find((a) => a.id === order.value!.virtualDestinationId);
   return addr ? `${addr.address}${addr.detail ? ' ' + addr.detail : ''}` : '配送地址';
 });
+const deliveryContactName = computed(() => {
+  if (order.value?.deliveryAddress?.name) return order.value.deliveryAddress.name;
+  return addressStore.addresses.find((a) => a.id === order.value?.virtualDestinationId)?.name || '';
+});
+const deliveryContactPhone = computed(() => {
+  if (order.value?.deliveryAddress?.phone) return order.value.deliveryAddress.phone;
+  return addressStore.addresses.find((a) => a.id === order.value?.virtualDestinationId)?.phone || '';
+});
+const paymentMethodText = computed(() => '虚拟余额支付');
 
 /* ── map center: destination (收货地址) ── */
 const mapCenter = computed(() => {
@@ -77,7 +100,7 @@ const markers = computed(() => {
       height: 38,
       anchor: { x: 0.5, y: 1 },
       callout: {
-        content: storeName.value,
+        content: displayStoreName.value,
         display: 'ALWAYS' as const,
         fontSize: 13,
         borderRadius: 6,
@@ -210,8 +233,20 @@ const etaText = computed(() => {
   if (hasFailed.value) return incidentDefinition.value?.failedText || '本单未能送达';
   if (hasIncident.value) return '正在确认外卖的下落';
   if (currentStepIndex.value === FINAL_STEP) return '订单已送达';
-  const min = order.value ? Math.round(order.value.durationMs / 60_000) : storeDeliveryMinutes.value;
-  return `预计 ${min} 分钟送达`;
+  if (!order.value) return `预计 ${storeDeliveryMinutes.value} 分钟送达`;
+  const startedAt = new Date(order.value.startedAt).getTime();
+  const remainingSeconds = Math.max(1, Math.ceil((startedAt + DELIVERY_START_MS + order.value.durationMs - now.value) / 1000));
+  return remainingSeconds >= 60
+    ? `预计 ${Math.ceil(remainingSeconds / 60)} 分钟送达`
+    : `预计 ${remainingSeconds} 秒送达`;
+});
+const deliveryTimeText = computed(() => {
+  if (!order.value) return '';
+  if (hasFailed.value) return '配送失败，已原路退款';
+  const deliveredAt = new Date(new Date(order.value.startedAt).getTime() + DELIVERY_START_MS + order.value.durationMs);
+  return currentStepIndex.value === FINAL_STEP
+    ? `${formatDateTime(deliveredAt.toISOString())} 已送达`
+    : `预计 ${formatClock(deliveredAt)} 送达`;
 });
 
 /* ── distance display ── */
@@ -224,6 +259,22 @@ const distanceText = computed(() => {
 /* ── deterministic hash from seed string ── */
 function seedHash(seed: string): number {
   return Math.abs(seed.split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0));
+}
+
+function formatMoney(cents: number): string {
+  return `¥${(cents / 100).toFixed(2)}`;
+}
+
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (input: number) => String(input).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatClock(date: Date): string {
+  const pad = (input: number) => String(input).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 /* ── resolve store info ── */
@@ -265,9 +316,51 @@ function onMapUpdated() {
   }
 }
 
+function touchY(event: TouchEvent): number | undefined {
+  return event.touches[0]?.clientY ?? event.changedTouches[0]?.clientY;
+}
+
+function onSheetTouchStart(event: TouchEvent) {
+  sheetDragStartY.value = touchY(event) ?? null;
+  sheetDragOffset.value = 0;
+}
+
+function onSheetTouchMove(event: TouchEvent) {
+  if (sheetDragStartY.value === null) return;
+  const currentY = touchY(event);
+  if (currentY === undefined) return;
+  const delta = currentY - sheetDragStartY.value;
+  sheetDragOffset.value = Math.max(-80, Math.min(80, delta));
+}
+
+function onSheetTouchEnd() {
+  const dragged = Math.abs(sheetDragOffset.value) > 6;
+  if (sheetDragOffset.value < -28) sheetExpanded.value = true;
+  if (sheetDragOffset.value > 28) sheetExpanded.value = false;
+  if (dragged) {
+    suppressNextSheetTap.value = true;
+    setTimeout(() => { suppressNextSheetTap.value = false; }, 0);
+  }
+  sheetDragStartY.value = null;
+  sheetDragOffset.value = 0;
+}
+
+function toggleSheet() {
+  if (sheetDragStartY.value !== null || suppressNextSheetTap.value) return;
+  sheetExpanded.value = !sheetExpanded.value;
+}
+
 /* ── lifecycle ── */
 onLoad(async (options) => {
   orderId.value = options?.id || '';
+  void addressStore.load();
+  if (orderId.value) {
+    try {
+      await orders.fetchDetail(orderId.value);
+    } catch (error) {
+      uni.showToast({ title: error instanceof Error ? error.message : '订单加载失败', icon: 'none' });
+    }
+  }
   startStepTimer();
   await resolveStoreInfo();
 });
@@ -290,7 +383,7 @@ async function prepareTimelineShare() {
   try {
     const card = await shareService.create({ kind: 'order', orderId: order.value.id });
     uni.navigateTo({
-      url: `${card.path}&share=1&reward=${card.initiatedRewardCents}`,
+      url: shareLandingUrl(card),
     });
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' });
@@ -327,8 +420,21 @@ async function prepareTimelineShare() {
     </view>
 
     <!-- ── 底部信息面板 ── -->
-    <view class="bottom-sheet">
-      <view class="sheet-handle" />
+    <view
+      class="bottom-sheet"
+      :class="{ 'bottom-sheet-expanded': sheetExpanded, 'bottom-sheet-dragging': sheetDragOffset !== 0 }"
+      :style="sheetStyle"
+    >
+      <view
+        class="sheet-drag-zone"
+        @tap="toggleSheet"
+        @touchstart="onSheetTouchStart"
+        @touchmove.stop.prevent="onSheetTouchMove"
+        @touchend="onSheetTouchEnd"
+        @touchcancel="onSheetTouchEnd"
+      >
+        <view class="sheet-handle" />
+      </view>
 
       <!-- 状态头部 -->
       <view class="sheet-header">
@@ -356,9 +462,9 @@ async function prepareTimelineShare() {
         </view>
       </view>
 
-      <button v-if="hasFailed" class="reorder-button" @tap="goToStore">重新点一单</button>
+      <button class="reorder-button" @tap="goToStore">{{ hasFailed ? '重新点一单' : '再来一单' }}</button>
       <button
-        v-else-if="currentStepIndex === FINAL_STEP"
+        v-if="!hasFailed && currentStepIndex === FINAL_STEP"
         class="share-button"
         :loading="preparingShare"
         @tap="prepareTimelineShare"
@@ -384,13 +490,85 @@ async function prepareTimelineShare() {
       <!-- 分隔线 -->
       <view class="divider" />
 
+      <!-- 订单详情 -->
+      <view class="order-detail">
+        <view class="store-title-row" hover-class="store-title-row-active" @tap="goToStore">
+          <image v-if="storeThumbUrl" class="store-thumb" :src="storeThumbUrl" mode="aspectFill" />
+          <view v-else class="store-thumb thumb-fallback">
+            <text>{{ displayStoreName.slice(0, 1) }}</text>
+          </view>
+          <text class="store-title">{{ displayStoreName }} ›</text>
+        </view>
+        <view v-for="line in order.lines" :key="line.menuItemId + line.optionNames.join(',')" class="dish-line">
+          <image v-if="line.imageUrl" class="dish-thumb" :src="line.imageUrl" mode="aspectFill" />
+          <view v-else class="dish-thumb dish-thumb-fallback">
+            <text>{{ line.name.slice(0, 1) }}</text>
+          </view>
+          <view class="dish-main">
+            <text class="dish-name">{{ line.name }}</text>
+            <text v-if="line.optionNames.length" class="dish-options">{{ line.optionNames.join('、') }}</text>
+            <text v-else class="dish-options">默认规格</text>
+          </view>
+          <view class="dish-qty">
+            <text>×{{ line.quantity }}</text>
+          </view>
+          <view class="dish-price">
+            <text class="paid-price">{{ formatMoney(line.totalCents) }}</text>
+            <text class="unit-price">{{ formatMoney(line.unitPriceCents) }}/份</text>
+          </view>
+        </view>
+        <view class="fee-line"><text>配送费</text><text>{{ formatMoney(order.deliveryFeeCents) }}</text></view>
+        <view class="fee-line"><text>打包费</text><text>{{ formatMoney(order.packingFeeCents) }}</text></view>
+        <view class="total-line"><text>实付</text><text>{{ formatMoney(order.totalCents) }}</text></view>
+      </view>
+
+      <!-- 分隔线 -->
+      <view class="divider" />
+
+      <!-- 配送与订单信息 -->
+      <view class="order-info">
+        <view class="info-row">
+          <text class="info-label">收货人</text>
+          <text class="info-value">{{ deliveryContactName || '收货人' }} {{ deliveryContactPhone }}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">收货地址</text>
+          <text class="info-value">{{ deliveryAddress }}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">配送时间</text>
+          <text class="info-value">{{ deliveryTimeText }}</text>
+        </view>
+      </view>
+
+      <view class="order-info compact-info">
+        <view class="info-row">
+          <text class="info-label">下单时间</text>
+          <text class="info-value">{{ formatDateTime(order.createdAt || order.startedAt) }}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">支付方式</text>
+          <text class="info-value">{{ paymentMethodText }}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">订单号</text>
+          <view class="order-number-wrap">
+            <text class="info-value mono-value order-number">{{ order.id }}</text>
+            <text class="copy-text">复制</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 分隔线 -->
+      <view class="divider" />
+
       <!-- 路线信息 -->
       <view class="route-info">
         <view class="route-point">
           <view class="route-dot origin" />
           <view class="route-text">
             <text class="route-label">商家</text>
-            <text class="route-value">{{ storeName }}</text>
+            <text class="route-value">{{ displayStoreName }}</text>
           </view>
         </view>
         <view class="route-connector" />
@@ -461,20 +639,36 @@ async function prepareTimelineShare() {
   left: 0;
   right: 0;
   z-index: 10;
-  background: #ffffff;
+  background: #f0f0ee;
   border-radius: 32rpx 32rpx 0 0;
-  padding: 20rpx 32rpx calc(28rpx + env(safe-area-inset-bottom));
+  padding: 0 26rpx calc(28rpx + env(safe-area-inset-bottom));
   box-shadow: 0 -8rpx 40rpx rgba(0, 0, 0, 0.08);
-  max-height: 58vh;
+  max-height: 48vh;
   overflow-y: auto;
+  transition: max-height 180ms ease, transform 120ms ease;
+}
+.bottom-sheet-expanded {
+  max-height: 78vh;
+}
+.bottom-sheet-dragging {
+  transition: none;
 }
 .share-button { margin-top: 18rpx; border: 0; border-radius: 999rpx; color: #fff; background: #ff6b3d; font-size: 27rpx; }
+.sheet-drag-zone {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f0ee;
+}
 .sheet-handle {
   width: 64rpx;
   height: 8rpx;
   background: #e0e0e0;
   border-radius: 4rpx;
-  margin: 0 auto 24rpx;
 }
 
 /* ── 状态头部 ── */
@@ -501,13 +695,19 @@ async function prepareTimelineShare() {
   margin-top: 4rpx;
 }
 .reorder-button {
-  margin: 24rpx 0 4rpx;
+  width: 250rpx;
+  height: 88rpx;
+  margin: 28rpx auto 8rpx;
   border: 0;
   border-radius: 999rpx;
-  background: #ff5b38;
-  color: #fff;
-  font-size: 28rpx;
-  font-weight: 700;
+  background: #ffcc16;
+  color: #1f1f1f;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 88rpx;
+}
+.reorder-button::after {
+  border: 0;
 }
 
 /* ── 时间轴 ── */
@@ -581,9 +781,201 @@ async function prepareTimelineShare() {
 
 /* ── 分隔线 ── */
 .divider {
-  height: 1rpx;
-  background: #f0f0f0;
-  margin: 20rpx 0;
+  height: 20rpx;
+  background: transparent;
+  margin: 0;
+}
+
+/* ── 订单详情 ── */
+.order-detail,
+.order-info {
+  padding: 28rpx 24rpx;
+  border-radius: 24rpx;
+  background: #fff;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 22rpx;
+}
+.section-title {
+  display: block;
+  color: #151515;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.25;
+}
+.section-meta {
+  color: #9a9a9a;
+  font-size: 22rpx;
+  line-height: 1.25;
+}
+.store-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-bottom: 18rpx;
+}
+.store-title-row-active {
+  opacity: 0.72;
+}
+.store-thumb,
+.dish-thumb {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 14rpx;
+  flex-shrink: 0;
+  background: #ececea;
+}
+.thumb-fallback,
+.dish-thumb-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8b8b8b;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+.store-title {
+  min-width: 0;
+  color: #1f1f1f;
+  font-size: 29rpx;
+  font-weight: 900;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dish-line {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 0;
+}
+.dish-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dish-name {
+  color: #1f1f1f;
+  font-size: 28rpx;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.dish-options {
+  margin-top: 6rpx;
+  color: #999;
+  font-size: 22rpx;
+  line-height: 1.35;
+}
+.dish-qty {
+  width: 54rpx;
+  color: #999;
+  font-size: 26rpx;
+  text-align: center;
+  flex-shrink: 0;
+  line-height: 1.35;
+}
+.dish-price {
+  width: 138rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+.unit-price {
+  margin-top: 5rpx;
+  color: #999;
+  font-size: 20rpx;
+  line-height: 1.3;
+}
+.paid-price {
+  color: #202020;
+  font-size: 29rpx;
+  font-weight: 900;
+  line-height: 1.3;
+}
+.fee-line,
+.total-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24rpx;
+  padding: 14rpx 0 0;
+  color: #777;
+  font-size: 27rpx;
+  line-height: 1.35;
+}
+.total-line {
+  margin-top: 20rpx;
+  padding-top: 22rpx;
+  border-top: 1rpx solid #eeeeeb;
+  color: #1f1f1f;
+  font-size: 30rpx;
+  font-weight: 900;
+}
+.total-line text:last-child {
+  color: #ff3b30;
+  font-size: 38rpx;
+}
+.order-info {
+  display: flex;
+  flex-direction: column;
+  gap: 22rpx;
+}
+.compact-info {
+  margin-top: 20rpx;
+}
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 20rpx;
+}
+.info-label {
+  width: 130rpx;
+  flex-shrink: 0;
+  color: #999;
+  font-size: 27rpx;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.info-value {
+  flex: 1;
+  min-width: 0;
+  color: #202020;
+  font-size: 27rpx;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: right;
+  word-break: break-all;
+}
+.mono-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.order-number-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8rpx;
+}
+.order-number {
+  flex: initial;
+  color: #202020;
+  background: transparent;
+  font-size: 24rpx;
+  line-height: 1.45;
+}
+.copy-text {
+  flex-shrink: 0;
+  color: #999;
+  font-size: 24rpx;
+  font-weight: 800;
 }
 
 /* ── 骑手信息 ── */
@@ -638,6 +1030,9 @@ async function prepareTimelineShare() {
   display: flex;
   flex-direction: column;
   gap: 4rpx;
+  padding: 28rpx 24rpx;
+  border-radius: 24rpx;
+  background: #fff;
 }
 .route-point {
   display: flex;

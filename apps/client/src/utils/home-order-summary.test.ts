@@ -30,8 +30,8 @@ describe('home order summary', () => {
   it('reports normal status and remaining time', () => {
     const summary = createHomeOrderSummary(order(), startedAt + 18_000);
 
-    expect(summary.statusLabel).toBe('骑手接单');
-    expect(summary.remainingMs).toBe(125_000);
+    expect(summary.statusLabel).toBe('配送中');
+    expect(summary.remainingMs).toBe(60_000);
     expect(summary.terminal).toBe(false);
     expect(summary.itemText).toBe('牛肉饭');
   });
@@ -71,7 +71,7 @@ describe('home order summary', () => {
       remainingMs: 0,
       terminal: true,
     });
-    expect(createHomeOrderSummary(order(), startedAt + 143_000)).toMatchObject({
+    expect(createHomeOrderSummary(order(), startedAt + 78_000)).toMatchObject({
       statusLabel: '已完成',
       remainingMs: 0,
       terminal: true,

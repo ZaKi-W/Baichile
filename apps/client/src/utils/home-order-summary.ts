@@ -1,8 +1,8 @@
 import type { VirtualOrder } from '@baichile/api-contract';
 import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
-import { getOrderStep, getOrderStepIndex, ORDER_STEPS } from './order-status';
+import { DELIVERY_START_MS, getOrderStep, getOrderStepIndex, ORDER_STEPS } from './order-status';
 
-const ORDER_PREPARATION_MS = 83_000;
+const ORDER_PREPARATION_MS = DELIVERY_START_MS;
 
 export interface HomeOrderSummary {
   order: VirtualOrder;

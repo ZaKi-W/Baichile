@@ -6,7 +6,9 @@ describe('native tab bar configuration', () => {
     const pages = JSON.parse(readFileSync(new URL('./pages.json', import.meta.url), 'utf8'));
 
     expect(pages.tabBar.custom).toBeUndefined();
-    expect(pages.tabBar.list.map((item: { text: string }) => item.text)).toEqual(['首页', '发现', '订单', '我的']);
+    expect(pages.tabBar.list.map((item: { text: string }) => item.text)).toEqual(['首页', '购物车', '订单', '我的']);
+    expect(pages.tabBar.list[1].iconPath).toBe('static/tabbar/cart.png');
+    expect(pages.tabBar.list[1].selectedIconPath).toBe('static/tabbar/cart-active.png');
     expect(pages.tabBar.list.every((item: { iconPath?: string; selectedIconPath?: string }) =>
       item.iconPath?.endsWith('.png') && item.selectedIconPath?.endsWith('.png'))).toBe(true);
   });

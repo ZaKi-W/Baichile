@@ -1,126 +1,167 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { onLoad } from '@dcloudio/uni-app';
-import type { HomeResponse } from '@baichile/api-contract';
-import type { IconKey } from '@baichile/icon-registry';
-import AppIcon from '../../components/AppIcon.vue';
-import StoreCard from '../../components/StoreCard.vue';
-import { catalogService } from '../../services/catalog';
+import { computed } from 'vue';
+import { useCartStore } from '../../stores/cart';
 
-const data = ref<HomeResponse>();
-const loading = ref(true);
-const error = ref('');
+const cart = useCartStore();
 const statusBarHeight = uni.getSystemInfoSync().statusBarHeight ?? 20;
-const safeTopStyle = computed(() => ({ height: `${statusBarHeight + 14}px` }));
-const featuredStores = computed(() => data.value?.featured.length ? data.value.featured : data.value?.stores.slice(0, 5) ?? []);
+const safeTopStyle = computed(() => ({ height: `${statusBarHeight + 12}px` }));
+const groups = computed(() => cart.groups);
+const hasCart = computed(() => groups.value.length > 0);
+const checkoutText = computed(() => hasCart.value ? `合并结算 ${formatMoney(cart.allTotalCents)}` : '先去选餐');
 
-async function load() {
-  loading.value = true;
-  error.value = '';
-  try {
-    data.value = await catalogService.home();
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '加载失败';
-  } finally {
-    loading.value = false;
-  }
+function formatMoney(cents: number): string {
+  return `¥${(cents / 100).toFixed(2)}`;
 }
-const openCategory = (id: string, name: string) => uni.navigateTo({ url: `/pages/category/index?id=${id}&name=${encodeURIComponent(name)}` });
-const openStore = (id: string) => uni.navigateTo({ url: `/pages/store/index?id=${id}` });
-onLoad(load);
+
+function openHome() {
+  uni.switchTab({ url: '/pages/home/index' });
+}
+
+function openStoreById(storeId: string) {
+  uni.navigateTo({ url: `/pages/store/index?id=${storeId}` });
+}
+
+function checkout() {
+  if (!hasCart.value) {
+    openHome();
+    return;
+  }
+  uni.navigateTo({ url: '/pages/checkout/index' });
+}
 </script>
 
 <template>
-  <view class="discover-page">
+  <view class="cart-page">
     <view class="safe-top" :style="safeTopStyle" />
-    <main class="discover-main">
-      <header class="discover-header">
+    <view class="cart-main">
+      <view class="page-head">
         <view>
-          <text class="eyebrow">BAICHILE PICKS</text>
-          <text class="title">发现好味道</text>
-          <text class="subtitle">从附近真实数据里，挑出值得点开的店。</text>
+          <text class="title">购物车</text>
+          <text class="subtitle">{{ hasCart ? '确认这顿白吃的清单' : '还没选菜，先挑一家店吧' }}</text>
         </view>
-        <text class="spark">✦</text>
-      </header>
-
-      <view v-if="loading" class="state-block">正在寻找附近好味道…</view>
-      <view v-else-if="error" class="state-block error-state">
-        <text>{{ error }}</text>
-        <button @tap="load">重新加载</button>
+        <button v-if="hasCart" class="clear-button" @tap="cart.clear">清空</button>
       </view>
 
-      <template v-else-if="data">
-        <section>
-          <view class="section-header">
-            <text class="section-title">按口味逛</text>
-            <text class="section-hint">{{ data.categories.length }} 个分类</text>
-          </view>
-          <scroll-view class="topic-scroll" scroll-x :show-scrollbar="false">
-            <view class="topic-row">
-              <button
-                v-for="category in data.categories"
-                :key="category.id"
-                class="topic"
-                @tap="openCategory(category.id, category.name)"
-              >
-                <view class="topic-icon"><AppIcon :name="category.icon as IconKey" :size="27" /></view>
-                <text>{{ category.name }}</text>
-              </button>
+      <view v-if="hasCart" class="group-list">
+        <view v-for="group in groups" :key="group.store.id" class="store-cart-card">
+          <view class="store-row" hover-class="store-row-active" @tap="openStoreById(group.store.id)">
+            <image v-if="group.store.coverUrl" class="store-cover" :src="group.store.coverUrl" mode="aspectFill" />
+            <view v-else class="store-cover cover-fallback">
+              <text>{{ group.store.name.slice(0, 1) }}</text>
             </view>
-          </scroll-view>
-        </section>
+            <view class="store-info">
+              <text class="store-name">{{ group.store.name }}</text>
+              <text class="store-meta">共 {{ group.count }} 件 · 配送 {{ group.store.virtualDeliveryMinutes }} 分钟</text>
+            </view>
+            <text class="store-arrow">›</text>
+          </view>
 
-        <section>
-          <view class="section-header featured-heading">
-            <view>
-              <text class="section-title">本周精选</text>
-              <text class="section-caption">高热度与好口碑，都在这里</text>
+          <view v-for="line in group.lines" :key="line.key" class="cart-line">
+            <image v-if="line.item.imageUrl" class="dish-image" :src="line.item.imageUrl" mode="aspectFill" />
+            <view v-else class="dish-image dish-fallback">
+              <text>{{ line.item.name.slice(0, 1) }}</text>
             </view>
-            <text class="rank-badge">TOP {{ featuredStores.length }}</text>
+            <view class="line-info">
+              <text class="line-name">{{ line.item.name }}</text>
+              <text class="line-options">{{ line.optionNames.length ? line.optionNames.join('、') : '默认规格' }}</text>
+              <text class="line-price">{{ formatMoney(line.totalCents) }}</text>
+            </view>
+            <view class="qty-control">
+              <button class="qty-button" @tap="cart.updateQuantity(line.key, line.quantity - 1)">−</button>
+              <text class="qty-text">{{ line.quantity }}</text>
+              <button class="qty-button" @tap="cart.updateQuantity(line.key, line.quantity + 1)">＋</button>
+            </view>
           </view>
-          <view v-if="featuredStores.length" class="store-list">
-            <StoreCard
-              v-for="(store, index) in featuredStores"
-              :key="store.id"
-              :store="store"
-              :index="index"
-              @open="openStore(store.id)"
-            />
+
+          <view class="store-summary">
+            <text>含配送/打包</text>
+            <text>{{ formatMoney(group.totalCents) }}</text>
           </view>
-          <view v-else class="state-block">精选店铺正在整理中</view>
-        </section>
-      </template>
-    </main>
+        </view>
+      </view>
+
+      <view v-if="hasCart" class="summary-card">
+        <view class="summary-row">
+          <text>商品小计</text>
+          <text>{{ formatMoney(cart.allItemsTotalCents) }}</text>
+        </view>
+        <view class="summary-row">
+          <text>店铺数</text>
+          <text>{{ groups.length }} 家</text>
+        </view>
+        <view class="summary-row">
+          <text>配送/打包</text>
+          <text>{{ formatMoney(cart.allTotalCents - cart.allItemsTotalCents) }}</text>
+        </view>
+        <view class="summary-total">
+          <text>合计</text>
+          <text>{{ formatMoney(cart.allTotalCents) }}</text>
+        </view>
+      </view>
+
+      <view v-else class="empty-card">
+        <view class="empty-mark">白</view>
+        <text class="empty-title">购物车还是空的</text>
+        <text class="empty-text">去首页挑一家店，选好菜后这里会自动汇总。</text>
+        <button class="browse-button" @tap="openHome">去首页选餐</button>
+      </view>
+    </view>
+
+    <view class="checkout-bar">
+      <view>
+        <text class="checkout-label">{{ hasCart ? `共 ${cart.allCount} 件 · ${groups.length} 家店` : '当前无商品' }}</text>
+        <text class="checkout-price">{{ hasCart ? formatMoney(cart.allTotalCents) : '¥0.00' }}</text>
+      </view>
+      <button class="checkout-button" @tap="checkout">{{ checkoutText }}</button>
+    </view>
   </view>
 </template>
 
 <style scoped>
-.discover-page { min-height: 100vh; color: #141414; background: #f7f7f5; }
+.cart-page { min-height: 100vh; color: #151515; background: #f5f5f3; }
 .safe-top { height: env(safe-area-inset-top); }
-.discover-main { padding: 34rpx 32rpx calc(220rpx + env(safe-area-inset-bottom)); }
+.cart-main { padding: 28rpx 28rpx calc(184rpx + env(safe-area-inset-bottom)); }
 button { margin: 0; padding: 0; border: 0; color: inherit; background: transparent; line-height: normal; }
 button::after { border: 0; }
-.discover-header { position: relative; min-height: 276rpx; display: flex; align-items: flex-end; justify-content: space-between; overflow: hidden; padding: 42rpx 38rpx; border-radius: 54rpx; color: #fff; background: radial-gradient(circle at 84% 12%, rgba(223, 247, 90, .88) 0 15%, transparent 16%), linear-gradient(125deg, #141414 5%, #234027 100%); box-shadow: 0 32rpx 74rpx rgba(21, 21, 18, .12); box-sizing: border-box; }
-.discover-header::after { content: ""; position: absolute; width: 300rpx; height: 300rpx; right: -120rpx; top: -100rpx; border: 1rpx solid rgba(255, 255, 255, .18); border-radius: 84rpx; transform: rotate(24deg); }
-.discover-header > view, .spark { position: relative; z-index: 1; }
-.eyebrow { display: block; margin-bottom: 16rpx; color: #dff75a; font-size: 20rpx; font-weight: 900; letter-spacing: 2rpx; }
-.title { display: block; font-size: 62rpx; line-height: 1; font-weight: 900; letter-spacing: -4rpx; }
-.subtitle { display: block; margin-top: 18rpx; color: rgba(255, 255, 255, .66); font-size: 24rpx; font-weight: 600; }
-.spark { font-size: 72rpx; color: #dff75a; }
-.section-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24rpx; margin: 52rpx 2rpx 26rpx; }
-.section-title { display: block; font-size: 40rpx; line-height: 1; font-weight: 900; letter-spacing: -2rpx; }
-.section-hint, .section-caption { color: #777773; font-size: 22rpx; font-weight: 600; }
-.section-caption { display: block; margin-top: 12rpx; }
-.topic-scroll { width: calc(100% + 64rpx); margin-left: -32rpx; white-space: nowrap; }
-.topic-row { display: inline-flex; gap: 18rpx; padding: 0 32rpx 18rpx; }
-.topic { width: 156rpx; display: flex; align-items: center; flex-direction: column; gap: 14rpx; padding: 20rpx 12rpx 18rpx; border: 1rpx solid rgba(20, 20, 20, .06); border-radius: 36rpx; background: #fff; box-shadow: 0 16rpx 32rpx rgba(20, 20, 20, .04); font-size: 23rpx; font-weight: 700; }
-.topic-icon { width: 92rpx; height: 92rpx; display: flex; align-items: center; justify-content: center; border-radius: 32rpx; background: #fff0e9; }
-.topic:nth-child(3n + 2) .topic-icon { background: #eff8d5; }
-.topic:nth-child(3n) .topic-icon { background: #e9efff; }
-.featured-heading { align-items: center; }
-.rank-badge { padding: 12rpx 18rpx; border-radius: 18rpx; color: #3f5112; background: #dff75a; font-size: 20rpx; font-weight: 900; }
-.store-list { display: grid; gap: 24rpx; }
-.state-block { margin-top: 40rpx; padding: 32rpx; border: 1rpx solid rgba(20, 20, 20, .06); border-radius: 32rpx; color: #71716f; background: rgba(255, 255, 255, .72); font-size: 26rpx; text-align: center; }
-.error-state { display: flex; align-items: center; justify-content: space-between; text-align: left; }
-.error-state button { padding: 14rpx 24rpx; border-radius: 999rpx; color: #fff; background: #141414; font-size: 24rpx; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; margin-bottom: 28rpx; }
+.title { display: block; font-size: 48rpx; line-height: 1.05; font-weight: 900; }
+.subtitle { display: block; margin-top: 10rpx; color: #777; font-size: 24rpx; font-weight: 600; }
+.clear-button { padding: 12rpx 20rpx; border-radius: 999rpx; color: #777; background: #fff; font-size: 23rpx; font-weight: 700; }
+.store-cart-card, .summary-card, .empty-card { border-radius: 24rpx; background: #fff; box-shadow: 0 4rpx 18rpx rgba(0, 0, 0, .04); }
+.group-list { display: grid; gap: 20rpx; }
+.store-cart-card { overflow: hidden; }
+.store-row { display: flex; align-items: center; gap: 16rpx; padding: 22rpx; }
+.store-row-active { opacity: .72; }
+.store-cover { width: 76rpx; height: 76rpx; border-radius: 16rpx; flex-shrink: 0; background: #ececea; }
+.cover-fallback, .dish-fallback { display: flex; align-items: center; justify-content: center; color: #777; font-weight: 900; }
+.store-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8rpx; }
+.store-name { color: #1f1f1f; font-size: 30rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-meta { color: #888; font-size: 22rpx; font-weight: 600; }
+.store-arrow { color: #999; font-size: 42rpx; line-height: 1; }
+.cart-line { display: flex; align-items: center; gap: 18rpx; padding: 24rpx 22rpx; border-bottom: 1rpx solid #f0f0ee; }
+.cart-line:last-child { border-bottom: 0; }
+.dish-image { width: 96rpx; height: 96rpx; border-radius: 18rpx; flex-shrink: 0; background: #ececea; }
+.line-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.line-name { color: #1f1f1f; font-size: 28rpx; font-weight: 800; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.line-options { margin-top: 8rpx; color: #999; font-size: 22rpx; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.line-price { margin-top: 12rpx; color: #ff5b38; font-size: 27rpx; font-weight: 900; }
+.qty-control { display: flex; align-items: center; gap: 12rpx; flex-shrink: 0; }
+.qty-button { width: 48rpx; height: 48rpx; border-radius: 50%; color: #171717; background: #dff75a; font-size: 28rpx; font-weight: 900; line-height: 48rpx; }
+.qty-text { min-width: 34rpx; color: #1f1f1f; font-size: 25rpx; font-weight: 800; text-align: center; }
+.store-summary { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; padding: 18rpx 22rpx; color: #777; background: #fafafa; font-size: 24rpx; font-weight: 700; }
+.store-summary text:last-child { color: #151515; font-size: 27rpx; font-weight: 900; }
+.summary-card { margin-top: 20rpx; padding: 24rpx; }
+.summary-row, .summary-total { display: flex; justify-content: space-between; align-items: center; gap: 20rpx; color: #777; font-size: 25rpx; line-height: 1.4; }
+.summary-row + .summary-row { margin-top: 14rpx; }
+.summary-total { margin-top: 22rpx; padding-top: 22rpx; border-top: 1rpx solid #f0f0ee; color: #151515; font-size: 30rpx; font-weight: 900; }
+.summary-total text:last-child { color: #ff5b38; font-size: 36rpx; }
+.empty-card { min-height: 520rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 44rpx 38rpx; text-align: center; }
+.empty-mark { width: 112rpx; height: 112rpx; display: flex; align-items: center; justify-content: center; margin-bottom: 26rpx; border-radius: 32rpx; color: #171717; background: #dff75a; font-size: 48rpx; font-weight: 900; }
+.empty-title { color: #1f1f1f; font-size: 34rpx; font-weight: 900; }
+.empty-text { max-width: 460rpx; margin-top: 12rpx; color: #777; font-size: 24rpx; line-height: 1.5; }
+.browse-button { margin-top: 34rpx; padding: 20rpx 42rpx; border-radius: 999rpx; color: #171717; background: #dff75a; font-size: 28rpx; font-weight: 900; }
+.checkout-bar { position: fixed; left: 24rpx; right: 24rpx; bottom: calc(24rpx + env(safe-area-inset-bottom)); z-index: 8; display: flex; align-items: center; justify-content: space-between; gap: 24rpx; padding: 20rpx 22rpx; border-radius: 28rpx; background: #151515; box-shadow: 0 18rpx 40rpx rgba(0, 0, 0, .14); }
+.checkout-label { display: block; color: rgba(255,255,255,.62); font-size: 22rpx; font-weight: 700; }
+.checkout-price { display: block; margin-top: 4rpx; color: #fff; font-size: 34rpx; font-weight: 900; }
+.checkout-button { min-width: 230rpx; height: 76rpx; border-radius: 999rpx; color: #171717; background: #dff75a; font-size: 28rpx; font-weight: 900; line-height: 76rpx; }
 </style>

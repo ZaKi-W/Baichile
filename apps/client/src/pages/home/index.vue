@@ -9,14 +9,12 @@ import HomeOrderCarousel from '../../components/HomeOrderCarousel.vue';
 import StoreCard from '../../components/StoreCard.vue';
 import { catalogService } from '../../services/catalog';
 import { useAuthStore } from '../../stores/auth';
-import { useLocationStore } from '../../stores/location';
 import { useOrderStore } from '../../stores/orders';
 import { createHomeOrderSummary, homeOrderSeenKey } from '../../utils/home-order-summary';
 
 const data = ref<HomeResponse>();
 const loading = ref(true);
 const error = ref('');
-const location = useLocationStore();
 const auth = useAuthStore();
 const orders = useOrderStore();
 const orderNow = ref(Date.now());
@@ -58,7 +56,6 @@ async function load() {
   }
 }
 const openSearch = () => uni.navigateTo({ url: '/pages/search/index' });
-const openLocationPicker = () => uni.navigateTo({ url: '/pages/location-picker/index' });
 const openCategory = (id: string, name: string) => uni.navigateTo({ url: `/pages/category/index?id=${id}&name=${encodeURIComponent(name)}` });
 const openStore = (id: string) => uni.navigateTo({ url: `/pages/store/index?id=${id}` });
 const openAllCategories = () => {
@@ -149,7 +146,6 @@ function handleHide() {
 
 onLoad(() => {
   load();
-  if (location.status === 'idle') location.locate();
 });
 onShow(handleShow);
 onHide(handleHide);
@@ -159,14 +155,6 @@ onUnload(handleHide);
 <template>
   <view class="home-page">
     <main class="app-main" :style="safeTopStyle">
-      <header class="topbar">
-        <button class="location-button" @tap="openLocationPicker">
-          <AppIcon name="location" :size="17" />
-          <text class="location-name">{{ location.status === 'locating' ? '定位中…' : location.label }}</text>
-          <text class="chevron">⌄</text>
-        </button>
-      </header>
-
       <view class="search-wrap">
         <view class="search" @tap="openSearch">
           <AppIcon name="search" :size="18" />
@@ -283,11 +271,7 @@ onUnload(handleHide);
 .app-main { padding: calc(env(safe-area-inset-top) + 28rpx) 32rpx calc(220rpx + env(safe-area-inset-bottom)); }
 button { padding: 0; border: 0; color: inherit; background: transparent; line-height: normal; }
 button::after { border: 0; }
-.topbar { min-height: 80rpx; display: flex; align-items: center; justify-content: space-between; margin: 4rpx 0 26rpx; }
-.location-button { min-width: 0; max-width: 570rpx; display: flex; align-items: center; gap: 14rpx; }
-.location-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 32rpx; font-weight: 800; letter-spacing: -1rpx; }
-.chevron { color: #7b7b78; font-size: 26rpx; transform: translateY(2rpx); }
-.search-wrap { position: relative; margin-bottom: 34rpx; }
+.search-wrap { position: relative; margin: 4rpx 0 34rpx; }
 .search { height: 104rpx; display: flex; align-items: center; gap: 18rpx; padding: 0 32rpx; border: 1rpx solid rgba(20, 20, 20, .08); border-radius: 36rpx; color: #9b9b98; background: rgba(255, 255, 255, .9); box-shadow: 0 18rpx 50rpx rgba(20, 20, 20, .04); box-sizing: border-box; font-size: 28rpx; font-weight: 600; }
 .hero { position: relative; height: 364rpx; overflow: hidden; border-radius: 54rpx; background: #171717; box-shadow: 0 36rpx 100rpx rgba(21, 21, 18, .12); }
 .hero-track { height: 100%; position: relative; }

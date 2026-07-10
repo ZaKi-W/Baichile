@@ -14,5 +14,4 @@ export const walletService = {
     token(),
   ),
   checkIn: () => requestApi<WalletSummary>('POST', '/v1/accounts/me/check-in', token()),
-  testCredit: () => requestApi<WalletSummary>('POST', '/v1/accounts/me/test-credit', token()),
 };

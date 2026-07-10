@@ -166,6 +166,18 @@ function pickPlace(place: PlaceSuggestion) {
   searchResults.value = [];
 }
 
+function useTypedAddress() {
+  const value = addressText.value.trim();
+  if (!value) return;
+  if (currentLat.value && currentLng.value) {
+    selectedLat = currentLat.value;
+    selectedLng = currentLng.value;
+  }
+  setSelectedAddress(value);
+  showResults.value = false;
+  searchResults.value = [];
+}
+
 async function useWechatPhone(event: { detail?: { code?: string; errMsg?: string } }) {
   const code = event.detail?.code;
   if (!code) {
@@ -266,7 +278,10 @@ onLoad(() => {
       <view v-if="showResults" class="dropdown">
         <view v-if="searching" class="dropdown-hint">搜索中...</view>
         <view v-else-if="searchError" class="dropdown-hint">{{ searchError }}</view>
-        <view v-else-if="!searchResults.length" class="dropdown-hint">无结果，请尝试其他关键词</view>
+        <view v-else-if="!searchResults.length" class="place-item manual-place" @tap="useTypedAddress">
+          <text class="place-title">使用「{{ addressText.trim() }}」作为地址</text>
+          <text class="place-addr">村里地址搜不到也可以直接保存，路线会使用当前定位或默认虚拟坐标</text>
+        </view>
         <view v-for="place in searchResults" :key="place.id" class="place-item" @tap="pickPlace(place)">
           <text class="place-title">{{ place.title }}</text>
           <text class="place-addr">{{ place.address }}</text>

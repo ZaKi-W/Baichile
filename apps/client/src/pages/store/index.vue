@@ -15,16 +15,27 @@ const cart = useCartStore();
 const activeCategoryId = ref('');
 const scrollAnchor = ref('');
 const sectionOffsets = new Map<string, number>();
+const failedImages = ref<string[]>([]);
 let isProgrammatic = false;
 
 onLoad(async (options) => {
   store.value = await catalogService.store(options?.id || '');
+  cart.selectStore(store.value);
   await nextTick();
   setTimeout(measureSections, 200);
 });
 
 const hasCartItems = computed(() => cart.count > 0);
-const canCheckout = computed(() => cart.store?.id === store.value?.id && cart.count > 0);
+const meetsMinimumOrder = computed(() => !store.value || cart.itemsTotalCents >= store.value.minimumOrderCents);
+const canCheckout = computed(() => cart.count > 0 && meetsMinimumOrder.value);
+const checkoutText = computed(() => {
+  if (!cart.count) return '购物车为空';
+  if (!meetsMinimumOrder.value && store.value) {
+    const missing = Math.max(0, store.value.minimumOrderCents - cart.itemsTotalCents);
+    return `差¥${(missing / 100).toFixed(0)}起送`;
+  }
+  return '去结算';
+});
 const menuGroups = computed(() => {
   const subs = store.value?.subCategories;
   if (!subs?.length) return [];
@@ -38,6 +49,10 @@ const menuGroups = computed(() => {
   return subs.filter((s) => map.has(s.id)).map((s) => ({ id: s.id, name: s.name, items: map.get(s.id)! }));
 });
 const storeInitial = computed(() => store.value?.name.slice(-1) || '食');
+const imageVisible = (id: string, url?: string) => Boolean(url && !failedImages.value.includes(id));
+const markImageFailed = (id: string) => {
+  if (!failedImages.value.includes(id)) failedImages.value = [...failedImages.value, id];
+};
 
 function measureSections() {
   uni.createSelectorQuery()
@@ -91,18 +106,31 @@ function removeFromCart(key: string) {
   cart.remove(key);
   if (!cart.lines.length) isCartOpen.value = false;
 }
-const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
+function changeCartQuantity(key: string, delta: number) {
+  const line = cart.lines.find((item) => item.key === key);
+  if (!line) return;
+  cart.updateQuantity(key, line.quantity + delta);
+  if (!cart.lines.length) isCartOpen.value = false;
+}
+function clearCart() {
+  if (store.value) cart.clear(store.value.id);
+  isCartOpen.value = false;
+}
+const checkout = () => {
+  if (!canCheckout.value || !store.value) return;
+  uni.navigateTo({ url: `/pages/checkout/index?storeId=${store.value.id}` });
+};
 </script>
 
 <template>
   <view v-if="store" class="page store-page">
     <view class="merchant-hero">
-      <image v-if="store.coverUrl" class="merchant-cover" :src="store.coverUrl" mode="aspectFill" />
-      <view v-if="store.coverUrl" class="merchant-cover-shade" />
+      <image v-if="imageVisible('store-cover', store.coverUrl)" class="merchant-cover" :src="store.coverUrl" mode="aspectFill" @error="markImageFailed('store-cover')" />
+      <view v-if="imageVisible('store-cover', store.coverUrl)" class="merchant-cover-shade" />
       <view class="hero-decoration">{{ storeInitial }}</view>
       <view class="merchant-content">
         <view class="store-logo">
-          <image v-if="store.coverUrl" :src="store.coverUrl" mode="aspectFill" />
+          <image v-if="imageVisible('store-logo', store.coverUrl)" :src="store.coverUrl" mode="aspectFill" @error="markImageFailed('store-logo')" />
           <text v-else>{{ storeInitial }}</text>
         </view>
         <view class="merchant-main">
@@ -163,7 +191,7 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
 
           <view v-for="(item, itemIndex) in group.items" :key="item.id" class="product-card">
             <view class="product-visual" :class="`visual-${itemIndex % 4}`">
-              <image v-if="item.imageUrl" class="product-image" :src="item.imageUrl" mode="aspectFill" />
+              <image v-if="imageVisible(item.id, item.imageUrl)" class="product-image" :src="item.imageUrl" mode="aspectFill" @error="markImageFailed(item.id)" />
               <text v-else class="food-glyph">{{ item.name.slice(-1) }}</text>
             </view>
             <view class="product-info">
@@ -194,10 +222,23 @@ const checkout = () => uni.navigateTo({ url: '/pages/checkout/index' });
         <text class="cart-total">¥{{ (cart.totalCents / 100).toFixed(2) }}</text>
         <text class="cart-note">{{ cart.count ? `已选 ${cart.count} 件` : '购物车还是空的' }}</text>
       </view>
-      <button class="checkout-button" :disabled="!canCheckout" @tap.stop="checkout">去结算</button>
+      <button class="checkout-button" :disabled="!canCheckout" @tap.stop="checkout">{{ checkoutText }}</button>
     </view>
     <SkuSheet :item="selected" @close="selected = null" @confirm="add" />
-    <CartSheet :visible="isCartOpen" :lines="cart.lines" @close="isCartOpen = false" @remove="removeFromCart" />
+    <CartSheet
+      :visible="isCartOpen"
+      :lines="cart.lines"
+      :store-name="cart.store?.name"
+      :total-cents="cart.totalCents"
+      :checkout-disabled="!canCheckout"
+      :checkout-text="checkoutText"
+      @close="isCartOpen = false"
+      @remove="removeFromCart"
+      @increase="changeCartQuantity($event, 1)"
+      @decrease="changeCartQuantity($event, -1)"
+      @clear="clearCart"
+      @checkout="checkout"
+    />
   </view>
 </template>
 

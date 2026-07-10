@@ -5,8 +5,13 @@ import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { useAddressStore } from '../../stores/address';
 import { useWalletStore } from '../../stores/wallet';
+import { useCartStore } from '../../stores/cart';
 import { CODE_VERSION } from '../../config/code-version';
 import { shareService } from '../../services/shares';
+import { orderService } from '../../services/orders';
+import { ApiRequestError } from '../../services/http';
+import { consumePendingOrders } from '../../utils/pending-order';
+import { shareLandingUrl } from '../../utils/share-navigation';
 
 interface ChooseAvatarEvent {
   detail: {
@@ -18,11 +23,12 @@ const auth = useAuthStore();
 const orders = useOrderStore();
 const addresses = useAddressStore();
 const wallet = useWalletStore();
+const cart = useCartStore();
 const showLoginPopup = ref(false);
 const avatarUrl = ref('');
 const nickname = ref('');
 const loading = ref(false);
-const walletAction = ref<'check-in' | 'credit' | ''>('');
+const walletAction = ref<'check-in' | ''>('');
 const preparingShare = ref(false);
 
 onShow(() => {
@@ -56,7 +62,7 @@ async function prepareTimelineShare(kind: 'achievement' | 'invitation' = 'invita
   try {
     const card = await shareService.create({ kind });
     uni.navigateTo({
-      url: `${card.path}&share=1&reward=${card.initiatedRewardCents}`,
+      url: shareLandingUrl(card),
     });
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' });
@@ -73,19 +79,6 @@ async function checkIn() {
     uni.showToast({ title: '签到成功，获得 ¥100', icon: 'success' });
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '签到失败', icon: 'none' });
-  } finally {
-    walletAction.value = '';
-  }
-}
-
-async function addTestCredit() {
-  if (walletAction.value) return;
-  walletAction.value = 'credit';
-  try {
-    await wallet.addTestCredit();
-    uni.showToast({ title: '已增加 ¥1000', icon: 'success' });
-  } catch (error) {
-    uni.showToast({ title: error instanceof Error ? error.message : '加钱失败', icon: 'none' });
   } finally {
     walletAction.value = '';
   }
@@ -119,6 +112,7 @@ async function login() {
     void orders.load();
     void addresses.load();
     void wallet.load().catch(() => uni.showToast({ title: '余额加载失败', icon: 'none' }));
+    void submitPendingOrderAfterLogin();
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : '登录失败，请重试',
@@ -126,6 +120,35 @@ async function login() {
     });
   } finally {
     loading.value = false;
+  }
+}
+
+async function submitPendingOrderAfterLogin() {
+  const pending = consumePendingOrders();
+  if (!pending.length) return;
+  const created = [];
+  try {
+    for (const request of pending) {
+      const order = await orderService.create(request);
+      created.push(order);
+      orders.save(order);
+    }
+    wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
+    cart.clear();
+    if (created.length === 1) uni.navigateTo({ url: `/pages/delivery/index?id=${created[0].id}` });
+    else uni.switchTab({ url: '/pages/orders/index' });
+    void wallet.load().catch(() => undefined);
+  } catch (error) {
+    if (created.length) {
+      wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
+      cart.clear();
+      void wallet.load().catch(() => undefined);
+      uni.showToast({ title: `已生成${created.length}个订单，剩余订单未完成`, icon: 'none' });
+      uni.switchTab({ url: '/pages/orders/index' });
+      return;
+    }
+    const insufficient = error instanceof ApiRequestError && error.code === 'INSUFFICIENT_BALANCE';
+    uni.showToast({ title: insufficient ? '余额不足' : '登录成功，但订单创建失败，请重新提交', icon: 'none' });
   }
 }
 </script>
@@ -196,14 +219,6 @@ async function login() {
           @tap="prepareTimelineShare('invitation')"
         >
           分享领饭钱
-        </button>
-        <button
-          class="wallet-action test-credit"
-          :loading="walletAction === 'credit'"
-          :disabled="!!walletAction"
-          @tap="addTestCredit"
-        >
-          测试加 ¥1000
         </button>
       </view>
     </view>
@@ -525,11 +540,6 @@ async function login() {
 .wallet-action.check-in {
   color: #161714;
   background: #dff75a;
-}
-
-.wallet-action.test-credit {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.14);
 }
 
 .wallet-action.share-reward {

@@ -16,6 +16,11 @@ export const orderService = {
     if (!auth.accountId) return [];
     return requestApi<VirtualOrder[]>('GET', '/v1/orders/me', auth.accessToken);
   },
+  async detail(id: string): Promise<VirtualOrder> {
+    const auth = useAuthStore();
+    if (!auth.accountId) throw new ApiRequestError('请先登录后查看订单');
+    return requestApi<VirtualOrder>('GET', `/v1/orders/${encodeURIComponent(id)}`, auth.accessToken);
+  },
   async savings(): Promise<AccountSavings> {
     const auth = useAuthStore();
     const empty = { savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0 };

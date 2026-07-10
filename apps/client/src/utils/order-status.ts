@@ -15,14 +15,14 @@ export const ORDER_STEPS: OrderStep[] = [
   { key: 'completed', label: '已送达', listLabel: '已完成', statusText: '订单已完成' },
 ];
 
-const STEP_TIMES = [0, 3_000, 8_000, 18_000, 78_000, 83_000];
-const DELIVERY_START_MS = STEP_TIMES.at(-1)!;
+export const ORDER_STEP_TIMES = [0, 2_000, 5_000, 9_000, 14_000, 18_000] as const;
+export const DELIVERY_START_MS = ORDER_STEP_TIMES.at(-1)!;
 
 export function getOrderStepIndex(startedAt: number, deliveryDurationMs: number, now = Date.now()): number {
   const elapsed = now - startedAt;
   if (elapsed >= DELIVERY_START_MS + deliveryDurationMs) return ORDER_STEPS.length - 1;
-  for (let index = STEP_TIMES.length - 1; index >= 0; index -= 1) {
-    if (elapsed >= STEP_TIMES[index]) return index;
+  for (let index = ORDER_STEP_TIMES.length - 1; index >= 0; index -= 1) {
+    if (elapsed >= ORDER_STEP_TIMES[index]) return index;
   }
   return 0;
 }

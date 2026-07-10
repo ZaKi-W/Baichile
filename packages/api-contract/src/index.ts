@@ -80,11 +80,21 @@ export interface QuoteRequest {
   lines: OrderLineInput[];
   virtualDestinationId: string;
   virtualDestinationPoint?: import('@baichile/map-core').GeoPoint;
+  deliveryAddressSnapshot?: OrderDeliveryAddressSnapshot;
+}
+
+export interface OrderDeliveryAddressSnapshot {
+  name: string;
+  phone: string;
+  address: string;
+  detail: string;
+  tag: string;
 }
 
 export interface QuoteLine {
   menuItemId: string;
   name: string;
+  imageUrl?: string;
   optionNames: string[];
   quantity: number;
   unitPriceCents: number;
@@ -187,8 +197,12 @@ export interface VirtualOrder extends OrderQuote {
   visitorId?: string;
   accountId?: string;
   virtualDestinationId: string;
+  storeName?: string;
+  deliveryAddress?: OrderDeliveryAddressSnapshot;
+  paymentMethod?: 'virtual_balance';
   status: DeliveryStatus;
   startedAt: string;
+  createdAt: string;
   durationMs: number;
   seed: string;
   route: VirtualRoute;

@@ -32,12 +32,13 @@ describe('profile page WeChat login', () => {
     expect(source).not.toContain('money-value');
   });
 
-  it('shows the wallet balance, daily check-in and test credit controls', () => {
+  it('shows the wallet balance and daily check-in controls without test credit', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
     expect(source).toContain('wallet.summary.balanceCents');
     expect(source).toContain('签到领 ¥100');
-    expect(source).toContain('测试加 ¥1000');
+    expect(source).not.toContain('测试加 ¥1000');
+    expect(source).not.toContain('addTestCredit');
     expect(source).toContain("'/pages/wallet/index'");
   });
 

@@ -21,7 +21,12 @@ export async function resolveCloudFileUrls(fileIds: Array<string | null | undefi
   const app = getCloudBaseApp();
   for (let index = 0; index < pending.length; index += BATCH_SIZE) {
     const batch = pending.slice(index, index + BATCH_SIZE);
-    const response = await app.getTempFileURL({ fileList: batch });
+    let response: { fileList?: Array<{ code?: string; fileID: string; tempFileURL?: string }> };
+    try {
+      response = await app.getTempFileURL({ fileList: batch });
+    } catch {
+      continue;
+    }
     for (const item of response.fileList ?? []) {
       if (item.code !== 'SUCCESS' || !item.tempFileURL) continue;
       fileUrlCache.set(item.fileID, {

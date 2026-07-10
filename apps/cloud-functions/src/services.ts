@@ -6,6 +6,7 @@ import type {
   AdministrativeArea,
   HomeResponse,
   MenuItem,
+  OrderDeliveryAddressSnapshot,
   OrderQuote,
   PlaceSuggestion,
   QuoteRequest,
@@ -33,6 +34,7 @@ import {
   validateSelections,
 } from '@baichile/domain';
 import type { DeliveryStatus, GeoPoint, VirtualRoute } from '@baichile/map-core';
+import { resolveCatalogImageUrl } from './catalog-images';
 import { collections } from './collections';
 import type { CollectionStore, Database, ListOptions } from './database';
 import { badRequest, conflict, notFound, unauthorized } from './errors';
@@ -62,11 +64,15 @@ interface AnalyticsEventDoc {
   createdAt: string;
 }
 
-const INITIAL_GRANT_CENTS = 30_000;
+const INITIAL_GRANT_CENTS = 100_000;
 const DAILY_CHECKIN_CENTS = 10_000;
-const TEST_CREDIT_CENTS = 100_000;
 const BENEFIT_TEXT = '好友第一次来围观，双方各领虚拟饭钱——不能提现，但真能在这里花。';
 const CLOUDBASE_PAGE_SIZE = 100;
+const ORDER_STEP_TIMES = [0, 2_000, 5_000, 9_000, 14_000, 18_000] as const;
+const DELIVERY_START_MS = ORDER_STEP_TIMES.at(-1)!;
+const MIN_DELIVERY_DURATION_MS = 45_000;
+const MAX_DELIVERY_DURATION_MS = 90_000;
+const PAYMENT_METHOD: VirtualOrder['paymentMethod'] = 'virtual_balance';
 
 async function listAll<T extends Record<string, any>>(
   collection: CollectionStore<T>,
@@ -78,6 +84,24 @@ async function listAll<T extends Record<string, any>>(
     rows.push(...page);
     if (page.length < CLOUDBASE_PAGE_SIZE) return rows;
   }
+}
+
+function normalizeDeliveryAddressSnapshot(input: QuoteRequest['deliveryAddressSnapshot']): OrderDeliveryAddressSnapshot | undefined {
+  if (!input) return undefined;
+  return {
+    name: String(input.name ?? '').trim(),
+    phone: String(input.phone ?? '').trim(),
+    address: String(input.address ?? '').trim(),
+    detail: String(input.detail ?? '').trim(),
+    tag: String(input.tag ?? '').trim(),
+  };
+}
+
+function isDeliveryAddressSnapshot(value: unknown): value is OrderDeliveryAddressSnapshot {
+  if (!value || typeof value !== 'object') return false;
+  const input = value as Partial<Record<keyof OrderDeliveryAddressSnapshot, unknown>>;
+  const keys: Array<keyof OrderDeliveryAddressSnapshot> = ['name', 'phone', 'address', 'detail', 'tag'];
+  return keys.every((key) => typeof input[key] === 'string');
 }
 
 export class BaichileCloudServices {
@@ -352,10 +376,13 @@ export class WalletService {
       const account = await accounts.get(accountId);
       if (!account) return;
       const txs = tx.collection<WalletTransactionDoc>(collections.walletTransactions);
-      if (await txs.findOne({ accountId, type: 'initial_grant' })) return;
-      const balanceCents = account.balanceCents + INITIAL_GRANT_CENTS;
+      const grants = await txs.list({ where: { accountId, type: 'initial_grant' } });
+      const grantedCents = grants.reduce((sum, row) => sum + Math.max(0, row.amountCents), 0);
+      const amountCents = Math.max(0, INITIAL_GRANT_CENTS - grantedCents);
+      if (!amountCents) return;
+      const balanceCents = account.balanceCents + amountCents;
       await accounts.update(accountId, { balanceCents, updatedAt: tx.now().toISOString() });
-      await txs.insert(walletTx(tx, accountId, 'initial_grant', INITIAL_GRANT_CENTS, balanceCents, '初始资金'));
+      await txs.insert(walletTx(tx, accountId, 'initial_grant', amountCents, balanceCents, grantedCents ? '初始资金补足' : '初始资金'));
     });
   }
 
@@ -392,10 +419,6 @@ export class WalletService {
       await txs.insert(walletTx(tx, accountId, 'daily_checkin', DAILY_CHECKIN_CENTS, balanceCents, '每日签到', { businessDate }));
       return { balanceCents, checkedInToday: true };
     });
-  }
-
-  async testCredit(accountId: string): Promise<WalletSummary> {
-    return this.credit(accountId, TEST_CREDIT_CENTS, 'test_credit', '测试加钱');
   }
 
   async credit(accountId: string, amountCents: number, type: WalletTransactionDoc['type'], description: string, db = this.db): Promise<WalletSummary> {
@@ -446,6 +469,7 @@ export class OrderService {
       return {
         menuItemId: item.id,
         name: item.name,
+        imageUrl: item.imageUrl,
         optionNames: options.map((option) => option.name),
         quantity: input.quantity,
         unitPriceCents,
@@ -475,15 +499,21 @@ export class OrderService {
     const startedAt = this.db.now();
     const incident = selectDeliveryIncident(id.slice(0, 8), store.virtualDeliveryMinutes, startedAt.getTime());
     const route = this.route(id, request.virtualDestinationPoint);
+    const deliveryAddress = normalizeDeliveryAddressSnapshot(request.deliveryAddressSnapshot);
+    const createdAt = startedAt.toISOString();
     const order: VirtualOrder = {
       ...quote,
       id,
       isVirtual: true,
       accountId,
       virtualDestinationId: request.virtualDestinationId,
+      storeName: store.name,
+      deliveryAddress,
+      paymentMethod: PAYMENT_METHOD,
       status: 'created',
-      startedAt: startedAt.toISOString(),
-      durationMs: store.virtualDeliveryMinutes * 60_000,
+      startedAt: createdAt,
+      createdAt,
+      durationMs: virtualDeliveryDurationMs(store.virtualDeliveryMinutes, id),
       seed: id.slice(0, 8),
       route,
       incident,
@@ -499,7 +529,10 @@ export class OrderService {
         accountId,
         status: order.status,
         storeId: order.storeId,
+        storeName: order.storeName,
         destinationId: order.virtualDestinationId,
+        deliveryAddress: order.deliveryAddress,
+        paymentMethod: order.paymentMethod,
         startedAt: order.startedAt,
         durationMs: order.durationMs,
         seed: order.seed,
@@ -516,7 +549,7 @@ export class OrderService {
         refundedAt: null,
         adminStatus: 'normal',
         adminNote: '',
-        createdAt: now,
+        createdAt: order.createdAt,
         updatedAt: now,
       });
       await this.wallet.debitOrder(tx, accountId, order.totalCents, id);
@@ -524,10 +557,13 @@ export class OrderService {
     return order;
   }
 
-  async find(id: string): Promise<VirtualOrder> {
+  async find(id: string, identity: { visitorId?: string; accountId?: string } = {}): Promise<VirtualOrder> {
     await this.settleFailedOrders(undefined, id);
     const row = await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).get(id);
     if (!row) notFound('订单不存在', 'ORDER_NOT_FOUND');
+    const canRead = (identity.accountId && row.accountId === identity.accountId)
+      || (identity.visitorId && row.visitorId === identity.visitorId);
+    if (!canRead) unauthorized();
     return this.toOrder(row);
   }
 
@@ -596,8 +632,12 @@ export class OrderService {
       accountId: row.accountId ?? undefined,
       storeId: row.storeId,
       virtualDestinationId: row.destinationId,
+      storeName: row.storeName ?? undefined,
+      deliveryAddress: isDeliveryAddressSnapshot(row.deliveryAddress) ? row.deliveryAddress : undefined,
+      paymentMethod: PAYMENT_METHOD,
       status: this.currentStatus(row),
       startedAt: row.startedAt,
+      createdAt: row.createdAt || row.startedAt,
       durationMs: row.durationMs,
       seed: row.seed,
       itemsTotalCents: row.itemsTotalCents,
@@ -619,12 +659,10 @@ export class OrderService {
       if (phase === 'incident' || phase === 'failed') return phase;
     }
     const elapsed = Date.now() - new Date(row.startedAt).getTime();
-    if (elapsed >= 83_000 + row.durationMs) return 'completed';
-    if (elapsed >= 83_000) return 'delivering';
-    if (elapsed >= 78_000) return 'picked_up';
-    if (elapsed >= 18_000) return 'rider_assigned';
-    if (elapsed >= 8_000) return 'preparing';
-    if (elapsed >= 3_000) return 'merchant_accepted';
+    if (elapsed >= DELIVERY_START_MS + row.durationMs) return 'completed';
+    for (let index = ORDER_STEP_TIMES.length - 1; index >= 0; index -= 1) {
+      if (elapsed >= ORDER_STEP_TIMES[index]) return ['created', 'merchant_accepted', 'preparing', 'rider_assigned', 'picked_up', 'delivering'][index] as DeliveryStatus;
+    }
     return 'created';
   }
 
@@ -815,7 +853,7 @@ export class ShareService {
       if (!input.orderId) badRequest('请选择要分享的订单', 'ORDER_REQUIRED');
       const order = await orders.get(input.orderId);
       if (!order || order.accountId !== accountId) notFound('订单不存在', 'ORDER_NOT_FOUND');
-      const deliveredAt = new Date(order.startedAt).getTime() + 83_000 + order.durationMs;
+      const deliveredAt = new Date(order.startedAt).getTime() + DELIVERY_START_MS + order.durationMs;
       if (order.status === 'failed' || Date.now() < deliveredAt) badRequest('订单送达后才能分享', 'ORDER_NOT_COMPLETED');
       return {
         dishNames: order.lines.slice(0, 3).map((line) => line && typeof line === 'object' && 'name' in line ? String(line.name) : '神秘菜品'),
@@ -825,7 +863,7 @@ export class ShareService {
       };
     }
     const rows = (await orders.list({ where: { accountId } })).filter((order) => (
-      order.status !== 'failed' && Date.now() >= new Date(order.startedAt).getTime() + 83_000 + order.durationMs
+      order.status !== 'failed' && Date.now() >= new Date(order.startedAt).getTime() + DELIVERY_START_MS + order.durationMs
     ));
     return {
       dishNames: [],
@@ -834,6 +872,13 @@ export class ShareService {
       completedOrderCount: rows.length,
     };
   }
+}
+
+function virtualDeliveryDurationMs(minutes: number, seed: string): number {
+  const normalized = Math.min(1, Math.max(0, (minutes - 18) / 27));
+  const base = MIN_DELIVERY_DURATION_MS + Math.round((MAX_DELIVERY_DURATION_MS - MIN_DELIVERY_DURATION_MS) * normalized);
+  const jitter = Math.abs(seed.split('').reduce((sum, char) => ((sum << 5) - sum + char.charCodeAt(0)) | 0, 0)) % 8_000;
+  return Math.min(MAX_DELIVERY_DURATION_MS, base + jitter);
 }
 
 export class AnalyticsService {
@@ -958,8 +1003,8 @@ function toStoreSummary(store: StoreDoc, imageUrls?: Map<string, string>): Store
 
 function resolveImageUrl(value: string | null | undefined, imageUrls?: Map<string, string>): string | undefined {
   if (!value) return undefined;
-  if (value.startsWith('cloud://')) return imageUrls?.get(value) ?? undefined;
-  return value;
+  if (value.startsWith('cloud://')) return imageUrls?.get(value) ?? value;
+  return resolveCatalogImageUrl(value) ?? value;
 }
 
 function toWalletTransaction(row: WalletTransactionDoc): WalletTransaction {

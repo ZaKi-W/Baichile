@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { onShow } from '@dcloudio/uni-app';
-import { useCartStore } from '../../stores/cart';
+import { onLoad, onShow } from '@dcloudio/uni-app';
+import { useCartStore, type CartStoreGroup } from '../../stores/cart';
 import { useOrderStore } from '../../stores/orders';
 import { useAddressStore } from '../../stores/address';
 import { orderService } from '../../services/orders';
 import { useAuthStore } from '../../stores/auth';
 import { useWalletStore } from '../../stores/wallet';
 import { ApiRequestError } from '../../services/http';
+import { savePendingOrder } from '../../utils/pending-order';
 
 const cart = useCartStore();
 const orders = useOrderStore();
@@ -15,31 +16,55 @@ const addressStore = useAddressStore();
 const auth = useAuthStore();
 const wallet = useWalletStore();
 const submitting = ref(false);
+const checkoutStoreId = ref('');
 
 const selectedAddress = computed(() => addressStore.selected);
+const checkoutGroups = computed(() => {
+  if (checkoutStoreId.value) {
+    const group = cart.group(checkoutStoreId.value);
+    return group ? [group] : [];
+  }
+  return cart.groups;
+});
+const checkoutTotalCents = computed(() => checkoutGroups.value.reduce((sum, group) => sum + group.totalCents, 0));
 
+onLoad((options) => { checkoutStoreId.value = options?.storeId || ''; });
 onShow(() => { void addressStore.load(); });
 
 function openAddressPicker() {
   uni.navigateTo({ url: '/pages/address-list/index' });
 }
 
-const request = computed(() => ({
-  storeId: cart.store?.id || '',
-  virtualDestinationId: selectedAddress.value?.id || 'unknown',
-  virtualDestinationPoint: selectedAddress.value
-    ? { lat: selectedAddress.value.lat, lng: selectedAddress.value.lng, coordSystem: 'gcj02' as const }
-    : undefined,
-  lines: cart.lines.map((line) => ({ menuItemId: line.item.id, optionIds: line.optionIds, quantity: line.quantity })),
-}));
+function requestForGroup(group: CartStoreGroup) {
+  return {
+    storeId: group.store.id,
+    virtualDestinationId: selectedAddress.value?.id || 'unknown',
+    virtualDestinationPoint: selectedAddress.value
+      ? { lat: selectedAddress.value.lat, lng: selectedAddress.value.lng, coordSystem: 'gcj02' as const }
+      : undefined,
+    deliveryAddressSnapshot: selectedAddress.value
+      ? {
+          name: selectedAddress.value.name,
+          phone: selectedAddress.value.phone,
+          address: selectedAddress.value.address,
+          detail: selectedAddress.value.detail,
+          tag: selectedAddress.value.tag,
+        }
+      : undefined,
+    lines: group.lines.map((line) => ({ menuItemId: line.item.id, optionIds: line.optionIds, quantity: line.quantity })),
+  };
+}
 
-const canSubmit = computed(() => cart.lines.length > 0 && !!selectedAddress.value);
+const requests = computed(() => checkoutGroups.value.map((group) => requestForGroup(group)));
+
+const canSubmit = computed(() => checkoutGroups.value.length > 0 && !!selectedAddress.value);
 
 async function submit() {
   if (!canSubmit.value || submitting.value) return;
   if (!auth.accountId) {
+    savePendingOrder(requests.value);
     auth.requestLogin();
-    uni.showToast({ title: '请先登录后使用虚拟余额下单', icon: 'none' });
+    uni.showToast({ title: '登录后将自动提交订单', icon: 'none' });
     setTimeout(() => uni.switchTab({ url: '/pages/profile/index' }), 350);
     return;
   }
@@ -48,14 +73,33 @@ async function submit() {
     return;
   }
   submitting.value = true;
+  const created = [];
+  const completedStoreIds: string[] = [];
   try {
-    const order = await orderService.create(request.value);
-    orders.save(order);
-    wallet.recordPayment(order.totalCents);
-    cart.clear();
-    uni.redirectTo({ url: `/pages/delivery/index?id=${order.id}` });
+    for (const group of checkoutGroups.value) {
+      const item = requestForGroup(group);
+      const order = await orderService.create(item);
+      created.push(order);
+      completedStoreIds.push(group.store.id);
+      orders.save(order);
+    }
+    wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
+    completedStoreIds.forEach((storeId) => cart.clear(storeId));
+    if (created.length === 1) uni.redirectTo({ url: `/pages/delivery/index?id=${created[0].id}` });
+    else {
+      uni.showToast({ title: `已生成${created.length}个订单`, icon: 'none' });
+      setTimeout(() => uni.switchTab({ url: '/pages/orders/index' }), 500);
+    }
     void wallet.load().catch(() => undefined);
   } catch (error) {
+    if (created.length) {
+      wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
+      completedStoreIds.forEach((storeId) => cart.clear(storeId));
+      void wallet.load().catch(() => undefined);
+      uni.showToast({ title: `已生成${created.length}个订单，剩余订单未完成`, icon: 'none' });
+      setTimeout(() => uni.switchTab({ url: '/pages/orders/index' }), 700);
+      return;
+    }
     const insufficient = error instanceof ApiRequestError && error.code === 'INSUFFICIENT_BALANCE';
     uni.showToast({ title: insufficient ? '余额不足' : '订单创建失败，请重试', icon: 'none' });
   } finally { submitting.value = false; }
@@ -84,18 +128,25 @@ async function submit() {
     </view>
 
     <!-- 订单商品 -->
-    <view class="card order-card">
-      <text class="heading">{{ cart.store?.name }}</text>
-      <view v-for="line in cart.lines" :key="line.key" class="line">
+    <view v-for="group in checkoutGroups" :key="group.store.id" class="card order-card">
+      <text class="heading">{{ group.store.name }}</text>
+      <view v-for="line in group.lines" :key="line.key" class="line">
         <view class="line-left">
           <text class="line-name">{{ line.item.name }} × {{ line.quantity }}</text>
-          <text class="line-opts">{{ line.optionNames.join('、') }}</text>
+          <text class="line-opts">{{ line.optionNames.join('、') || '默认规格' }}</text>
         </view>
         <text class="line-price">¥{{ (line.totalCents / 100).toFixed(2) }}</text>
       </view>
-      <view class="line fee"><text>配送费</text><text>¥{{ ((cart.store?.deliveryFeeCents || 0) / 100).toFixed(2) }}</text></view>
-      <view class="line fee"><text>打包费</text><text>¥{{ ((cart.store?.packingFeeCents || 0) / 100).toFixed(2) }}</text></view>
-      <view class="line total"><text>合计</text><text class="total-price">¥{{ (cart.totalCents / 100).toFixed(2) }}</text></view>
+      <view class="line fee"><text>配送费</text><text>¥{{ (group.store.deliveryFeeCents / 100).toFixed(2) }}</text></view>
+      <view class="line fee"><text>打包费</text><text>¥{{ (group.store.packingFeeCents / 100).toFixed(2) }}</text></view>
+      <view class="line total"><text>本店小计</text><text class="total-price">¥{{ (group.totalCents / 100).toFixed(2) }}</text></view>
+    </view>
+
+    <view v-if="checkoutGroups.length > 1" class="card merge-card">
+      <view class="line total merge-total">
+        <text>合并支付</text>
+        <text class="total-price">¥{{ (checkoutTotalCents / 100).toFixed(2) }}</text>
+      </view>
     </view>
 
     <!-- 提交按钮 -->

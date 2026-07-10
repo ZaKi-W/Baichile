@@ -10,9 +10,14 @@ describe('CartSheet', () => {
     expect(source).toContain('v-for="line in lines"');
     expect(source).toContain('{{ line.item.name }}');
     expect(source).toContain("line.optionNames.join('、')");
-    expect(source).toContain('× {{ line.quantity }}');
+    expect(source).toContain('{{ line.quantity }}');
     expect(source).toContain('(line.totalCents / 100).toFixed(2)');
-    expect(source).toContain("defineEmits<{ close: []; remove: [key: string] }>()");
+    expect(source).toContain('increase: [key: string]');
+    expect(source).toContain('decrease: [key: string]');
+    expect(source).toContain('clear: []');
+    expect(source).toContain('checkout: []');
     expect(source).toContain("@tap=\"$emit('remove', line.key)\"");
+    expect(source).toContain('清空');
+    expect(source).toContain('checkoutText');
   });
 });

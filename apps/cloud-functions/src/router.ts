@@ -86,7 +86,8 @@ export class BaichileRouter {
       return this.services.orders.list(identity.visitorId, identity.accountId);
     }
     if (request.method === 'GET' && segments[1] === 'orders' && segments[2]) {
-      return this.services.orders.find(decodeURIComponent(segments[2]));
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization);
+      return this.services.orders.find(decodeURIComponent(segments[2]), identity);
     }
 
     if (request.method === 'GET' && path === '/v1/accounts/me/savings') {
@@ -104,8 +105,6 @@ export class BaichileRouter {
       return this.services.wallet.listTransactions(accountId);
     }
     if (request.method === 'POST' && path === '/v1/accounts/me/check-in') return this.services.wallet.checkIn(await this.requireAccount(request.authorization));
-    if (request.method === 'POST' && path === '/v1/accounts/me/test-credit') return this.services.wallet.testCredit(await this.requireAccount(request.authorization));
-
     if (request.method === 'POST' && path === '/v1/shares') return this.services.shares.create(await this.requireAccount(request.authorization), request.data as any);
     if (request.method === 'GET' && segments[1] === 'shares' && segments[2]) return this.services.shares.landing(decodeURIComponent(segments[2]));
     if (request.method === 'POST' && segments[1] === 'shares' && segments[2] && segments[3] === 'initiated-reward') {

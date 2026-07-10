@@ -115,7 +115,10 @@ export interface VirtualOrderDoc {
   accountId?: string | null;
   status: string;
   storeId: string;
+  storeName?: string | null;
   destinationId: string;
+  deliveryAddress?: unknown;
+  paymentMethod?: string | null;
   startedAt: string;
   durationMs: number;
   seed: string;

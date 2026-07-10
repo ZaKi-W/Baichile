@@ -8,6 +8,8 @@ describe('store page cart interaction', () => {
     expect(source).toContain("import CartSheet from '../../components/CartSheet.vue'");
     expect(source).toContain('const isCartOpen = ref(false)');
     expect(source).toContain('const hasCartItems = computed(() => cart.count > 0)');
+    expect(source).toContain('cart.selectStore(store.value)');
+    expect(source).toContain('/pages/checkout/index?storeId=');
     expect(source).toContain('if (hasCartItems.value) isCartOpen.value = true');
     expect(source).toContain('class="cart-bar" :class="{ disabled: !hasCartItems }" @tap="openCart"');
     expect(source).toContain('@tap.stop="checkout"');
@@ -16,6 +18,7 @@ describe('store page cart interaction', () => {
     expect(source).toContain('@close="isCartOpen = false"');
     expect(source).toContain('@remove="removeFromCart"');
     expect(source).toContain('cart.remove(key)');
+    expect(source).toContain('cart.clear(store.value.id)');
   });
 
   it('renders the complete merchant design structure around existing behavior', () => {
@@ -23,13 +26,14 @@ describe('store page cart interaction', () => {
 
     expect(source).toContain('const menuGroups = computed');
     expect(source).toContain('class="merchant-hero"');
-    expect(source).toContain('v-if="store.coverUrl"');
+    expect(source).toContain("imageVisible('store-cover', store.coverUrl)");
     expect(source).toContain('class="merchant-cover"');
     expect(source).toContain('class="service-strip"');
     expect(source).toContain('class="menu-layout"');
     expect(source).toContain('class="category-sidebar"');
     expect(source).toContain('class="product-card"');
     expect(source).toContain("item.specGroups.length ? '选规格' : '＋'");
+    expect(source).toContain('@error="markImageFailed(item.id)"');
   });
 
   it('shows each menu item monthly sales', () => {
