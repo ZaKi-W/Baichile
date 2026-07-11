@@ -12,6 +12,6 @@ export const catalogService = {
     return requestApi<StoreDetail[]>('GET', `/v1/catalog/search?q=${encodeURIComponent(query)}`, '');
   },
   async byCategory(categoryId: string): Promise<StoreDetail[]> {
-    return requestApi<StoreDetail[]>('GET', `/v1/catalog/stores?categoryId=${categoryId}`, '');
+    return requestApi<StoreDetail[]>('GET', `/v1/catalog/stores?categoryId=${encodeURIComponent(categoryId)}`, '');
   },
 };
