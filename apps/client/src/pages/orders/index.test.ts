@@ -6,6 +6,9 @@ describe('orders card presentation', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
     expect(source).toContain('storeThumb(order)');
+    expect(source).toContain('storeCovers.value[order.storeId]');
+    expect(source).toContain('catalogService.home()');
+    expect(source).not.toContain("order.lines.find((line) => line.imageUrl)");
     expect(source).toContain('storeName(order)');
     expect(source).toContain('dishSummary(order)');
     expect(source).toContain('实付');

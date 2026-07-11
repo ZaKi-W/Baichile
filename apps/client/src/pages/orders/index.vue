@@ -3,12 +3,14 @@ import { ref } from 'vue';
 import { onHide, onShow } from '@dcloudio/uni-app';
 import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
+import { catalogService } from '../../services/catalog';
 import { getOrderStep } from '../../utils/order-status';
 import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
 import type { VirtualOrder } from '@baichile/api-contract';
 const auth = useAuthStore();
 const orders = useOrderStore();
 const now = ref(Date.now());
+const storeCovers = ref<Record<string, string>>({});
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 const openOrder = (id: string) => uni.navigateTo({ url: `/pages/delivery/index?id=${id}` });
 const openStore = (storeId: string) => uni.navigateTo({ url: `/pages/store/index?id=${storeId}` });
@@ -34,7 +36,19 @@ const isCompleted = (startedAt: string, durationMs: number) =>
 const isFailed = (order: VirtualOrder) =>
   order.status === 'failed' || Boolean(order.incident && getDeliveryIncidentPhase(order.incident, now.value) === 'failed');
 const storeName = (order: VirtualOrder) => order.storeName || '白吃了订单';
-const storeThumb = (order: VirtualOrder) => order.lines.find((line) => line.imageUrl)?.imageUrl || '';
+const storeThumb = (order: VirtualOrder) => storeCovers.value[order.storeId] || '';
+async function loadStoreCovers() {
+  try {
+    const home = await catalogService.home();
+    storeCovers.value = Object.fromEntries(
+      [...home.featured, ...home.stores]
+        .filter((store) => Boolean(store.coverUrl))
+        .map((store) => [store.id, store.coverUrl as string]),
+    );
+  } catch {
+    storeCovers.value = {};
+  }
+}
 const dishSummary = (order: VirtualOrder) => order.lines
   .map((line) => `${line.name}${line.optionNames.length ? `（${line.optionNames.join('、')}）` : ''} ×${line.quantity}`)
   .join('、');
@@ -48,6 +62,7 @@ const formatOrderTime = (value: string) => {
 onShow(() => {
   now.value = Date.now();
   void orders.load();
+  void loadStoreCovers();
   clearInterval(statusTimer);
   statusTimer = setInterval(() => { now.value = Date.now(); }, 1000);
 });

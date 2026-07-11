@@ -9,9 +9,13 @@ describe('CartSheet', () => {
     expect(source).toContain('class="sheet" @tap.stop');
     expect(source).toContain('v-for="line in lines"');
     expect(source).toContain('{{ line.item.name }}');
-    expect(source).toContain("line.optionNames.join('、')");
+    expect(source).toContain(':src="line.item.imageUrl"');
+    expect(source).toContain('imageVisible(line)');
+    expect(source).toContain('v-for="optionName in line.optionNames"');
+    expect(source).toContain('unitPriceCents(line)');
+    expect(source).toContain('formatMoney(line.totalCents)');
+    expect(source).toContain('小计');
     expect(source).toContain('{{ line.quantity }}');
-    expect(source).toContain('(line.totalCents / 100).toFixed(2)');
     expect(source).toContain('increase: [key: string]');
     expect(source).toContain('decrease: [key: string]');
     expect(source).toContain('clear: []');
