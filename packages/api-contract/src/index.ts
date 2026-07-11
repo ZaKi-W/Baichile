@@ -62,9 +62,21 @@ export interface StoreDetail extends StoreSummary {
   subCategories?: MenuSubCategory[];
 }
 
+export interface FlashSaleItem {
+  menuItemId: string;
+  storeId: string;
+  subCategoryId?: string;
+  storeName: string;
+  name: string;
+  imageUrl?: string;
+  originalPriceCents: number;
+  flashPriceCents: number;
+}
+
 export interface HomeResponse {
   categories: Category[];
   featured: StoreSummary[];
+  flashSaleItems: FlashSaleItem[];
   stores: StoreSummary[];
   nextCursor: string | null;
 }

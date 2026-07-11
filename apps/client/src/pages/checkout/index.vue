@@ -138,7 +138,6 @@ async function submit() {
         <text class="line-price">¥{{ (line.totalCents / 100).toFixed(2) }}</text>
       </view>
       <view class="line fee"><text>配送费</text><text>¥{{ (group.store.deliveryFeeCents / 100).toFixed(2) }}</text></view>
-      <view class="line fee"><text>打包费</text><text>¥{{ (group.store.packingFeeCents / 100).toFixed(2) }}</text></view>
       <view class="line total"><text>本店小计</text><text class="total-price">¥{{ (group.totalCents / 100).toFixed(2) }}</text></view>
     </view>
 

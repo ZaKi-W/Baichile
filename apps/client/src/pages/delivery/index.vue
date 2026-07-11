@@ -518,7 +518,6 @@ async function prepareTimelineShare() {
           </view>
         </view>
         <view class="fee-line"><text>配送费</text><text>{{ formatMoney(order.deliveryFeeCents) }}</text></view>
-        <view class="fee-line"><text>打包费</text><text>{{ formatMoney(order.packingFeeCents) }}</text></view>
         <view class="total-line"><text>实付</text><text>{{ formatMoney(order.totalCents) }}</text></view>
       </view>
 

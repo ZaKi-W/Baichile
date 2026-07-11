@@ -21,6 +21,16 @@ let isProgrammatic = false;
 onLoad(async (options) => {
   store.value = await catalogService.store(options?.id || '');
   cart.selectStore(store.value);
+  const flashSaleItem = options?.flashSaleItemId
+    ? store.value.menu.find((item) => item.id === options.flashSaleItemId)
+    : undefined;
+  if (flashSaleItem?.subCategoryId) {
+    activeCategoryId.value = flashSaleItem.subCategoryId;
+    scrollAnchor.value = `cat-${flashSaleItem.subCategoryId}`;
+  }
+  if (flashSaleItem && await cart.add(store.value, flashSaleItem, flashSaleOptionIds(flashSaleItem), 1)) {
+    uni.showToast({ title: '已抢到，已加入购物车', icon: 'none' });
+  }
   await nextTick();
   setTimeout(measureSections, 200);
 });
@@ -53,6 +63,17 @@ const imageVisible = (id: string, url?: string) => Boolean(url && !failedImages.
 const markImageFailed = (id: string) => {
   if (!failedImages.value.includes(id)) failedImages.value = [...failedImages.value, id];
 };
+const requiresSpecSelection = (item: MenuItem) => item.specGroups.some((group) => group.options.length > 1);
+const directOptionIds = (item: MenuItem) => item.specGroups.flatMap((group) => {
+  const defaults = group.options.filter((option) => option.isDefault).map((option) => option.id);
+  if (defaults.length) return defaults;
+  return group.options.length === 1 ? [group.options[0].id] : [];
+});
+const flashSaleOptionIds = (item: MenuItem) => item.specGroups.flatMap((group) => {
+  const defaults = group.options.filter((option) => option.isDefault).map((option) => option.id);
+  if (defaults.length) return defaults;
+  return group.required && group.options[0] ? [group.options[0].id] : [];
+});
 
 function measureSections() {
   uni.createSelectorQuery()
@@ -96,6 +117,16 @@ async function add(optionIds: string[], quantity: number) {
   if (!store.value || !selected.value) return;
   if (await cart.add(store.value, selected.value, optionIds, quantity)) {
     selected.value = null;
+    uni.showToast({ title: '已加入购物车', icon: 'none' });
+  }
+}
+async function addItem(item: MenuItem) {
+  if (!store.value) return;
+  if (requiresSpecSelection(item)) {
+    selected.value = item;
+    return;
+  }
+  if (await cart.add(store.value, item, directOptionIds(item), 1)) {
     uni.showToast({ title: '已加入购物车', icon: 'none' });
   }
 }
@@ -203,8 +234,8 @@ const checkout = () => {
                   <text class="price-symbol">¥</text>{{ (item.basePriceCents / 100).toFixed(2) }}
                   <text class="price-from">起</text>
                 </view>
-                <button class="product-add" :class="{ 'has-spec': item.specGroups.length }" @tap="selected = item">
-                  {{ item.specGroups.length ? '选规格' : '＋' }}
+                <button class="product-add" :class="{ 'has-spec': requiresSpecSelection(item) }" @tap="addItem(item)">
+                  {{ requiresSpecSelection(item) ? '选规格' : '＋' }}
                 </button>
               </view>
             </view>

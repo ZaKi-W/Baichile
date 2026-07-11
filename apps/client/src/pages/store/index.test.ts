@@ -32,13 +32,33 @@ describe('store page cart interaction', () => {
     expect(source).toContain('class="menu-layout"');
     expect(source).toContain('class="category-sidebar"');
     expect(source).toContain('class="product-card"');
-    expect(source).toContain("item.specGroups.length ? '选规格' : '＋'");
+    expect(source).toContain("requiresSpecSelection(item) ? '选规格' : '＋'");
     expect(source).toContain('@error="markImageFailed(item.id)"');
+  });
+
+  it('adds dishes with a single available specification directly', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('const requiresSpecSelection = (item: MenuItem)');
+    expect(source).toContain('return group.options.length === 1 ? [group.options[0].id] : []');
+    expect(source).toContain('@tap="addItem(item)"');
+    expect(source).toContain('cart.add(store.value, item, directOptionIds(item), 1)');
   });
 
   it('shows each menu item monthly sales', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
     expect(source).toContain('月售 {{ item.monthlySales }}');
+  });
+
+  it('positions and immediately adds a flash-sale dish when opened from home', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('options?.flashSaleItemId');
+    expect(source).toContain('activeCategoryId.value = flashSaleItem.subCategoryId');
+    expect(source).toContain('scrollAnchor.value = `cat-${flashSaleItem.subCategoryId}`');
+    expect(source).toContain('const flashSaleOptionIds = (item: MenuItem)');
+    expect(source).toContain('cart.add(store.value, flashSaleItem, flashSaleOptionIds(flashSaleItem), 1)');
+    expect(source).toContain("uni.showToast({ title: '已抢到，已加入购物车', icon: 'none' })");
   });
 });

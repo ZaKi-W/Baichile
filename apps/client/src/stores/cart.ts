@@ -35,7 +35,7 @@ const makeGroup = (store: StoreDetail, lines: CartLine[]): CartStoreGroup => {
     lines,
     count,
     itemsTotalCents,
-    totalCents: itemsTotalCents + store.deliveryFeeCents + store.packingFeeCents,
+    totalCents: itemsTotalCents + store.deliveryFeeCents,
   };
 };
 
@@ -64,8 +64,8 @@ export const useCartStore = defineStore('cart', {
       return this.groups.reduce((sum, group) => sum + group.itemsTotalCents, 0);
     },
     totalCents(): number {
-      if (!this.store) return 0;
-      return this.itemsTotalCents + this.store.deliveryFeeCents + this.store.packingFeeCents;
+      if (!this.store || !this.lines.length) return 0;
+      return this.itemsTotalCents + this.store.deliveryFeeCents;
     },
     allTotalCents(): number {
       return this.groups.reduce((sum, group) => sum + group.totalCents, 0);

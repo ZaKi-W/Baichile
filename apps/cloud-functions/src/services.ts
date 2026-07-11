@@ -4,6 +4,7 @@ import type {
   AccountSession,
   Address,
   AdministrativeArea,
+  FlashSaleItem,
   HomeResponse,
   MenuItem,
   OrderDeliveryAddressSnapshot,
@@ -292,18 +293,43 @@ export class CatalogService {
   constructor(private readonly db: Database) {}
 
   async home(): Promise<HomeResponse> {
-    const [categories, storeRows] = await Promise.all([
+    const [categories, storeRows, menuItems] = await Promise.all([
       listAll(this.db.collection<CategoryDoc>(collections.categories), { orderBy: [['sortOrder', 'asc']] }),
       listAll(this.db.collection<StoreDoc>(collections.stores), {
         where: { status: 'active' },
         orderBy: [['sortOrder', 'asc']],
       }),
+      listAll(this.db.collection<MenuItemDoc>(collections.menuItems), {
+        where: { status: 'active' },
+        orderBy: [['sortOrder', 'asc']],
+      }),
     ]);
-    const imageUrls = await resolveCloudFileUrls(storeRows.map((row) => row.coverUrl));
+    const imageUrls = await resolveCloudFileUrls([
+      ...storeRows.map((row) => row.coverUrl),
+      ...menuItems.map((item) => item.imageUrl),
+    ]);
     const stores = storeRows.map((row) => toStoreSummary(row, imageUrls));
+    const storesById = new Map(storeRows.map((store) => [store.id, store]));
+    const flashSaleItems: FlashSaleItem[] = menuItems
+      .filter((item) => storesById.has(item.storeId) && Boolean(item.imageUrl))
+      .slice(0, 3)
+      .map((item) => {
+        const store = storesById.get(item.storeId)!;
+        return {
+          menuItemId: item.id,
+          storeId: item.storeId,
+          subCategoryId: item.subCategoryId ?? undefined,
+          storeName: store.name,
+          name: item.name,
+          imageUrl: resolveImageUrl(item.imageUrl, imageUrls),
+          originalPriceCents: item.basePriceCents,
+          flashPriceCents: Math.max(100, Math.floor(item.basePriceCents * 0.78 / 100) * 100),
+        };
+      });
     return {
       categories: categories.map(({ id, name, icon }) => ({ id, name, icon })),
       featured: stores.slice(0, 3),
+      flashSaleItems,
       stores,
       nextCursor: null,
     };
@@ -485,8 +511,8 @@ export class OrderService {
       lines,
       itemsTotalCents,
       deliveryFeeCents: store.deliveryFeeCents,
-      packingFeeCents: store.packingFeeCents,
-      totalCents: calculateOrderTotal(lines.map((line) => line.totalCents), store.deliveryFeeCents, store.packingFeeCents),
+      packingFeeCents: 0,
+      totalCents: calculateOrderTotal(lines.map((line) => line.totalCents), store.deliveryFeeCents),
       itemsTotalCaloriesKcal,
     };
   }

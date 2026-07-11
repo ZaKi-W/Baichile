@@ -57,6 +57,26 @@ function activeMenuItem(overrides: Partial<MenuItemDoc> = {}): MenuItemDoc {
   };
 }
 
+describe('home catalog', () => {
+  it('returns three stable image-backed flash sale items with a display discount', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await Promise.all([1, 2, 3, 4].map((sortOrder) => db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem({
+      _id: `dish_${sortOrder}`,
+      id: `dish_${sortOrder}`,
+      name: `招牌饭 ${sortOrder}`,
+      sortOrder,
+      basePriceCents: 1200 + sortOrder * 100,
+    }))));
+
+    const home = await new BaichileCloudServices(db).catalog.home();
+
+    expect(home.flashSaleItems).toHaveLength(3);
+    expect(home.flashSaleItems.map((item) => item.menuItemId)).toEqual(['dish_1', 'dish_2', 'dish_3']);
+    expect(home.flashSaleItems.every((item) => item.imageUrl && item.flashPriceCents < item.originalPriceCents)).toBe(true);
+  });
+});
+
 describe('order detail snapshots', () => {
   it('returns and stores store, address, payment, and created time snapshots', async () => {
     const db = new MemoryDatabase();
@@ -90,6 +110,8 @@ describe('order detail snapshots', () => {
     });
     expect(order.paymentMethod).toBe('virtual_balance');
     expect(order.createdAt).toBe(order.startedAt);
+    expect(order.packingFeeCents).toBe(0);
+    expect(order.totalCents).toBe(2600);
 
     const saved = await db.collection<VirtualOrderDoc>(collections.virtualOrders).get(order.id);
     expect(saved?.storeName).toBe('白吃小馆');

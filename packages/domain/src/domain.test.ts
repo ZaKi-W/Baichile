@@ -14,8 +14,8 @@ describe('order pricing', () => {
     expect(calculateLineTotal(1800, [200, 300], 2)).toBe(4600);
   });
 
-  it('adds delivery and packing fees once', () => {
-    expect(calculateOrderTotal([4600, 1200], 300, 100)).toBe(6200);
+  it('adds only the delivery fee to dish totals', () => {
+    expect(calculateOrderTotal([4600, 1200], 300)).toBe(6100);
   });
 });
 

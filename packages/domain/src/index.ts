@@ -27,9 +27,8 @@ export function calculateLineTotal(
 export function calculateOrderTotal(
   lineTotals: number[],
   deliveryFeeCents: number,
-  packingFeeCents: number,
 ): number {
-  return lineTotals.reduce((sum, total) => sum + total, 0) + deliveryFeeCents + packingFeeCents;
+  return lineTotals.reduce((sum, total) => sum + total, 0) + deliveryFeeCents;
 }
 
 export function calculateLineCalories(
