@@ -34,7 +34,7 @@ function addNew() {
 <template>
   <view class="page">
     <view v-if="!addresses.length" class="empty">
-      <text class="empty-icon">📍</text>
+      <view class="empty-icon"><image src="/static/icons/location.svg" mode="aspectFit" /></view>
       <text class="empty-text">还没有收货地址</text>
     </view>
 
@@ -67,7 +67,7 @@ function addNew() {
   min-height: 100vh;
   padding: 24rpx 28rpx calc(160rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background: #f5f5f3;
+  background: #f6f6f6;
 }
 .empty {
   display: flex;
@@ -75,7 +75,8 @@ function addNew() {
   align-items: center;
   padding: 120rpx 0;
 }
-.empty-icon { font-size: 80rpx; }
+.empty-icon { width: 112rpx; height: 112rpx; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ffd400; }
+.empty-icon image { width: 58rpx; height: 58rpx; }
 .empty-text { margin-top: 20rpx; color: #999; font-size: 28rpx; }
 
 .addr-card {
@@ -84,13 +85,13 @@ function addNew() {
   gap: 16rpx;
   margin-bottom: 20rpx;
   padding: 28rpx 24rpx;
+  border: 1rpx solid #ececec;
   border-radius: 24rpx;
   background: #fff;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, .04);
 }
 .addr-main { flex: 1; min-width: 0; }
 .addr-top { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; }
-.addr-name { font-size: 30rpx; font-weight: 800; color: #151515; }
+.addr-name { font-size: 30rpx; font-weight: 800; color: #171717; }
 .addr-phone { font-size: 26rpx; color: #666; }
 .addr-tag {
   font-size: 20rpx;
@@ -100,7 +101,7 @@ function addNew() {
   color: #888;
   background: #f0f0ee;
 }
-.addr-tag.default { color: #ff5b38; background: #fff0ec; }
+.addr-tag.default { color: #171717; background: #ffd400; }
 .addr-text {
   display: block;
   margin-top: 10rpx;
@@ -120,7 +121,7 @@ function addNew() {
   padding: 8rpx 16rpx;
   border-radius: 16rpx;
   color: #999;
-  background: #f5f5f3;
+  background: #f6f6f6;
   font-size: 22rpx;
 }
 
@@ -137,9 +138,9 @@ function addNew() {
   width: 100%;
   height: 88rpx;
   margin: 0;
-  border-radius: 44rpx;
+  border-radius: 22rpx;
   color: #171717;
-  background: #dff75a;
+  background: #ffd400;
   font-size: 30rpx;
   font-weight: 800;
   line-height: 88rpx;

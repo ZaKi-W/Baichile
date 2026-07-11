@@ -253,11 +253,11 @@ onLoad(() => {
     <view class="form-section location-section">
       <view class="location-actions">
         <view class="action-btn gps" :class="{ loading: locating }" @tap="locateMe">
-          <text class="action-icon">📍</text>
+          <image class="action-icon" src="/static/icons/location.svg" mode="aspectFit" />
           <text class="action-text">{{ locating ? '定位中...' : '获取当前位置' }}</text>
         </view>
         <view class="action-btn map" @tap="pickOnMap">
-          <text class="action-icon">🗺️</text>
+          <image class="action-icon" src="/static/marker-store.png" mode="aspectFit" />
           <text class="action-text">地图选点</text>
         </view>
       </view>
@@ -346,7 +346,7 @@ onLoad(() => {
       </view>
       <view class="field switch-field">
         <text class="label">设为默认地址</text>
-        <switch :checked="isDefault" @change="setDefaultAddress" color="#dff75a" />
+        <switch :checked="isDefault" @change="setDefaultAddress" color="#ffd400" />
       </view>
     </view>
 
@@ -362,7 +362,7 @@ onLoad(() => {
   min-height: 100vh;
   padding: 24rpx 28rpx calc(160rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background: #f5f5f3;
+  background: #f6f6f6;
 }
 
 /* ── 选地址区域 ── */
@@ -381,23 +381,25 @@ onLoad(() => {
   justify-content: center;
   gap: 10rpx;
   padding: 20rpx 0;
-  border-radius: 16rpx;
+  border: 1rpx solid #ececec;
+  border-radius: 18rpx;
   font-size: 26rpx;
   font-weight: 600;
 }
 .action-btn.gps {
-  color: #1a73e8;
-  background: #e8f0fe;
+  color: #171717;
+  background: #fff7cf;
 }
 .action-btn.gps.loading {
   opacity: 0.6;
 }
 .action-btn.map {
-  color: #ff5b38;
-  background: #fff0ec;
+  color: #171717;
+  background: #fff;
 }
 .action-icon {
-  font-size: 28rpx;
+  width: 32rpx;
+  height: 32rpx;
 }
 .action-text {
   font-size: 26rpx;
@@ -409,13 +411,14 @@ onLoad(() => {
   align-items: center;
   gap: 12rpx;
   padding: 16rpx 20rpx;
-  border-radius: 16rpx;
-  background: #f5f5f3;
+  border: 2rpx solid #171717;
+  border-radius: 24rpx;
+  background: #fff;
 }
 .search-input {
   flex: 1;
   font-size: 28rpx;
-  color: #151515;
+  color: #171717;
 }
 .clear-btn {
   width: 36rpx;
@@ -477,7 +480,7 @@ onLoad(() => {
   display: block;
   font-size: 28rpx;
   font-weight: 600;
-  color: #151515;
+  color: #171717;
 }
 .place-addr {
   display: block;
@@ -490,6 +493,7 @@ onLoad(() => {
 .form-section {
   margin-bottom: 24rpx;
   padding: 8rpx 24rpx;
+  border: 1rpx solid #ececec;
   border-radius: 24rpx;
   background: #fff;
 }
@@ -511,7 +515,7 @@ onLoad(() => {
   flex: 1;
   min-width: 0;
   font-size: 28rpx;
-  color: #151515;
+  color: #171717;
 }
 .phone-control {
   display: flex;
@@ -530,7 +534,7 @@ onLoad(() => {
   padding: 0 20rpx;
   border-radius: 28rpx;
   color: #171717;
-  background: #dff75a;
+  background: #ffd400;
   font-size: 22rpx;
   font-weight: 700;
   line-height: 56rpx;
@@ -546,11 +550,11 @@ onLoad(() => {
   font-size: 24rpx;
   font-weight: 600;
   color: #888;
-  background: #f5f5f3;
+  background: #f6f6f6;
 }
 .tag-btn.active {
-  color: #ff5b38;
-  background: #fff0ec;
+  color: #171717;
+  background: #ffd400;
   font-weight: 800;
 }
 
@@ -571,9 +575,9 @@ onLoad(() => {
   width: 100%;
   height: 88rpx;
   margin: 0;
-  border-radius: 44rpx;
+  border-radius: 22rpx;
   color: #171717;
-  background: #dff75a;
+  background: #ffd400;
   font-size: 30rpx;
   font-weight: 800;
   line-height: 88rpx;

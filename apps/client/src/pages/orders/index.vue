@@ -100,14 +100,14 @@ onHide(() => clearInterval(statusTimer));
   min-height: 100vh;
   padding: 24rpx 24rpx 0;
   box-sizing: border-box;
-  background: #f5f5f3;
+  background: #f6f6f6;
 }
 .order-card {
   margin-bottom: 22rpx;
   overflow: hidden;
+  border: 1rpx solid #ececec;
   border-radius: 24rpx;
   background: #fff;
-  box-shadow: 0 4rpx 18rpx rgba(0, 0, 0, 0.04);
 }
 .order-main {
   padding: 26rpx 24rpx 22rpx;
@@ -153,12 +153,12 @@ onHide(() => clearInterval(statusTimer));
 }
 .status-text {
   flex-shrink: 0;
-  color: #ff5b38;
+  color: #f04426;
   font-size: 25rpx;
   font-weight: 800;
 }
 .status-text.completed {
-  color: #6f7e22;
+  color: #259b58;
 }
 .status-text.failed {
   color: #999;
@@ -189,7 +189,7 @@ onHide(() => clearInterval(statusTimer));
 .incident-story {
   display: block;
   margin-top: 12rpx;
-  color: #ff5b38;
+  color: #f04426;
   font-size: 24rpx;
   line-height: 1.45;
 }
@@ -205,7 +205,7 @@ onHide(() => clearInterval(statusTimer));
   height: 60rpx;
   margin: 0;
   padding: 0 24rpx;
-  border-radius: 999rpx;
+  border-radius: 18rpx;
   font-size: 25rpx;
   font-weight: 800;
   line-height: 60rpx;
@@ -215,7 +215,7 @@ onHide(() => clearInterval(statusTimer));
 }
 .primary-action {
   color: #1f1f1f;
-  background: #dff75a;
+  background: #ffd400;
 }
 .ghost-action {
   color: #666;

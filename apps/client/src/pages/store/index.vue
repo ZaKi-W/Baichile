@@ -275,15 +275,15 @@ const checkout = () => {
 
 <style scoped>
 .store-page {
-  --ink: #151515;
+  --ink: #171717;
   --muted: #83837f;
   --line: rgba(20, 20, 20, .08);
-  --lime: #dff75a;
-  --accent: #ff5b38;
+  --lime: #ffd400;
+  --accent: #f04426;
   min-height: 100vh;
   padding: 28rpx 28rpx calc(196rpx + env(safe-area-inset-bottom));
   overflow: hidden;
-  background: #f7f7f5;
+  background: #f6f6f6;
   color: var(--ink);
 }
 
@@ -293,12 +293,9 @@ const checkout = () => {
   padding: max(24rpx, env(safe-area-inset-top)) 30rpx 28rpx;
   overflow: hidden;
   box-sizing: border-box;
-  border-radius: 52rpx;
+  border-radius: 32rpx;
   color: #fff;
-  background:
-    radial-gradient(circle at 81% 18%, rgba(223, 247, 90, .98) 0 10%, transparent 10.5%),
-    radial-gradient(circle at 79% 21%, rgba(223, 247, 90, .2) 0 25%, transparent 25.5%),
-    linear-gradient(139deg, #151515 3%, #263631 58%, #2f463b 100%);
+  background: #171717;
   box-shadow: 0 30rpx 76rpx rgba(21, 21, 18, .16);
 }
 .merchant-hero::before {
@@ -314,7 +311,7 @@ const checkout = () => {
   box-shadow: inset 0 0 0 60rpx rgba(255, 255, 255, .025);
 }
 .merchant-cover { position: absolute; inset: 0; width: 100%; height: 100%; }
-.merchant-cover-shade { position: absolute; inset: 0; background: linear-gradient(110deg, rgba(10, 16, 13, .92), rgba(10, 16, 13, .62) 60%, rgba(10, 16, 13, .34)); }
+.merchant-cover-shade { position: absolute; inset: 0; background: linear-gradient(110deg, rgba(10, 10, 10, .94), rgba(10, 10, 10, .62) 60%, rgba(10, 10, 10, .30)); }
 .hero-decoration {
   position: absolute;
   right: 18rpx;
@@ -343,8 +340,8 @@ const checkout = () => {
   justify-content: center;
   border: 2rpx solid rgba(255, 255, 255, .5);
   border-radius: 40rpx;
-  color: #19291f;
-  background: linear-gradient(145deg, #f3ffbe, var(--lime));
+  color: #171717;
+  background: #ffd400;
   box-shadow: 0 22rpx 40rpx rgba(0, 0, 0, .18), inset 0 2rpx 0 rgba(255, 255, 255, .72);
   font-size: 54rpx;
   font-weight: 900;

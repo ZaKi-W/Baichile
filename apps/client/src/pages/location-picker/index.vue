@@ -7,8 +7,11 @@ import { suggestPlaces } from '../../services/location';
 import { useLocationStore } from '../../stores/location';
 
 const location = useLocationStore();
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight ?? 20;
-const safeTopStyle = { paddingTop: `${statusBarHeight + 14}px` };
+const systemInfo = uni.getSystemInfoSync();
+const menuButtonRect = uni.getMenuButtonBoundingClientRect();
+const safeTopStyle = {
+  paddingTop: `${Math.max((systemInfo.statusBarHeight ?? 20) + 14, menuButtonRect.bottom + 10)}px`,
+};
 
 /* ── search ── */
 const keyword = ref('');
@@ -238,17 +241,17 @@ if (location.area) {
 </template>
 
 <style scoped>
-.picker-page { height: 100vh; display: flex; flex-direction: column; background: #f7f7f5; color: #141414; }
+.picker-page { height: 100vh; display: flex; flex-direction: column; background: #f6f6f6; color: #171717; }
 
-.picker-header { background: #fff; border-bottom: 1rpx solid rgba(20, 20, 20, .06); padding: 16rpx 32rpx 24rpx; }
-.search-bar { display: flex; align-items: center; gap: 16rpx; height: 80rpx; padding: 0 24rpx; border-radius: 999rpx; background: #f2f2f0; }
+.picker-header { background: #ffd400; border-bottom: 1rpx solid rgba(20, 20, 20, .06); padding: 16rpx 32rpx 24rpx; }
+.search-bar { display: flex; align-items: center; gap: 16rpx; height: 80rpx; padding: 0 24rpx; border: 3rpx solid #171717; border-radius: 40rpx; background: #fff; box-sizing: border-box; }
 .search-input { flex: 1; height: 80rpx; font-size: 30rpx; font-weight: 600; }
 .clear-btn { width: 40rpx; height: 40rpx; display: flex; align-items: center; justify-content: center; color: #999; font-size: 24rpx; }
 
 .action-row { padding: 20rpx 32rpx 0; }
 .locate-action {
   display: flex; align-items: center; gap: 16rpx; width: 100%;
-  padding: 28rpx 24rpx; border-radius: 24rpx; background: #fff;
+  padding: 28rpx 24rpx; border-radius: 24rpx; background: #fff7cf;
   border: 1rpx solid rgba(20, 20, 20, .05); text-align: left;
 }
 .action-label { font-size: 30rpx; font-weight: 700; }
@@ -267,7 +270,7 @@ if (location.area) {
   border-bottom: 4rpx solid transparent; text-align: center;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
-.tab-item.active { color: #141414; border-bottom-color: #141414; }
+.tab-item.active { color: #171717; border-bottom-color: #ffd400; }
 .tab-item.disabled { color: #ccc; }
 
 .item-scroll { flex: 1; }
@@ -279,8 +282,8 @@ if (location.area) {
   border: 1rpx solid rgba(20, 20, 20, .04);
   font-size: 30rpx; font-weight: 600; text-align: left;
 }
-.list-item.selected { color: #141414; background: #f0f0ee; border-color: rgba(20, 20, 20, .1); }
-.check { color: #141414; font-weight: 800; font-size: 28rpx; }
+.list-item.selected { color: #171717; background: #fff7cf; border-color: #ffd400; }
+.check { color: #171717; font-weight: 800; font-size: 28rpx; }
 
 .picker-body { flex: 1; padding: 24rpx 32rpx; overflow-y: auto; }
 .state-text { padding: 60rpx 0; text-align: center; color: #9b9b98; font-size: 28rpx; }

@@ -84,21 +84,21 @@ function timeText(value: string): string {
   min-height: 100vh;
   box-sizing: border-box;
   padding: 24rpx 24rpx calc(60rpx + env(safe-area-inset-bottom));
-  background: #f5f5f3;
+  background: #f6f6f6;
 }
 
 .balance-panel {
   padding: 38rpx 34rpx 34rpx;
   border-radius: 28rpx;
-  color: #fff;
-  background: #20211d;
+  color: #171717;
+  background: #ffd400;
   box-shadow: 0 14rpx 32rpx rgba(25, 26, 22, 0.16);
 }
 
 .balance-label,
 .balance-note {
   display: block;
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(23, 23, 23, 0.62);
   font-size: 24rpx;
 }
 

@@ -27,8 +27,9 @@ let mapCtx: UniApp.MapContext | null = null;
 const mapReady = ref(false);
 let cameraFramed = false;
 
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight ?? 20;
-const safeTopStyle = { paddingTop: `${statusBarHeight + 8}px` };
+const systemInfo = uni.getSystemInfoSync();
+const menuButtonRect = uni.getMenuButtonBoundingClientRect();
+const safeTopStyle = { paddingTop: `${Math.max((systemInfo.statusBarHeight ?? 20) + 8, menuButtonRect.bottom + 8)}px` };
 
 const order = computed(() => orders.find(orderId.value));
 const displayStoreName = computed(() => order.value?.storeName || storeName.value);
@@ -106,7 +107,7 @@ const markers = computed(() => {
         borderRadius: 6,
         padding: 6,
         bgColor: '#ffffff',
-        color: '#151515',
+        color: '#171717',
         borderWidth: 0,
       },
     },
@@ -127,7 +128,7 @@ const markers = computed(() => {
         borderRadius: 6,
         padding: 6,
         bgColor: '#ffffff',
-        color: '#151515',
+        color: '#171717',
         borderWidth: 0,
       },
     },
@@ -476,7 +477,7 @@ async function prepareTimelineShare() {
       <!-- 骑手信息 -->
       <view class="rider-row">
         <view class="rider-avatar">
-          <text class="rider-emoji">🛵</text>
+          <image class="rider-image" src="/static/marker-rider.png" mode="aspectFit" />
         </view>
         <view class="rider-info">
           <text class="rider-name">{{ riderName }}</text>
@@ -627,7 +628,7 @@ async function prepareTimelineShare() {
 .back-icon {
   font-size: 48rpx;
   font-weight: 300;
-  color: #151515;
+  color: #171717;
   line-height: 1;
 }
 
@@ -652,7 +653,7 @@ async function prepareTimelineShare() {
 .bottom-sheet-dragging {
   transition: none;
 }
-.share-button { margin-top: 18rpx; border: 0; border-radius: 999rpx; color: #fff; background: #ff6b3d; font-size: 27rpx; }
+.share-button { margin-top: 18rpx; border: 0; border-radius: 20rpx; color: #171717; background: #ffd400; font-size: 27rpx; font-weight: 800; }
 .sheet-drag-zone {
   position: sticky;
   top: 0;
@@ -678,7 +679,7 @@ async function prepareTimelineShare() {
   display: block;
   font-size: 36rpx;
   font-weight: 800;
-  color: #151515;
+  color: #171717;
   line-height: 1.3;
 }
 .eta-text {
@@ -742,7 +743,7 @@ async function prepareTimelineShare() {
   z-index: 0;
 }
 .step-line.active {
-  background: #ff5b38;
+  background: #f04426;
 }
 .step-dot {
   width: 20rpx;
@@ -754,10 +755,10 @@ async function prepareTimelineShare() {
   flex-shrink: 0;
 }
 .step-dot.done {
-  background: #ff5b38;
+  background: #f04426;
 }
 .step-dot.current {
-  background: #ff5b38;
+  background: #f04426;
   width: 28rpx;
   height: 28rpx;
   box-shadow: 0 0 0 6rpx rgba(255, 91, 56, 0.2);
@@ -801,7 +802,7 @@ async function prepareTimelineShare() {
 }
 .section-title {
   display: block;
-  color: #151515;
+  color: #171717;
   font-size: 30rpx;
   font-weight: 900;
   line-height: 1.25;
@@ -893,7 +894,7 @@ async function prepareTimelineShare() {
   line-height: 1.3;
 }
 .paid-price {
-  color: #202020;
+  color: #171717;
   font-size: 29rpx;
   font-weight: 900;
   line-height: 1.3;
@@ -945,7 +946,7 @@ async function prepareTimelineShare() {
 .info-value {
   flex: 1;
   min-width: 0;
-  color: #202020;
+  color: #171717;
   font-size: 27rpx;
   font-weight: 500;
   line-height: 1.45;
@@ -965,7 +966,7 @@ async function prepareTimelineShare() {
 }
 .order-number {
   flex: initial;
-  color: #202020;
+  color: #171717;
   background: transparent;
   font-size: 24rpx;
   line-height: 1.45;
@@ -993,9 +994,7 @@ async function prepareTimelineShare() {
   justify-content: center;
   flex-shrink: 0;
 }
-.rider-emoji {
-  font-size: 36rpx;
-}
+.rider-image { width: 58rpx; height: 58rpx; }
 .rider-info {
   flex: 1;
   min-width: 0;
@@ -1005,7 +1004,7 @@ async function prepareTimelineShare() {
 .rider-name {
   font-size: 30rpx;
   font-weight: 700;
-  color: #151515;
+  color: #171717;
 }
 .rider-tag {
   font-size: 22rpx;
@@ -1046,7 +1045,7 @@ async function prepareTimelineShare() {
   flex-shrink: 0;
 }
 .route-dot.origin {
-  background: #ff5b38;
+  background: #f04426;
 }
 .route-dot.dest {
   background: #00b450;

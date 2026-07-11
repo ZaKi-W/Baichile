@@ -56,13 +56,14 @@ function confirm() {
 
 <style scoped>
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 50; display: flex; align-items: flex-end; }
-.sheet { width: 100%; background: #fff; border-radius: 28rpx 28rpx 0 0; padding: 32rpx; padding-bottom: calc(32rpx + env(safe-area-inset-bottom)); }
-.title { font-size: 34rpx; font-weight: 700; }
+.sheet { width: 100%; box-sizing: border-box; background: #fff; border-radius: 32rpx 32rpx 0 0; padding: 34rpx 28rpx; padding-bottom: calc(34rpx + env(safe-area-inset-bottom)); }
+.title { font-size: 36rpx; font-weight: 900; }
 .group { margin-top: 28rpx; }
 .options { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 14rpx; }
-.options button { margin: 0; background: #f5f5f5; }
-.options button.selected { background: #fff4e8; color: #c3541f; }
+.options button { margin: 0; border: 1rpx solid #ececec; border-radius: 16rpx; background: #f7f7f7; }
+.options button.selected { border-color: #ffd400; background: #ffd400; color: #171717; font-weight: 800; }
 .footer { display: flex; align-items: center; margin-top: 32rpx; gap: 20rpx; }
 .quantity { display: flex; align-items: center; gap: 12rpx; }
 .confirm { flex: 1; }
+.confirm::after, .quantity button::after, .options button::after { border: 0; }
 </style>

@@ -184,7 +184,7 @@ async function submitPendingOrderAfterLogin() {
 
     <!-- Not logged in hero -->
     <view v-else class="hero guest">
-      <view class="guest-icon">👤</view>
+      <view class="guest-icon"><image src="/static/tabbar/profile.svg" mode="aspectFit" /></view>
       <text class="guest-title">登录白吃了</text>
       <text class="guest-desc">登录后会合并游客订单，并在这里显示你的头像和昵称</text>
       <button class="login-btn" @tap="openLogin">
@@ -230,31 +230,31 @@ async function submitPendingOrderAfterLogin() {
         class="menu-item"
         @tap="prepareTimelineShare('achievement')"
       >
-        <text class="menu-icon">🏆</text>
+        <text class="menu-icon">战</text>
         <text class="menu-text">晒晒我的白吃战绩</text>
         <text class="menu-arrow">›</text>
       </view>
       <view v-if="auth.accountId && orders.savings.completedOrderCount >= 5 && orders.savings.completedOrderCount % 5 === 0" class="menu-divider" />
       <view v-if="auth.accountId" class="menu-item" @tap="openWallet">
-        <text class="menu-icon">👛</text>
+        <text class="menu-icon">钱</text>
         <text class="menu-text">我的钱包</text>
         <text class="menu-arrow">›</text>
       </view>
       <view v-if="auth.accountId" class="menu-divider" />
       <view class="menu-item">
-        <text class="menu-icon">📦</text>
+        <text class="menu-icon">单</text>
         <text class="menu-text">我的订单</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-divider" />
       <view class="menu-item" @tap="prepareTimelineShare('invitation')">
-        <text class="menu-icon">🎁</text>
+        <text class="menu-icon">享</text>
         <text class="menu-text">分享朋友圈，领虚拟饭钱</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-divider" />
       <view class="menu-item" @tap="openAddresses">
-        <text class="menu-icon">📍</text>
+        <image class="menu-icon image-icon" src="/static/icons/location.svg" mode="aspectFit" />
         <text class="menu-text">收货地址</text>
         <text class="menu-count">{{ addresses.addresses.length }}</text>
         <text class="menu-arrow">›</text>
@@ -320,14 +320,14 @@ async function submitPendingOrderAfterLogin() {
 <style scoped>
 .page {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: #f6f6f6;
   padding: 0;
   padding-bottom: 120rpx;
 }
 
 /* Hero section */
 .hero {
-  background: linear-gradient(135deg, #ff7a45 0%, #ff9a6c 100%);
+  background: #ffd400;
   padding: 60rpx 40rpx 50rpx;
   margin-bottom: 24rpx;
 }
@@ -355,7 +355,7 @@ async function submitPendingOrderAfterLogin() {
 .hero.logged-in .nickname {
   font-size: 40rpx;
   font-weight: 600;
-  color: #fff;
+  color: #171717;
   margin-bottom: 12rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -372,7 +372,7 @@ async function submitPendingOrderAfterLogin() {
 
 .hero.logged-in .badge-text {
   font-size: 22rpx;
-  color: #fff;
+  color: #171717;
 }
 
 .stats-row {
@@ -397,14 +397,14 @@ async function submitPendingOrderAfterLogin() {
   box-sizing: border-box;
   font-size: 38rpx;
   font-weight: 700;
-  color: #fff;
+  color: #171717;
   line-height: 1;
   white-space: nowrap;
 }
 
 .stat-label {
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(23, 23, 23, 0.72);
   margin-top: 8rpx;
 }
 
@@ -425,20 +425,20 @@ async function submitPendingOrderAfterLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 60rpx;
   margin-bottom: 32rpx;
 }
+.guest-icon image { width: 64rpx; height: 64rpx; }
 
 .guest-title {
   font-size: 40rpx;
   font-weight: 700;
-  color: #fff;
+  color: #171717;
   margin-bottom: 16rpx;
 }
 
 .guest-desc {
   font-size: 26rpx;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(23, 23, 23, 0.76);
   line-height: 1.5;
   margin-bottom: 40rpx;
   max-width: 500rpx;
@@ -463,12 +463,12 @@ async function submitPendingOrderAfterLogin() {
 .login-btn-text {
   font-size: 30rpx;
   font-weight: 600;
-  color: #ff7a45;
+  color: #171717;
 }
 
 .guest-hint {
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(23, 23, 23, 0.62);
 }
 
 /* Menu card */
@@ -476,7 +476,7 @@ async function submitPendingOrderAfterLogin() {
   margin: 0 24rpx 24rpx;
   overflow: hidden;
   border-radius: 24rpx;
-  background: #20211d;
+  background: #171717;
   color: #fff;
   box-shadow: 0 12rpx 28rpx rgba(25, 26, 22, 0.16);
 }
@@ -539,7 +539,7 @@ async function submitPendingOrderAfterLogin() {
 
 .wallet-action.check-in {
   color: #161714;
-  background: #dff75a;
+  background: #ffd400;
 }
 
 .wallet-action.share-reward {
@@ -566,9 +566,19 @@ async function submitPendingOrderAfterLogin() {
 }
 
 .menu-icon {
-  font-size: 40rpx;
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-right: 20rpx;
+  border-radius: 14rpx;
+  color: #171717;
+  background: #ffd400;
+  font-size: 22rpx;
+  font-weight: 900;
 }
+.menu-icon.image-icon { padding: 10rpx; box-sizing: border-box; }
 
 .menu-text {
   flex: 1;

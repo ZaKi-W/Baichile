@@ -17,7 +17,8 @@ describe('cart tab page', () => {
     expect(source).toContain('/pages/checkout/index');
     expect(source).toContain('去首页选餐');
     expect(source).toContain('class="safe-top"');
-    expect(source).toContain('uni.getSystemInfoSync().statusBarHeight');
+    expect(source).toContain('const systemInfo = uni.getSystemInfoSync()');
+    expect(source).toContain('uni.getMenuButtonBoundingClientRect()');
     expect(source).toContain(':style="safeTopStyle"');
   });
 });

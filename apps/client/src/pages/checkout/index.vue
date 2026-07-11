@@ -160,7 +160,7 @@ async function submit() {
   min-height: 100vh;
   padding: 24rpx 28rpx calc(180rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background: #f5f5f3;
+  background: #f6f6f6;
 }
 
 .virtual-notice {
@@ -181,20 +181,20 @@ async function submit() {
   gap: 16rpx;
   padding: 28rpx 24rpx;
   margin-bottom: 24rpx;
+  border: 2rpx solid #ffd400;
   border-radius: 24rpx;
   background: #fff;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, .04);
 }
 .address-info { flex: 1; min-width: 0; }
 .address-top { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; }
-.address-name { font-size: 32rpx; font-weight: 800; color: #151515; }
+.address-name { font-size: 32rpx; font-weight: 800; color: #171717; }
 .address-phone { font-size: 26rpx; color: #666; }
 .address-tag {
   font-size: 20rpx;
   font-weight: 600;
   padding: 2rpx 12rpx;
   border-radius: 8rpx;
-  color: #ff5b38;
+  color: #f04426;
   background: #fff0ec;
 }
 .address-text {
@@ -213,11 +213,11 @@ async function submit() {
 .card {
   margin-bottom: 24rpx;
   padding: 28rpx 24rpx;
+  border: 1rpx solid #ececec;
   border-radius: 24rpx;
   background: #fff;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, .04);
 }
-.heading { display: block; font-size: 30rpx; font-weight: 800; margin-bottom: 20rpx; color: #151515; }
+.heading { display: block; font-size: 30rpx; font-weight: 800; margin-bottom: 20rpx; color: #171717; }
 .line {
   display: flex;
   align-items: flex-start;
@@ -229,12 +229,12 @@ async function submit() {
 .line-left { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .line-name { font-size: 26rpx; font-weight: 600; color: #333; }
 .line-opts { margin-top: 4rpx; font-size: 22rpx; color: #999; }
-.line-price { font-size: 26rpx; font-weight: 700; color: #333; white-space: nowrap; }
+.line-price { font-size: 26rpx; font-weight: 800; color: #f04426; white-space: nowrap; }
 .fee { border-bottom: 0; padding: 8rpx 0; }
 .fee text { font-size: 24rpx; color: #999; }
 .total { border-bottom: 0; padding-top: 16rpx; border-top: 1rpx solid #f0f0ee; }
-.total text { font-size: 28rpx; font-weight: 800; color: #151515; }
-.total-price { color: #ff5b38; font-size: 32rpx; }
+.total text { font-size: 28rpx; font-weight: 800; color: #171717; }
+.total-price { color: #f04426; font-size: 32rpx; }
 
 /* ── 提交按钮 ── */
 .submit-btn {
@@ -244,14 +244,14 @@ async function submit() {
   bottom: calc(24rpx + env(safe-area-inset-bottom));
   height: 96rpx;
   margin: 0;
-  border-radius: 48rpx;
+  border-radius: 24rpx;
   color: #171717;
-  background: #dff75a;
+  background: #ffd400;
   font-size: 32rpx;
   font-weight: 900;
   line-height: 96rpx;
   box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, .1);
 }
-.submit-btn[disabled] { color: rgba(255, 255, 255, .5); background: #bbb; }
+.submit-btn[disabled] { color: #777; background: #ddd; }
 .submit-btn::after { border: 0; }
 </style>

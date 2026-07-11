@@ -13,21 +13,30 @@ onShow(() => {
 
 <style lang="scss">
 page {
-  background: #f6f6f6;
-  color: #202020;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --brand-yellow: #ffd400;
+  --brand-black: #171717;
+  --brand-red: #f04426;
+  --brand-green: #259b58;
+  --surface: #ffffff;
+  --page-bg: #f6f6f6;
+  --line: #ececec;
+  --muted: #777777;
+  background: var(--page-bg);
+  color: var(--brand-black);
+  font-family: "PingFang SC", sans-serif;
 }
 button {
   margin: 0;
 }
 .page {
   min-height: 100vh;
-  padding: 24rpx;
+  padding: 24rpx 24rpx calc(48rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 .card {
-  background: #fff;
-  border-radius: 20rpx;
+  border: 1rpx solid var(--line);
+  background: var(--surface);
+  border-radius: 24rpx;
   padding: 24rpx;
   margin-bottom: 20rpx;
 }
@@ -36,16 +45,17 @@ button {
   font-size: 24rpx;
 }
 .primary-button {
-  background: #ff7a45;
-  color: #fff;
+  background: var(--brand-yellow);
+  color: var(--brand-black);
   border-radius: 999rpx;
   font-size: 28rpx;
+  font-weight: 800;
 }
 .virtual-notice {
   padding: 20rpx;
   border-radius: 16rpx;
-  background: #fff4e8;
-  color: #8a4b22;
+  background: #fff7cf;
+  color: #665300;
   font-size: 24rpx;
 }
 </style>

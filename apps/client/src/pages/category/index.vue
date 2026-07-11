@@ -39,7 +39,10 @@ const openStore = (id: string) => uni.navigateTo({ url: `/pages/store/index?id=$
 
 <template>
   <view class="page">
-    <text class="heading">{{ name }}</text>
+    <view class="page-head">
+      <text class="eyebrow">为你精选</text>
+      <text class="heading">{{ name }}</text>
+    </view>
     <view v-if="loading" class="card muted loading-state">正在加载店铺…</view>
     <view v-else class="store-list">
       <StoreCard v-for="store in stores" :key="store.id" :store="store" @open="openStore(store.id)" />
@@ -49,7 +52,10 @@ const openStore = (id: string) => uni.navigateTo({ url: `/pages/store/index?id=$
 </template>
 
 <style scoped>
-.heading { display: block; font-size: 36rpx; font-weight: 700; margin: 8rpx 0 24rpx; }
-.store-list { display: flex; flex-direction: column; gap: 24rpx; }
+.page { padding-top: 30rpx; background: #f6f6f6; }
+.page-head { margin-bottom: 18rpx; }
+.eyebrow { display: block; color: #9a7b00; font-size: 19rpx; font-weight: 800; }
+.heading { display: block; margin-top: 6rpx; font-size: 40rpx; font-weight: 900; }
+.store-list { overflow: hidden; padding: 0 20rpx; border-radius: 26rpx; background: #fff; }
 .loading-state { text-align: center; }
 </style>

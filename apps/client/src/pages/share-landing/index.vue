@@ -90,12 +90,12 @@ function start() {
 </template>
 
 <style scoped>
-.landing { min-height: 100vh; box-sizing: border-box; padding: 48rpx 28rpx; background: #f4f1e9; }
+.landing { min-height: 100vh; box-sizing: border-box; padding: 48rpx 28rpx; background: #fff7cf; }
 .receipt { display: flex; flex-direction: column; gap: 24rpx; }
-.expired { padding: 48rpx 36rpx; border-radius: 28rpx; background: #fff; box-shadow: 0 18rpx 50rpx rgba(40,35,25,.08); }
+.expired { padding: 48rpx 36rpx; border: 2rpx solid #171717; border-radius: 28rpx; background: #fff; }
 .poster-preview { display: block; width: 100%; border-radius: 28rpx; box-shadow: 0 18rpx 50rpx rgba(40,35,25,.12); }
 .title { display: block; margin: 22rpx 0 30rpx; color: #1e1d19; font-size: 42rpx; font-weight: 850; line-height: 1.35; }
-.share-tip, .claim-panel { display: flex; flex-direction: column; gap: 16rpx; padding: 26rpx; border-radius: 22rpx; background: #fff; box-shadow: 0 10rpx 30rpx rgba(40,35,25,.07); }
+.share-tip, .claim-panel { display: flex; flex-direction: column; gap: 16rpx; padding: 26rpx; border: 1rpx solid #ececec; border-radius: 22rpx; background: #fff; }
 .share-tip { color: #9a4b2e; font-size: 25rpx; text-align: center; }
 .claim-panel > text { color: #443b32; font-size: 27rpx; font-weight: 700; text-align: center; }
 .primary-button { width: 100%; }.state, .expired { text-align: center; color: #777; }
