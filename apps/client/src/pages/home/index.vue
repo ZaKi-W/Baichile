@@ -2,12 +2,11 @@
 import { computed, ref } from 'vue';
 import { onHide, onLoad, onShow, onUnload } from '@dcloudio/uni-app';
 import type { FlashSaleItem, HomeResponse } from '@baichile/api-contract';
-import type { IconKey } from '@baichile/icon-registry';
 import { getDeliveryIncidentPhase } from '@baichile/domain';
-import AppIcon from '../../components/AppIcon.vue';
 import HomeOrderCarousel from '../../components/HomeOrderCarousel.vue';
 import StoreCard from '../../components/StoreCard.vue';
 import { catalogService } from '../../services/catalog';
+import { useAddressStore } from '../../stores/address';
 import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { createHomeOrderSummary, homeOrderSeenKey } from '../../utils/home-order-summary';
@@ -16,28 +15,53 @@ const data = ref<HomeResponse>();
 const loading = ref(true);
 const error = ref('');
 const auth = useAuthStore();
+const address = useAddressStore();
 const orders = useOrderStore();
 const orderNow = ref(Date.now());
 const dismissedOrderIds = ref<string[]>([]);
 const sessionOrderIds = ref<string[]>([]);
-const activeFilter = ref('综合排序');
-const filters = ['综合排序', '距离最近', '评分最高', '预计更快', '免配送费'];
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight ?? 20;
-const safeTopStyle = computed(() => ({ paddingTop: `${statusBarHeight + 14}px` }));
+const activeSort = ref('综合排序');
+const activeQuickFilter = ref('全部');
+const sortFilters = ['综合排序', '销量最高', '距离最近', '评分最高'];
+const quickFilters = ['全部', '免配送费', '30分钟内', '满减优惠'];
+const systemInfo = uni.getSystemInfoSync();
+const statusBarHeight = systemInfo.statusBarHeight ?? 20;
+const menuButtonRect = uni.getMenuButtonBoundingClientRect();
+const safeTopStyle = computed(() => ({ paddingTop: `${Math.max(statusBarHeight + 8, menuButtonRect.top)}px` }));
+const brandRowStyle = computed(() => ({ paddingRight: `${Math.max(0, systemInfo.windowWidth - menuButtonRect.left + 10)}px` }));
 let orderTimer: ReturnType<typeof setInterval> | undefined;
 const flashSaleSeconds = ref(0);
 let flashSaleTimer: ReturnType<typeof setInterval> | undefined;
 const settlementRequested = new Set<string>();
+const categoryImages = [
+  '/static/home-categories/burger.webp',
+  '/static/home-categories/pizza.webp',
+  '/static/home-categories/coffee.webp',
+  '/static/home-categories/drink.webp',
+  '/static/home-categories/dessert.webp',
+  '/static/home-categories/salad.webp',
+  '/static/home-categories/hotpot.webp',
+  '/static/home-categories/bbq.webp',
+];
 
 const sortedStores = computed(() => {
-  const stores = [...(data.value?.stores ?? [])];
-  if (activeFilter.value === '距离最近') return stores.sort((a, b) => a.distanceKm - b.distanceKm);
-  if (activeFilter.value === '评分最高') return stores.sort((a, b) => b.rating - a.rating);
-  if (activeFilter.value === '预计更快') return stores.sort((a, b) => a.virtualDeliveryMinutes - b.virtualDeliveryMinutes);
-  if (activeFilter.value === '免配送费') return stores.sort((a, b) => Number(a.deliveryFeeCents > 0) - Number(b.deliveryFeeCents > 0));
+  let stores = [...(data.value?.stores ?? [])];
+  if (activeQuickFilter.value === '30分钟内') stores = stores.filter((store) => store.virtualDeliveryMinutes <= 30);
+  if (activeQuickFilter.value === '免配送费') stores = stores.filter((store) => store.deliveryFeeCents === 0);
+  if (activeQuickFilter.value === '满减优惠') stores = stores.filter((store) => store.tags.some((tag) => tag.includes('减')));
+  if (activeSort.value === '销量最高') return stores.sort((a, b) => b.monthlySales - a.monthlySales);
+  if (activeSort.value === '距离最近') return stores.sort((a, b) => a.distanceKm - b.distanceKm);
+  if (activeSort.value === '评分最高') return stores.sort((a, b) => b.rating - a.rating);
   return stores;
 });
 const flashSaleItems = computed(() => data.value?.flashSaleItems ?? []);
+const featuredStore = computed(() => data.value?.featured[0] ?? data.value?.stores[0]);
+const displayAddress = computed(() => {
+  const selected = address.selected;
+  if (selected) return `${selected.address}${selected.detail ? ` ${selected.detail}` : ''}`;
+  return '点击添加收货地址';
+});
+const categoryImage = (index: number) => categoryImages[index % categoryImages.length];
 
 async function load() {
   loading.value = true;
@@ -51,23 +75,15 @@ async function load() {
   }
 }
 const openSearch = () => uni.navigateTo({ url: '/pages/search/index' });
+const openAddressList = () => uni.navigateTo({ url: '/pages/address-list/index' });
 const openCategory = (id: string, name: string) => uni.navigateTo({ url: `/pages/category/index?id=${id}&name=${encodeURIComponent(name)}` });
 const openStore = (id: string) => uni.navigateTo({ url: `/pages/store/index?id=${id}` });
-const openAllCategories = () => {
-  const first = data.value?.categories[0];
-  if (first) openCategory(first.id, first.name);
-};
 const flashSaleTime = computed(() => {
   const hours = Math.floor(flashSaleSeconds.value / 3600);
   const minutes = Math.floor((flashSaleSeconds.value % 3600) / 60);
   const seconds = flashSaleSeconds.value % 60;
   return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
 });
-const failedFlashSaleImageIds = ref<string[]>([]);
-const flashSaleImageVisible = (item: FlashSaleItem) => Boolean(item.imageUrl && !failedFlashSaleImageIds.value.includes(item.menuItemId));
-const markFlashSaleImageFailed = (id: string) => {
-  if (!failedFlashSaleImageIds.value.includes(id)) failedFlashSaleImageIds.value = [...failedFlashSaleImageIds.value, id];
-};
 function startFlashSaleTimer() {
   stopFlashSaleTimer();
   flashSaleSeconds.value = 10 * 60 * 60 + Math.floor(Math.random() * 8 * 60 * 60);
@@ -145,6 +161,7 @@ function handleShow() {
   settlementRequested.clear();
   startFlashSaleTimer();
   startOrderTimer();
+  void address.load().catch(() => undefined);
   void refreshOrders();
 }
 
@@ -163,14 +180,32 @@ onUnload(handleHide);
 
 <template>
   <view class="home-page">
-    <main class="app-main" :style="safeTopStyle">
-      <view class="search-wrap">
-        <view class="search" @tap="openSearch">
-          <AppIcon name="search" :size="18" />
-          <text>搜店铺、菜品、口味</text>
+    <header class="platform-header" :style="safeTopStyle">
+      <view class="brand-row" :style="brandRowStyle">
+        <view>
+          <text class="brand-name">白吃了</text>
+          <text class="brand-slogan">好吃不贵 · 准时必达</text>
         </view>
       </view>
+      <view class="address-row" @tap="openAddressList">
+        <image class="location-pin" src="/static/icons/location.svg" mode="aspectFit" />
+        <view class="address-copy">
+          <text class="address-name">{{ displayAddress }}</text>
+        </view>
+        <text class="address-arrow">›</text>
+        <view class="promise-badge">
+          <image class="promise-mark" src="/static/icons/shield.svg" mode="aspectFit" />
+          <text class="promise-title">准时保</text>
+        </view>
+      </view>
+      <view class="search" @tap="openSearch">
+        <image class="search-glyph" src="/static/icons/search.svg" mode="aspectFit" />
+        <text class="search-placeholder">搜附近美食</text>
+        <text class="search-action">搜索</text>
+      </view>
+    </header>
 
+    <main class="app-main">
       <HomeOrderCarousel
         :orders="orders.orders"
         :now="orderNow"
@@ -179,85 +214,80 @@ onUnload(handleHide);
         @dismiss="dismissOrder"
       />
 
-      <view v-if="loading" class="state-block">正在准备虚拟菜单…</view>
+      <view v-if="loading" class="state-block">正在准备附近美食…</view>
       <view v-else-if="error" class="state-block error-state">
         <text>{{ error }}</text>
         <button @tap="load">重新加载</button>
       </view>
 
       <template v-else-if="data">
-        <section>
-          <view class="section-header">
-            <text class="section-title">今天吃什么</text>
-            <button class="section-link" @tap="openAllCategories">全部分类 ›</button>
-          </view>
+        <section class="category-section">
           <view v-if="data.categories.length" class="category-grid">
             <button
-              v-for="category in data.categories.slice(0, 8)"
+              v-for="(category, index) in data.categories.slice(0, 8)"
               :key="category.id"
               class="category-item"
               @tap="openCategory(category.id, category.name)"
             >
-              <view class="category-icon"><AppIcon :name="category.icon as IconKey" :size="29" /></view>
+              <view class="category-image-wrap">
+                <image class="category-image" :src="categoryImage(index)" mode="aspectFill" />
+              </view>
               <text class="category-name">{{ category.name }}</text>
             </button>
           </view>
           <view v-else class="empty-inline">分类正在整理中</view>
         </section>
 
-        <section v-if="flashSaleItems.length" class="flash-sale-section">
-          <view class="flash-sale-header">
-            <text class="flash-sale-title">🔥 限时秒杀</text>
-            <view class="flash-sale-countdown">
-              <text>距结束</text>
-              <text class="flash-sale-time">{{ flashSaleTime }}</text>
+        <section v-if="featuredStore || flashSaleItems.length" class="campaign-grid" :class="{ single: !featuredStore || !flashSaleItems.length }">
+          <button v-if="featuredStore" class="campaign-card featured-campaign" @tap="openStore(featuredStore.id)">
+            <view class="campaign-copy">
+              <text class="campaign-title">今日精选</text>
+              <text class="campaign-subtitle">口碑好店 · 放心下单</text>
+              <text class="campaign-button">立即去吃</text>
             </view>
-          </view>
-          <scroll-view class="flash-sale-scroll" scroll-x :show-scrollbar="false">
-            <view class="flash-sale-items">
-              <button
-                v-for="item in flashSaleItems"
-                :key="item.menuItemId"
-                class="flash-sale-card"
-                @tap="openFlashSale(item)"
-              >
-                <view class="flash-sale-image-wrap">
-                  <image
-                    v-if="flashSaleImageVisible(item)"
-                    class="flash-sale-image"
-                    :src="item.imageUrl"
-                    mode="aspectFill"
-                    @error="markFlashSaleImageFailed(item.menuItemId)"
-                  />
-                  <text v-else class="flash-sale-fallback">{{ item.name.slice(-1) }}</text>
-                </view>
-                <text class="flash-sale-name">{{ item.name }}</text>
-                <text class="flash-sale-store">{{ item.storeName }}</text>
-                <view class="flash-sale-prices">
-                  <text class="flash-sale-price">¥{{ (item.flashPriceCents / 100).toFixed(2) }}</text>
-                  <text class="flash-sale-original">¥{{ (item.originalPriceCents / 100).toFixed(2) }}</text>
-                </view>
-                <view class="flash-sale-action">抢</view>
-              </button>
+            <view class="campaign-image-wrap">
+              <image class="campaign-image" src="/static/home-campaigns/featured.webp" mode="aspectFill" />
             </view>
-          </scroll-view>
+          </button>
+          <button v-if="flashSaleItems.length" class="campaign-card sale-campaign" @tap="openFlashSale(flashSaleItems[0])">
+            <view class="campaign-copy">
+              <view class="sale-heading">
+                <text class="campaign-title sale-title">限时秒杀</text>
+                <text class="sale-time">{{ flashSaleTime }}</text>
+              </view>
+              <text class="campaign-subtitle">{{ flashSaleItems[0].name }}</text>
+              <view class="price-row">
+                <text class="sale-price">¥{{ (flashSaleItems[0].flashPriceCents / 100).toFixed(1) }}</text>
+                <text class="original-price">¥{{ (flashSaleItems[0].originalPriceCents / 100).toFixed(1) }}</text>
+              </view>
+              <text class="sale-action">马上抢</text>
+            </view>
+            <view class="campaign-image-wrap">
+              <image class="campaign-image" src="/static/home-campaigns/sale.webp" mode="aspectFill" />
+            </view>
+          </button>
         </section>
 
-        <section>
-          <view class="section-header recommendation-heading">
-            <view class="recommendation-title">
-              <text class="section-title">附近推荐</text>
-              <text class="recommendation-badge">真实口碑</text>
-            </view>
-          </view>
+        <section class="recommendation-section">
           <scroll-view class="filter-row" scroll-x :show-scrollbar="false">
             <view class="filter-content">
               <button
-                v-for="filter in filters"
+                v-for="filter in sortFilters"
                 :key="filter"
                 class="filter-chip"
-                :class="{ active: activeFilter === filter }"
-                @tap="activeFilter = filter"
+                :class="{ active: activeSort === filter }"
+                @tap="activeSort = filter"
+              >{{ filter }}</button>
+            </view>
+          </scroll-view>
+          <scroll-view class="quick-filter-row" scroll-x :show-scrollbar="false">
+            <view class="quick-filter-content">
+              <button
+                v-for="filter in quickFilters"
+                :key="filter"
+                class="quick-filter-chip"
+                :class="{ active: activeQuickFilter === filter }"
+                @tap="activeQuickFilter = filter"
               >{{ filter }}</button>
             </view>
           </scroll-view>
@@ -272,8 +302,8 @@ onUnload(handleHide);
           </view>
           <view v-else class="empty-inline">附近暂时没有虚拟店铺</view>
           <view class="route-note">
-            <AppIcon name="rider" :size="16" />
-            <text><strong>这是虚拟外卖演示。</strong>下单后会展示模拟派送路线与送达进度。</text>
+            <text class="route-label">虚拟外卖演示</text>
+            <text>下单后展示模拟派送路线与送达进度</text>
           </view>
         </section>
       </template>
@@ -282,59 +312,72 @@ onUnload(handleHide);
 </template>
 
 <style scoped>
-.home-page { min-height: 100vh; color: #141414; background: #f7f7f5; }
-.app-main { padding: calc(env(safe-area-inset-top) + 28rpx) 32rpx calc(220rpx + env(safe-area-inset-bottom)); }
+.home-page { min-height: 100vh; color: #171717; background: #f6f6f6; font-family: "PingFang SC", sans-serif; }
+.platform-header { position: relative; z-index: 1; padding: 24rpx 28rpx 48rpx; background: #ffd400; box-sizing: border-box; }
+.brand-row { min-height: 76rpx; box-sizing: border-box; }
+.brand-name { display: block; font-size: 48rpx; line-height: 1; font-weight: 900; letter-spacing: -3rpx; }
+.brand-slogan { display: block; margin-top: 10rpx; font-size: 20rpx; font-weight: 700; letter-spacing: 1rpx; }
+.promise-badge { display: flex; flex: 0 0 auto; align-items: center; gap: 7rpx; padding: 9rpx 12rpx; border: 2rpx solid rgba(23,23,23,.72); border-radius: 18rpx; background: rgba(255,255,255,.2); }
+.promise-mark { width: 28rpx; height: 28rpx; flex: 0 0 auto; }
+.promise-title { font-size: 19rpx; font-weight: 900; }
+.address-row { min-width: 0; min-height: 66rpx; display: flex; align-items: center; gap: 12rpx; margin-top: 14rpx; }
+.location-pin { width: 32rpx; height: 32rpx; flex: 0 0 auto; }
+.address-copy { min-width: 0; flex: 1; }
+.address-name { display: block; overflow: hidden; font-size: 27rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.address-arrow { flex: 0 0 auto; font-size: 34rpx; font-weight: 700; }
+.search { position: absolute; right: 28rpx; bottom: -38rpx; left: 28rpx; height: 78rpx; display: flex; align-items: center; gap: 14rpx; padding: 7rpx 8rpx 7rpx 22rpx; border: 4rpx solid #171717; border-radius: 38rpx; background: #fff; box-shadow: 0 8rpx 20rpx rgba(23,23,23,.12); box-sizing: border-box; }
+.search-glyph { width: 30rpx; height: 30rpx; flex: 0 0 auto; }
+.search-placeholder { color: #898989; font-size: 26rpx; }
+.search-action { height: 58rpx; display: flex; align-items: center; justify-content: center; margin-left: auto; padding: 0 27rpx; border-radius: 29rpx; color: #171717; background: #ffd400; font-size: 24rpx; font-weight: 900; }
+.app-main { padding: 66rpx 24rpx calc(190rpx + env(safe-area-inset-bottom)); }
 button { padding: 0; border: 0; color: inherit; background: transparent; line-height: normal; }
 button::after { border: 0; }
-.search-wrap { position: relative; margin: 4rpx 0 34rpx; }
-.search { height: 104rpx; display: flex; align-items: center; gap: 18rpx; padding: 0 32rpx; border: 1rpx solid rgba(20, 20, 20, .08); border-radius: 36rpx; color: #9b9b98; background: rgba(255, 255, 255, .9); box-shadow: 0 18rpx 50rpx rgba(20, 20, 20, .04); box-sizing: border-box; font-size: 28rpx; font-weight: 600; }
-.section-header { display: flex; align-items: baseline; justify-content: space-between; gap: 24rpx; margin: 46rpx 2rpx 26rpx; }
-.section-title { font-size: 40rpx; line-height: 1; font-weight: 900; letter-spacing: -2rpx; }
-.section-link { color: #7a7a77; font-size: 24rpx; font-weight: 700; }
-.category-grid { display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 28rpx; }
-.category-item { display: flex; align-items: center; flex-direction: column; gap: 14rpx; }
-.category-icon { width: 116rpx; height: 116rpx; display: flex; align-items: center; justify-content: center; border-radius: 42rpx; background: #fff; box-shadow: inset 0 0 0 1rpx rgba(20, 20, 20, .05), 0 16rpx 32rpx rgba(20, 20, 20, .035); }
-.category-item:nth-child(2) .category-icon { background: #fff0e9; }
-.category-item:nth-child(3) .category-icon { background: #eff8d5; }
-.category-item:nth-child(4) .category-icon { background: #e9efff; }
-.category-item:nth-child(5) .category-icon { background: #f8eafd; }
-.category-item:nth-child(6) .category-icon { background: #fff6d7; }
-.category-item:nth-child(7) .category-icon { background: #e4f4f1; }
-.category-name { font-size: 24rpx; line-height: 1; font-weight: 700; letter-spacing: -1rpx; }
-.flash-sale-section { margin-top: 48rpx; padding: 26rpx 20rpx 22rpx; overflow: hidden; border-radius: 38rpx; color: #fff; background: linear-gradient(135deg, #ff4d19, #ff8a25); box-shadow: 0 24rpx 58rpx rgba(255, 93, 27, .2); }
-.flash-sale-header { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; padding: 0 8rpx 20rpx; }
-.flash-sale-title { font-size: 38rpx; font-weight: 900; letter-spacing: -2rpx; }
-.flash-sale-countdown { display: flex; align-items: center; gap: 10rpx; color: rgba(255, 255, 255, .9); font-size: 23rpx; font-weight: 700; }
-.flash-sale-time { padding: 7rpx 12rpx; border-radius: 12rpx; color: #fff; background: rgba(118, 46, 13, .58); font-size: 25rpx; font-weight: 900; letter-spacing: 1rpx; }
-.flash-sale-scroll { width: 100%; white-space: nowrap; }
-.flash-sale-items { display: inline-flex; gap: 16rpx; }
-.flash-sale-card { width: 216rpx; min-height: 352rpx; display: flex; flex: 0 0 auto; flex-direction: column; overflow: hidden; padding: 14rpx 14rpx 16rpx; border-radius: 28rpx; color: #171717; background: #fff; text-align: left; box-sizing: border-box; }
-.flash-sale-image-wrap { width: 100%; height: 156rpx; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 19rpx; color: #e86325; background: #fff0e7; }
-.flash-sale-image { width: 100%; height: 100%; }
-.flash-sale-fallback { font-size: 62rpx; font-weight: 900; }
-.flash-sale-name { display: block; overflow: hidden; margin-top: 14rpx; font-size: 27rpx; font-weight: 900; letter-spacing: -1rpx; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
-.flash-sale-store { display: block; overflow: hidden; margin-top: 6rpx; color: #969693; font-size: 19rpx; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.flash-sale-prices { display: flex; align-items: baseline; gap: 8rpx; margin-top: 12rpx; }
-.flash-sale-price { color: #ff3e35; font-size: 29rpx; font-weight: 900; }
-.flash-sale-original { color: #a3a3a0; font-size: 19rpx; font-weight: 600; text-decoration: line-through; }
-.flash-sale-action { width: 104rpx; margin: auto auto 0; padding: 9rpx 0; border-radius: 999rpx; color: #fff; background: #ff4037; font-size: 28rpx; font-weight: 900; text-align: center; line-height: 1; }
-.recommendation-heading { margin-top: 52rpx; }
-.recommendation-title { display: flex; align-items: center; gap: 16rpx; }
-.recommendation-badge { padding: 10rpx 16rpx 8rpx; color: #75400c; border-radius: 16rpx; background: #fff0c3; font-size: 20rpx; font-weight: 900; }
-.filter-row { width: calc(100% + 64rpx); margin-left: -32rpx; margin-bottom: 24rpx; white-space: nowrap; }
-.filter-content { display: inline-flex; gap: 16rpx; padding: 0 32rpx 4rpx; }
-.filter-chip { flex: 0 0 auto; min-height: 64rpx; display: inline-flex; align-items: center; justify-content: center; padding: 0 24rpx; border-radius: 999rpx; color: #73736f; background: #fff; box-shadow: inset 0 0 0 1rpx rgba(20, 20, 20, .08); font-size: 24rpx; font-weight: 700; line-height: 1; }
-.filter-chip.active { color: #fff; background: #141414; box-shadow: none; }
-.store-list { display: grid; gap: 24rpx; }
-.route-note { display: flex; align-items: center; gap: 14rpx; margin-top: 24rpx; padding: 18rpx 22rpx; border: 1rpx solid rgba(20, 20, 20, .05); border-radius: 30rpx; color: #63635f; background: rgba(255, 255, 255, .62); font-size: 22rpx; font-weight: 600; line-height: 1.35; }
-.route-note strong { color: #141414; font-weight: 800; }
-.state-block, .empty-inline { margin-top: 40rpx; padding: 32rpx; border: 1rpx solid rgba(20, 20, 20, .06); border-radius: 32rpx; color: #71716f; background: rgba(255, 255, 255, .72); font-size: 26rpx; text-align: center; }
+.category-section { position: relative; padding: 16rpx 6rpx 8rpx; border-radius: 30rpx; background: #fff; }
+.category-grid { display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 22rpx; }
+.category-item { min-width: 0; display: flex; align-items: center; flex-direction: column; gap: 10rpx; }
+.category-image-wrap { width: 118rpx; height: 104rpx; overflow: hidden; border-radius: 34rpx; background: #f7f3e9; }
+.category-image { width: 100%; height: 100%; }
+.category-name { max-width: 138rpx; overflow: hidden; font-size: 22rpx; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; margin-top: 20rpx; }
+.campaign-grid.single { grid-template-columns: 1fr; }
+.campaign-card { position: relative; min-width: 0; height: 260rpx; display: flex; overflow: hidden; padding: 22rpx 18rpx; border: 1rpx solid #ececec; border-radius: 28rpx; background: #fff; text-align: left; box-sizing: border-box; }
+.featured-campaign { background: #fff8df; }
+.sale-campaign { background: #fff1ec; }
+.campaign-copy { position: relative; z-index: 2; min-width: 0; display: flex; flex: 1; align-items: flex-start; flex-direction: column; }
+.campaign-title { display: block; font-size: 30rpx; font-weight: 900; }
+.sale-title { color: #f04426; }
+.campaign-subtitle { display: block; max-width: 210rpx; overflow: hidden; margin-top: 9rpx; color: #666; font-size: 18rpx; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-button { margin-top: 14rpx; padding: 9rpx 16rpx; border-radius: 18rpx; color: #171717; background: #ffd400; font-size: 17rpx; font-weight: 800; }
+.campaign-image-wrap { position: absolute; right: -12rpx; bottom: -14rpx; width: 190rpx; height: 148rpx; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 70rpx 0 0 0; color: #171717; background: #f0e5c8; }
+.campaign-image { width: 100%; height: 100%; }
+.campaign-fallback { font-size: 30rpx; font-weight: 900; }
+.sale-heading { display: flex; align-items: center; gap: 8rpx; }
+.sale-time { padding: 6rpx 8rpx; border-radius: 8rpx; color: #fff; background: #f04426; font-size: 15rpx; font-weight: 800; }
+.price-row { display: flex; align-items: baseline; gap: 8rpx; margin-top: auto; }
+.sale-price { color: #f04426; font-size: 34rpx; font-weight: 900; }
+.original-price { color: #999; font-size: 17rpx; text-decoration: line-through; }
+.sale-action { position: absolute; z-index: 3; right: 14rpx; bottom: 14rpx; padding: 10rpx 18rpx; border-radius: 22rpx; color: #fff; background: #f04426; font-size: 18rpx; font-weight: 900; }
+.recommendation-section { margin-top: 30rpx; }
+.filter-row { width: calc(100% + 48rpx); margin-left: -24rpx; white-space: nowrap; border-top: 1rpx solid #ededed; border-bottom: 1rpx solid #ededed; background: #fff; }
+.filter-content { display: inline-flex; gap: 10rpx; padding: 0 24rpx; }
+.filter-chip { min-height: 76rpx; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; padding: 0 20rpx; color: #6c6c6c; font-size: 22rpx; font-weight: 600; }
+.filter-chip.active { color: #171717; font-weight: 900; }
+.filter-chip.active::after { content: ""; width: 8rpx; height: 8rpx; margin-left: 8rpx; border-radius: 50%; background: #ffd400; }
+.quick-filter-row { width: calc(100% + 48rpx); margin-left: -24rpx; white-space: nowrap; background: #fff; }
+.quick-filter-content { display: inline-flex; gap: 14rpx; padding: 16rpx 24rpx 20rpx; }
+.quick-filter-chip { min-width: 130rpx; min-height: 58rpx; display: inline-flex; align-items: center; justify-content: center; padding: 0 22rpx; border: 1rpx solid #e3e3e3; border-radius: 14rpx; color: #606060; background: #fafafa; font-size: 20rpx; font-weight: 600; }
+.quick-filter-chip.active { border-color: #ffd400; color: #171717; background: #ffd400; font-weight: 900; }
+.store-list { margin: 0 -4rpx; padding: 0 4rpx; background: #fff; }
+.route-note { display: flex; align-items: center; justify-content: center; gap: 12rpx; margin-top: 22rpx; color: #969696; font-size: 18rpx; line-height: 1.4; }
+.route-label { color: #6a6a6a; font-weight: 800; }
+.state-block, .empty-inline { margin-top: 24rpx; padding: 34rpx 20rpx; border-radius: 24rpx; color: #777; background: #fff; font-size: 24rpx; text-align: center; }
 .error-state { display: flex; align-items: center; justify-content: space-between; text-align: left; }
-.error-state button { padding: 14rpx 24rpx; border-radius: 999rpx; color: #fff; background: #141414; font-size: 24rpx; }
+.error-state button { min-height: 58rpx; padding: 0 20rpx; border-radius: 29rpx; color: #171717; background: #ffd400; font-size: 21rpx; font-weight: 800; }
 @media (max-width: 356px) {
-  .category-icon { width: 106rpx; height: 106rpx; }
-  .flash-sale-card { width: 204rpx; }
-  .flash-sale-title { font-size: 34rpx; }
-  .flash-sale-countdown { gap: 6rpx; font-size: 20rpx; }
+  .brand-name { font-size: 44rpx; }
+  .category-image-wrap { width: 104rpx; height: 94rpx; }
+  .campaign-card { height: 244rpx; padding: 18rpx 15rpx; }
+  .campaign-image-wrap { width: 170rpx; height: 132rpx; }
+  .promise-badge { padding: 8rpx 10rpx; }
 }
 </style>

@@ -7,10 +7,12 @@ describe('home order carousel', () => {
 
     expect(source).toContain('<swiper');
     expect(source).toContain('<swiper-item');
-    expect(source).toContain('订单进度');
+    expect(source).toContain('订单进行中');
     expect(source).toContain('incidentText');
     expect(source).toContain('remainingText');
     expect(source).toContain('activeIndex + 1');
+    expect(source).toContain('订单进行中');
+    expect(source).toContain('.order-card.incident { border-color: #f0a48f; background: #fff1ec; }');
     expect(source).not.toContain('v-if="summary.terminal"');
     expect(source).toContain("emit('dismiss'");
     expect(source).toContain("emit('open'");

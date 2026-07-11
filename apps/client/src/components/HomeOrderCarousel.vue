@@ -42,15 +42,14 @@ function onChange(event: { detail: { current: number } }) {
 
 <template>
   <section v-if="summaries.length" class="home-orders">
-    <view class="orders-heading">
-      <text>订单进度</text>
-      <text v-if="summaries.length > 1" class="orders-page">{{ activeIndex + 1 }}/{{ summaries.length }}</text>
-    </view>
     <swiper class="orders-swiper" :current="activeIndex" :indicator-dots="summaries.length > 1" @change="onChange">
       <swiper-item v-for="summary in summaries" :key="summary.order.id">
         <view class="order-card" :class="{ incident: summary.incidentText }" @tap="emit('open', summary.order.id)">
           <view class="order-card-top">
-            <text class="order-status">{{ summary.statusLabel }}</text>
+            <view>
+              <text class="order-kicker">订单进行中</text>
+              <text class="order-status">{{ summary.statusLabel }}</text>
+            </view>
             <button
               class="order-close"
               @tap.stop="emit('dismiss', summary.order.id)"
@@ -65,6 +64,7 @@ function onChange(event: { detail: { current: number } }) {
           <view class="order-progress">
             <view class="order-progress-fill" :style="{ width: `${summary.progress * 100}%` }" />
           </view>
+          <text v-if="summaries.length > 1" class="orders-page">{{ activeIndex + 1 }}/{{ summaries.length }}</text>
         </view>
       </swiper-item>
     </swiper>
@@ -72,19 +72,19 @@ function onChange(event: { detail: { current: number } }) {
 </template>
 
 <style scoped>
-.home-orders { margin-top: 34rpx; }
-.orders-heading { display: flex; align-items: center; justify-content: space-between; margin: 0 4rpx 16rpx; font-size: 28rpx; font-weight: 900; }
-.orders-page { color: #878782; font-size: 22rpx; font-weight: 700; }
-.orders-swiper { height: 284rpx; }
-.order-card { height: 252rpx; padding: 28rpx 30rpx; border-radius: 38rpx; color: #fff; background: linear-gradient(135deg, #171717, #393936); box-shadow: 0 20rpx 54rpx rgba(20, 20, 20, .12); box-sizing: border-box; }
-.order-card.incident { background: linear-gradient(135deg, #4d2f89, #8b4dc4); }
+.home-orders { margin-bottom: 20rpx; }
+.orders-swiper { height: 238rpx; }
+.order-card { position: relative; height: 218rpx; padding: 22rpx 24rpx; overflow: hidden; border: 1rpx solid #e7e7e7; border-radius: 28rpx; color: #171717; background: #fff; box-shadow: 0 8rpx 22rpx rgba(23,23,23,.05); box-sizing: border-box; }
+.order-card.incident { border-color: #f0a48f; background: #fff1ec; }
 .order-card-top, .order-meta { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
-.order-status { font-size: 30rpx; font-weight: 900; }
-.order-close { width: 48rpx; height: 48rpx; min-height: 0; padding: 0; border: 0; border-radius: 50%; color: #fff; background: rgba(255,255,255,.16); font-size: 32rpx; line-height: 44rpx; }
+.order-kicker { display: inline-block; margin-right: 12rpx; color: #171717; font-size: 22rpx; font-weight: 900; }
+.order-status { color: #9a7b00; font-size: 20rpx; font-weight: 800; }
+.order-close { width: 44rpx; height: 44rpx; min-height: 0; padding: 0; border: 1rpx solid #d6d6d6; border-radius: 50%; color: #777; background: #fff; font-size: 28rpx; line-height: 40rpx; }
 .order-close::after { border: 0; }
-.order-items { display: block; margin-top: 18rpx; overflow: hidden; color: rgba(255,255,255,.72); font-size: 24rpx; white-space: nowrap; text-overflow: ellipsis; }
-.order-incident { display: block; margin-top: 12rpx; overflow: hidden; font-size: 25rpx; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; }
-.order-meta { margin-top: 20rpx; color: rgba(255,255,255,.82); font-size: 22rpx; font-weight: 700; }
-.order-progress { height: 8rpx; margin-top: 18rpx; overflow: hidden; border-radius: 999rpx; background: rgba(255,255,255,.2); }
-.order-progress-fill { height: 100%; border-radius: inherit; background: #dff75a; transition: width .3s linear; }
+.order-items { display: block; margin-top: 13rpx; overflow: hidden; color: #666; font-size: 20rpx; white-space: nowrap; text-overflow: ellipsis; }
+.order-incident { display: block; margin-top: 8rpx; overflow: hidden; color: #b33d25; font-size: 20rpx; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
+.order-meta { margin-top: 15rpx; color: #555; font-size: 19rpx; font-weight: 600; }
+.order-progress { height: 7rpx; margin-top: 15rpx; overflow: hidden; border-radius: 7rpx; background: #efefef; }
+.order-progress-fill { height: 100%; border-radius: inherit; background: #ffd400; transition: width .3s linear; }
+.orders-page { position: absolute; right: 24rpx; bottom: 11rpx; color: #999; font-size: 16rpx; }
 </style>

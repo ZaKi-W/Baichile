@@ -2,21 +2,42 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('home page sections', () => {
-  it('renders categories followed by the flash sale module without restoring the removed banner', () => {
+  it('renders a yellow delivery-platform hierarchy with real actions', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
-    expect(source).not.toContain('class="topbar"');
+    expect(source).toContain('class="platform-header"');
     expect(source).not.toContain('openLocationPicker');
     expect(source).not.toContain('location.locate()');
-    expect(source).toContain('class="search-wrap"');
+    expect(source).toContain('uni.getMenuButtonBoundingClientRect()');
+    expect(source).toContain(':style="brandRowStyle"');
+    expect(source).toContain('class="brand-name">白吃了');
+    expect(source).toContain('class="address-name">{{ displayAddress }}');
+    expect(source).toContain('点击添加收货地址');
+    expect(source).toContain('@tap="openAddressList"');
+    expect(source).toContain("'/pages/address-list/index'");
+    expect(source).not.toContain('estimatedArrival');
+    expect(source).toContain('搜附近美食');
     expect(source).toContain('class="category-grid"');
-    expect(source).toContain('class="flash-sale-section"');
+    expect(source).toContain('class="category-image"');
+    expect(source).toContain('class="campaign-grid"');
+    expect(source).toContain('今日精选');
+    expect(source).toContain('限时秒杀');
+    expect(source).toContain('class="sale-action">马上抢');
     expect(source).toContain('const flashSaleItems = computed(() => data.value?.flashSaleItems ?? [])');
     expect(source).toContain('v-if="flashSaleItems.length"');
-    expect(source).toContain('class="flash-sale-countdown"');
+    expect(source).toContain('class="sale-time"');
     expect(source).toContain('class="filter-row"');
+    expect(source).toContain("const sortFilters = ['综合排序', '销量最高', '距离最近', '评分最高']");
+    expect(source).toContain("const quickFilters = ['全部', '免配送费', '30分钟内', '满减优惠']");
+    expect(source).toContain("activeQuickFilter.value === '30分钟内'");
+    expect(source).toContain("activeQuickFilter.value === '免配送费'");
+    expect(source).toContain('class="quick-filter-row"');
+    expect(source).toContain('/static/home-campaigns/featured.webp');
+    expect(source).toContain('/static/home-campaigns/sale.webp');
     expect(source).toContain('class="route-note"');
-    expect(source).toContain('uni.getSystemInfoSync().statusBarHeight');
+    expect(source).toContain('虚拟外卖演示');
+    expect(source).toContain('const systemInfo = uni.getSystemInfoSync()');
+    expect(source).toContain('const statusBarHeight = systemInfo.statusBarHeight');
     expect(source).toContain(':style="safeTopStyle"');
     expect(source).not.toContain('class="profile-button"');
     expect(source).not.toContain('const openProfile');
@@ -24,13 +45,21 @@ describe('home page sections', () => {
     expect(source).not.toContain('heroSlides');
     expect(source).not.toContain('startCarousel');
     expect(source).not.toContain('排序 ⇅');
-    expect(source).toContain('.filter-chip { flex: 0 0 auto; min-height: 64rpx; display: inline-flex; align-items: center; justify-content: center;');
+    expect(source).toContain('.filter-chip.active::after');
     expect(source).toContain('onUnload(handleHide)');
     expect(source).toContain('data.categories.slice(0, 8)');
     expect(source).toContain(':index="index"');
     expect(source).not.toContain('今晚想吃什么');
     expect(source).not.toContain('class="card topic"');
     expect(source).not.toContain('.topic {');
+    expect(source).not.toContain('🔥');
+    expect(source).not.toContain('BAI CHI LE · DAILY');
+    expect(source).not.toContain('CHOOSE A FLAVOUR');
+    expect(source).not.toContain('NEARBY TABLES');
+    expect(source).not.toContain('查看全部分类');
+    expect(source).not.toContain('附近好店');
+    expect(source).not.toContain('真实口碑 · 配送到家');
+    expect(source).not.toMatch(/purple|violet|indigo|fuchsia/i);
   });
 
   it('starts a fresh fake countdown and cleans up its timer with other home timers', () => {
