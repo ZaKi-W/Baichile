@@ -155,6 +155,10 @@ async function updateCloudBaseImagesToStorage(fileIdMap: Map<string, string>, en
 
 function resolveHostingUrl(value: unknown, baseUrl: string): string | null | undefined {
   if (typeof value !== 'string') return value as undefined;
+  if (value.startsWith('cloud://')) {
+    const fileName = basename(value);
+    return `${baseUrl}/${fileName}`;
+  }
   return resolveCatalogImageUrl(value, baseUrl);
 }
 

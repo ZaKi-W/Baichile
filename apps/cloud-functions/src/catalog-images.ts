@@ -18,6 +18,14 @@ export function resolveCatalogImageUrl(value: string | null | undefined, baseUrl
   return `${baseUrl}/${value.slice(CATALOG_IMAGE_LOCAL_PREFIX.length)}`;
 }
 
+export function requireCatalogImageBaseUrl(value = process.env.CATALOG_IMAGE_BASE_URL): string {
+  const baseUrl = normalizeCatalogImageBaseUrl(value);
+  if (!baseUrl || !/^https:\/\//.test(baseUrl)) {
+    throw new Error('CATALOG_IMAGE_BASE_URL 必须配置为 HTTPS CDN 地址，目录图片不能使用本地路径或 cloud:// 临时链接');
+  }
+  return baseUrl;
+}
+
 export function rewriteCatalogRecordImages<T extends Record<string, unknown>>(
   collection: string,
   row: T,

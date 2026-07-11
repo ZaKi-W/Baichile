@@ -1,5 +1,5 @@
 import { categories, stores } from '@baichile/catalog-data';
-import { rewriteCatalogRecordImages } from '../src/catalog-images';
+import { requireCatalogImageBaseUrl, rewriteCatalogRecordImages } from '../src/catalog-images';
 import type { ManagedContentStatus } from '@baichile/api-contract';
 import { collections } from '../src/collections';
 import { createCloudBaseDatabase, type Database } from '../src/database';
@@ -8,6 +8,7 @@ import type { CategoryDoc, MenuItemDoc, StoreDoc, StoreSubCategoryDoc } from '..
 const PAGE_SIZE = 100;
 
 async function main() {
+  requireCatalogImageBaseUrl();
   const db = createCloudBaseDatabase();
   const counts = await seedCatalog(db);
   console.log(`CloudBase catalog seeded: ${counts.categories} categories, ${counts.stores} stores, ${counts.menuItems} menu items`);

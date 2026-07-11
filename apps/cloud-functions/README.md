@@ -8,7 +8,7 @@
 - `WECHAT_MINI_APP_ID`、`WECHAT_MINI_APP_SECRET`：微信登录与手机号能力。
 - `TENCENT_MAP_KEY`：腾讯位置服务服务端 Key。
 - `ADMIN_BOOTSTRAP_USERNAME`、`ADMIN_BOOTSTRAP_PASSWORD`、`ADMIN_BOOTSTRAP_DISPLAY_NAME`：首次初始化后台管理员。
-- `CATALOG_IMAGE_BASE_URL`：可选，目录图片迁到云存储/CDN 后用于重写图片 URL。
+- `CATALOG_IMAGE_BASE_URL`：必填的 HTTPS CDN 前缀。目录图片只允许使用 CDN URL，不使用本地路径或 `cloud://` 临时链接。
 
 ## 云函数入口
 
