@@ -31,12 +31,28 @@ describe('delivery page status initialization', () => {
     expect(source).toContain('reorderCurrent');
   });
 
+  it('keeps reorder and share actions in one horizontal action row', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('class="order-primary-actions"');
+    expect(source).toContain('class="order-primary-button reorder-button"');
+    expect(source).toContain('class="order-primary-button share-button"');
+    expect(source).toContain('v-if="canShareOrder"');
+    expect(source).toContain('hasIncident.value || hasFailed.value');
+    expect(source).toContain('.order-primary-actions {');
+    expect(source).toContain('display: flex;');
+    expect(source).not.toContain('.share-button { margin-top:');
+  });
+
   it('shows order detail, payment, order number, and delivery information', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
     expect(source).toContain('订单详情');
     expect(source).toContain('dish-thumb');
     expect(source).toContain('store-thumb');
+    expect(source).toContain('storeCoverUrl.value = detail.coverUrl');
+    expect(source).toContain(':src="storeCoverUrl"');
+    expect(source).not.toContain("order.value?.lines.find((line) => line.imageUrl)?.imageUrl");
     expect(source).toContain('实付');
     expect(source).toContain('收货地址');
     expect(source).toContain('配送时间');

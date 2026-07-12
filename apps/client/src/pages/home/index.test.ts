@@ -32,8 +32,10 @@ describe('home page sections', () => {
     expect(source).toContain("activeQuickFilter.value === '30分钟内'");
     expect(source).toContain("activeQuickFilter.value === '免配送费'");
     expect(source).toContain('class="quick-filter-row"');
-    expect(source).toContain('/static/home-campaigns/featured.webp');
-    expect(source).toContain('/static/home-campaigns/sale.webp');
+    expect(source).toContain('tcloudbaseapp.com/baichile-home');
+    expect(source).toContain('/campaigns/featured.png');
+    expect(source).toContain('/campaigns/sale.png');
+    expect(source).toContain('/categories/burger.png');
     expect(source).toContain('class="route-note"');
     expect(source).toContain('虚拟外卖演示');
     expect(source).toContain('const systemInfo = uni.getSystemInfoSync()');

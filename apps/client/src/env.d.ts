@@ -12,6 +12,13 @@ interface WxCloudCallFunctionResult {
 
 interface WxCloud {
   init(options: { env: string; traceUser?: boolean }): void;
+  uploadFile(options: {
+    cloudPath: string;
+    filePath: string;
+  }): Promise<{ fileID: string }>;
+  downloadFile(options: {
+    fileID: string;
+  }): Promise<{ tempFilePath: string; statusCode?: number }>;
   callFunction(options: {
     name: string;
     data?: Record<string, unknown>;

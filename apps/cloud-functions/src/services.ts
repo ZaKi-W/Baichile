@@ -7,6 +7,7 @@ import type {
   FlashSaleItem,
   HomeResponse,
   MenuItem,
+  OrderEasterEgg,
   OrderDeliveryAddressSnapshot,
   OrderQuote,
   PlaceSuggestion,
@@ -30,6 +31,7 @@ import {
   calculateLineCalories,
   calculateLineTotal,
   calculateOrderTotal,
+  findDeliveryIncident,
   getDeliveryIncidentPhase,
   selectDeliveryIncident,
   validateSelections,
@@ -66,8 +68,8 @@ interface AnalyticsEventDoc {
   createdAt: string;
 }
 
-const INITIAL_GRANT_CENTS = 100_000;
-const DAILY_CHECKIN_CENTS = 10_000;
+const INITIAL_GRANT_CENTS = 300_000;
+const DAILY_CHECKIN_CENTS = 50_000;
 const BENEFIT_TEXT = '好友第一次来围观，双方各领虚拟饭钱——不能提现，但真能在这里花。';
 const CLOUDBASE_PAGE_SIZE = 100;
 const ORDER_STEP_TIMES = [0, 2_000, 5_000, 9_000, 14_000, 18_000] as const;
@@ -404,12 +406,11 @@ export class WalletService {
       if (!account) return;
       const txs = tx.collection<WalletTransactionDoc>(collections.walletTransactions);
       const grants = await txs.list({ where: { accountId, type: 'initial_grant' } });
-      const grantedCents = grants.reduce((sum, row) => sum + Math.max(0, row.amountCents), 0);
-      const amountCents = Math.max(0, INITIAL_GRANT_CENTS - grantedCents);
+      const amountCents = grants.length ? 0 : INITIAL_GRANT_CENTS;
       if (!amountCents) return;
       const balanceCents = account.balanceCents + amountCents;
       await accounts.update(accountId, { balanceCents, updatedAt: tx.now().toISOString() });
-      await txs.insert(walletTx(tx, accountId, 'initial_grant', amountCents, balanceCents, grantedCents ? '初始资金补足' : '初始资金'));
+      await txs.insert(walletTx(tx, accountId, 'initial_grant', amountCents, balanceCents, '新用户赠送'));
     });
   }
 
@@ -868,7 +869,13 @@ export class ShareService {
     const active = config.enabled && new Date(invite.expiresAt).getTime() > Date.now();
     const kind = invite.kind === 'invitation' ? 'persona' : invite.kind;
     const miniProgramCodeUrl = active ? await createShareMiniProgramCode(token) : undefined;
-    return { active, expired: !active, kind, title: invite.title, ...invite.snapshot, miniProgramCodeUrl, inviteeRewardCents: active ? config.inviteeRewardCents : 0, benefitText: BENEFIT_TEXT };
+    const identity = invite.snapshot.identity;
+    const avatarUrls = await resolveCloudFileUrls([identity?.avatarUrl]);
+    const resolvedIdentity = identity ? {
+      ...identity,
+      avatarUrl: identity.avatarUrl ? avatarUrls.get(identity.avatarUrl) ?? identity.avatarUrl : '',
+    } : undefined;
+    return { active, expired: !active, kind, title: invite.title, ...invite.snapshot, identity: resolvedIdentity, miniProgramCodeUrl, inviteeRewardCents: active ? config.inviteeRewardCents : 0, benefitText: BENEFIT_TEXT };
   }
 
   async completeReferral(inviteeAccountId: string, token?: string): Promise<void> {
@@ -898,7 +905,20 @@ export class ShareService {
       const order = await orders.get(input.orderId);
       if (!order || order.accountId !== accountId) notFound('订单不存在', 'ORDER_NOT_FOUND');
       const deliveredAt = new Date(order.startedAt).getTime() + DELIVERY_START_MS + order.durationMs;
-      if (order.status === 'failed' || Date.now() < deliveredAt) badRequest('订单送达后才能分享', 'ORDER_NOT_COMPLETED');
+      const shareableIncident = Boolean(
+        order.incidentKey
+        && order.incidentStartedAt
+        && order.failedAt
+        && getDeliveryIncidentPhase({
+          key: order.incidentKey as DeliveryIncidentKey,
+          startedAt: order.incidentStartedAt,
+          failedAt: order.failedAt,
+        }) !== 'pending',
+      );
+      if (!shareableIncident && Date.now() < deliveredAt) badRequest('订单送达或触发彩蛋后才能分享', 'ORDER_NOT_COMPLETED');
+      const incidentEgg = order.incidentKey && order.incidentStartedAt
+        ? deliveryIncidentShareEgg(order.incidentKey as DeliveryIncidentKey, order.seed, order.incidentStartedAt)
+        : undefined;
       return {
         identity,
         storeName: order.storeName || '神秘小馆',
@@ -907,7 +927,7 @@ export class ShareService {
         savedMoneyCents: order.totalCents,
         savedCaloriesKcal: order.itemsTotalCaloriesKcal,
         completedOrderCount: 1,
-        easterEgg: order.easterEgg ?? undefined,
+        easterEgg: order.easterEgg ?? incidentEgg,
         posterTheme: 'order' as const,
       };
     }
@@ -929,6 +949,23 @@ export class ShareService {
         : { persona: classifyPersona(allLines, completedOrderCount, savedMoneyCents, savedCaloriesKcal), posterTheme: 'persona' as const }),
     };
   }
+}
+
+function deliveryIncidentShareEgg(key: DeliveryIncidentKey, seed: string, triggeredAt: string): OrderEasterEgg {
+  const incident = findDeliveryIncident(key);
+  const collectionNumber = String(Math.abs(seed.split('').reduce((sum, char) => (
+    ((sum << 5) - sum + char.charCodeAt(0)) | 0
+  ), 0)) % 10000).padStart(4, '0');
+  return {
+    id: `incident-${key}`,
+    name: incident.failedText,
+    rarity: 'rare',
+    verdict: incident.activeText,
+    themeColor: '#F04B32',
+    decoration: 'delivery-incident',
+    collectionNumber,
+    triggeredAt,
+  };
 }
 
 function virtualDeliveryDurationMs(minutes: number, seed: string): number {

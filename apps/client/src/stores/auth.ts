@@ -16,6 +16,20 @@ function errorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
+async function persistWechatAvatar(filePath: string, visitorId: string): Promise<string> {
+  if (!filePath || /^(cloud:\/\/|https:\/\/)/.test(filePath)) return filePath;
+  const cloud = typeof wx === 'undefined' ? undefined : wx.cloud;
+  if (!cloud) throw new Error('云开发环境未初始化');
+  const extension = filePath.match(/\.([a-zA-Z0-9]+)(?:\?|$)/)?.[1]?.toLowerCase() || 'jpg';
+  const safeExtension = ['jpg', 'jpeg', 'png', 'webp'].includes(extension) ? extension : 'jpg';
+  const result = await cloud.uploadFile({
+    cloudPath: `avatars/${visitorId || 'wechat'}/${Date.now()}.${safeExtension}`,
+    filePath,
+  });
+  if (!result.fileID) throw new Error('头像上传失败');
+  return result.fileID;
+}
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     visitorId: '' as string,
@@ -43,6 +57,7 @@ export const useAuthStore = defineStore('auth', {
       if (account) this.applyAccount(account);
     },
     async wechatLogin(profile: UserProfile) {
+      const persistedAvatarUrl = await persistWechatAvatar(profile.avatarUrl.trim(), this.visitorId);
       const code = await new Promise<string>((resolve, reject) => {
         uni.login({
           provider: 'weixin',
@@ -54,7 +69,7 @@ export const useAuthStore = defineStore('auth', {
         code,
         visitorId: this.visitorId || undefined,
         profile: {
-          avatarUrl: profile.avatarUrl.trim(),
+          avatarUrl: persistedAvatarUrl,
           nickname: profile.nickname.trim(),
         },
         referralToken: uni.getStorageSync(REFERRAL_KEY) || undefined,

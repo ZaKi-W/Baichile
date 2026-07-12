@@ -154,6 +154,7 @@ const checkout = () => {
 </script>
 
 <template>
+  <page-meta page-style="height: 100%; overflow: hidden;" />
   <view v-if="store" class="page store-page">
     <view class="merchant-hero">
       <image v-if="imageVisible('store-cover', store.coverUrl)" class="merchant-cover" :src="store.coverUrl" mode="aspectFill" @error="markImageFailed('store-cover')" />
@@ -199,20 +200,24 @@ const checkout = () => {
     </scroll-view>
 
     <view class="menu-layout">
-      <scroll-view class="category-sidebar" scroll-y :show-scrollbar="false">
-        <view
-          v-for="group in menuGroups"
-          :key="group.id"
-          class="category-button"
-          :class="{ active: group.id === (activeCategoryId || menuGroups[0]?.id) }"
-          @tap="selectCategory(group.id)"
-        >
-          <text>{{ group.name }}</text>
-          <text class="category-count">{{ group.items.length }} 件</text>
+      <scroll-view class="category-sidebar" scroll-y enhanced :show-scrollbar="false" :bounces="false">
+        <view class="category-scroll-content">
+          <view
+            v-for="group in menuGroups"
+            :key="group.id"
+            class="category-button"
+            :class="{ active: group.id === (activeCategoryId || menuGroups[0]?.id) }"
+            @tap="selectCategory(group.id)"
+          >
+            <text>{{ group.name }}</text>
+            <text class="category-count">{{ group.items.length }} 件</text>
+          </view>
+          <view class="category-bottom-spacer" />
         </view>
       </scroll-view>
 
-      <scroll-view class="menu-content" scroll-y :show-scrollbar="false" :scroll-into-view="scrollAnchor" scroll-with-animation @scroll="onMenuScroll">
+      <scroll-view class="menu-content" scroll-y enhanced :show-scrollbar="false" :bounces="false" :scroll-into-view="scrollAnchor" scroll-with-animation @scroll="onMenuScroll">
+        <view class="menu-scroll-content">
         <view v-if="!menuGroups.length" class="empty-menu">菜单正在准备中</view>
         <view v-for="group in menuGroups" :key="group.id" :id="`cat-${group.id}`" class="menu-section">
           <view class="menu-section-title-row">
@@ -240,6 +245,8 @@ const checkout = () => {
               </view>
             </view>
           </view>
+        </view>
+        <view class="menu-bottom-spacer" />
         </view>
       </scroll-view>
     </view>
@@ -280,9 +287,14 @@ const checkout = () => {
   --line: rgba(20, 20, 20, .08);
   --lime: #ffd400;
   --accent: #f04426;
-  min-height: 100vh;
-  padding: 28rpx 28rpx calc(196rpx + env(safe-area-inset-bottom));
+  width: 100%;
+  height: 100vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
   overflow: hidden;
+  box-sizing: border-box;
   background: #f6f6f6;
   color: var(--ink);
 }
@@ -290,6 +302,7 @@ const checkout = () => {
 .merchant-hero {
   position: relative;
   min-height: 398rpx;
+  flex: 0 0 auto;
   padding: max(24rpx, env(safe-area-inset-top)) 30rpx 28rpx;
   overflow: hidden;
   box-sizing: border-box;
@@ -428,6 +441,7 @@ const checkout = () => {
 
 .service-strip {
   width: 100%;
+  flex: 0 0 auto;
   margin-top: 22rpx;
   padding: 16rpx 18rpx;
   box-sizing: border-box;
@@ -453,8 +467,9 @@ const checkout = () => {
 .service-item text { color: var(--ink); font-weight: 900; }
 
 .menu-layout {
-  min-height: calc(100vh - 650rpx);
+  min-height: 0;
   display: flex;
+  flex: 1;
   align-items: stretch;
   margin-top: 22rpx;
   overflow: hidden;
@@ -465,12 +480,14 @@ const checkout = () => {
 }
 .category-sidebar {
   width: 160rpx;
-  height: calc(100vh - 650rpx);
+  height: 100%;
   flex: 0 0 auto;
-  padding: 20rpx 14rpx 150rpx;
+  padding: 0;
   box-sizing: border-box;
   background: #f0f0ed;
 }
+.category-scroll-content { padding: 20rpx 14rpx 0; }
+.category-bottom-spacer { height: 28rpx; }
 .category-button {
   position: relative;
   min-height: 92rpx;
@@ -502,7 +519,13 @@ const checkout = () => {
   background: var(--accent);
 }
 .category-count { margin-top: 6rpx; color: #aaa9a5; font-size: 17rpx; font-weight: 600; }
-.menu-content { min-width: 0; flex: 1; height: calc(100vh - 650rpx); padding: 0 18rpx 60rpx; background: #fff; }
+.menu-content { min-width: 0; height: 100%; flex: 1; padding: 0; box-sizing: border-box; background: #fff; }
+.menu-scroll-content { padding: 0 18rpx; }
+.menu-bottom-spacer { height: 32rpx; }
+.category-sidebar::-webkit-scrollbar,
+.menu-content::-webkit-scrollbar,
+.category-sidebar ::-webkit-scrollbar,
+.menu-content ::-webkit-scrollbar { width: 0; height: 0; display: none; color: transparent; background: transparent; }
 .menu-section { padding-top: 32rpx; }
 .menu-section + .menu-section { margin-top: 10rpx; }
 .menu-section-title-row {
@@ -619,14 +642,14 @@ const checkout = () => {
 .product-add.has-spec { min-width: 96rpx; font-size: 19rpx; }
 
 .cart-bar {
-  position: fixed;
+  position: relative;
   z-index: 20;
-  left: 28rpx;
-  right: 28rpx;
-  bottom: calc(24rpx + env(safe-area-inset-bottom));
+  width: 100%;
   min-height: 104rpx;
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
+  margin-top: 18rpx;
   padding: 12rpx 12rpx 12rpx 18rpx;
   box-sizing: border-box;
   border: 2rpx solid rgba(255, 255, 255, .1);

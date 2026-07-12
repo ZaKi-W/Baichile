@@ -36,6 +36,11 @@ onShow(() => {
   void addresses.load();
   if (auth.accountId) {
     void wallet.load().catch(() => uni.showToast({ title: '余额加载失败', icon: 'none' }));
+    if (!/^(cloud:\/\/|https:\/\/)/.test(auth.userProfile.avatarUrl)) {
+      avatarUrl.value = '';
+      nickname.value = auth.userProfile.nickname;
+      showLoginPopup.value = true;
+    }
   }
   else if (auth.consumeLoginRequest()) showLoginPopup.value = true;
 });
@@ -50,6 +55,10 @@ function openAddresses() {
 
 function openWallet() {
   uni.navigateTo({ url: '/pages/wallet/index' });
+}
+
+function openPersonalityTest() {
+  uni.navigateTo({ url: '/pages/personality-test/index' });
 }
 
 async function shareNow(kind: 'achievement' | 'persona' = 'persona') {
@@ -70,7 +79,7 @@ async function checkIn() {
   walletAction.value = 'check-in';
   try {
     await wallet.checkIn();
-    uni.showToast({ title: '签到成功，获得 ¥100', icon: 'success' });
+    uni.showToast({ title: '签到成功，获得 ¥500', icon: 'success' });
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '签到失败', icon: 'none' });
   } finally {
@@ -204,7 +213,7 @@ async function submitPendingOrderAfterLogin() {
           :disabled="wallet.summary.checkedInToday || !!walletAction"
           @tap="checkIn"
         >
-          {{ wallet.summary.checkedInToday ? '今日已签到' : '签到领 ¥100' }}
+          {{ wallet.summary.checkedInToday ? '今日已签到' : '签到领 ¥500' }}
         </button>
         <button
           class="wallet-action share-reward"
@@ -239,7 +248,7 @@ async function submitPendingOrderAfterLogin() {
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-divider" />
-      <view class="menu-item" @tap="shareNow('persona')">
+      <view class="menu-item" @tap="openPersonalityTest">
         <text class="menu-icon">享</text>
         <text class="menu-text">测测我的白吃人格</text>
         <text class="menu-arrow">›</text>
@@ -319,7 +328,7 @@ async function submitPendingOrderAfterLogin() {
 /* Hero section */
 .hero {
   background: #ffd400;
-  padding: 60rpx 40rpx 50rpx;
+  padding: 28rpx 40rpx 50rpx;
   margin-bottom: 24rpx;
 }
 
@@ -405,7 +414,7 @@ async function submitPendingOrderAfterLogin() {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 80rpx 40rpx 60rpx;
+  padding: 36rpx 40rpx 60rpx;
 }
 
 .guest-icon {

@@ -18,6 +18,7 @@ describe('auth store WeChat login', () => {
     });
     vi.stubGlobal('wx', {
       cloud: {
+        uploadFile: vi.fn().mockResolvedValue({ fileID: 'cloud://avatar.png' }),
         callFunction: vi.fn(({ name, data }: {
           name: string;
           data: {

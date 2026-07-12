@@ -10,6 +10,7 @@ import { buildSharePosterModel } from '../../utils/share-poster';
 const auth = useAuthStore(); const wallet = useWalletStore();
 const data = ref<ShareLanding>(); const loading = ref(true); const token = ref('');
 const sharing = ref(false); const saving = ref(false); const rewardCents = ref(0);
+const PERSONA_CLOUD_PREFIX = 'cloud://cloud1-d8g7o18ula3c12f10/baichile-home/personas';
 let rewardRequested = false;
 const poster = computed(() => data.value ? buildSharePosterModel(data.value) : undefined);
 
@@ -29,7 +30,7 @@ function sharePayload() {
   const title = data.value?.kind === 'persona' && persona
     ? `我的这顿白吃人格是 ${persona.acronym} · ${persona.name}`
     : data.value?.title || poster.value?.title || '朋友请你来白吃一顿';
-  return { title, query: `token=${encodeURIComponent(token.value)}`, imageUrl };
+  return { title, query: `token=${encodeURIComponent(token.value)}&kind=${data.value?.kind || ''}`, imageUrl };
 }
 function rewardShare() {
   if (!sharing.value || !token.value || rewardRequested) return;
@@ -41,7 +42,7 @@ function rewardShare() {
   }).catch(() => { rewardRequested = false; });
 }
 onShareTimeline(() => { rewardShare(); return sharePayload(); });
-onShareAppMessage(() => { rewardShare(); return { ...sharePayload(), path: `/pages/share-landing/index?token=${encodeURIComponent(token.value)}` }; });
+onShareAppMessage(() => { rewardShare(); return { ...sharePayload(), path: `/pages/share-landing/index?token=${encodeURIComponent(token.value)}&kind=${data.value?.kind || ''}` }; });
 
 async function savePoster() {
   if (!data.value?.miniProgramCodeUrl) { uni.showModal({ title: '小程序码暂未生成', content: '你仍可点击右上角直接分享到朋友圈。', showCancel: false }); return; }
@@ -50,7 +51,9 @@ async function savePoster() {
     await nextTick();
     const qr = await download(data.value.miniProgramCodeUrl);
     const avatar = data.value.identity?.avatarUrl ? await download(data.value.identity.avatarUrl).catch(() => '') : '';
-    const character = data.value.persona?.imageUrl ? await imagePath(data.value.persona.imageUrl).catch(() => '') : '';
+    const character = data.value.persona
+      ? await downloadCloudFile(`${PERSONA_CLOUD_PREFIX}/${data.value.persona.id}.png`)
+      : '';
     await drawPoster(qr, avatar, character);
     const path = await exportCanvas();
     await saveImage(path);
@@ -60,7 +63,17 @@ async function savePoster() {
 }
 
 function download(url: string): Promise<string> { return new Promise((resolve, reject) => uni.downloadFile({ url, success: (r) => r.statusCode === 200 ? resolve(r.tempFilePath) : reject(new Error('素材下载失败')), fail: reject })); }
-function imagePath(src: string): Promise<string> { return new Promise((resolve, reject) => uni.getImageInfo({ src, success: (r) => resolve(r.path), fail: reject })); }
+async function downloadCloudFile(fileID: string): Promise<string> {
+  const cloud = typeof wx === 'undefined' ? undefined : wx.cloud;
+  if (!cloud) throw new Error('云存储未初始化');
+  try {
+    const result = await cloud.downloadFile({ fileID });
+    if (!result.tempFilePath) throw new Error('人格素材下载失败');
+    return result.tempFilePath;
+  } catch {
+    throw new Error('人格素材下载失败');
+  }
+}
 function drawPoster(qr: string, avatar: string, character: string): Promise<void> {
   const m = poster.value!; const d = data.value!; const ctx = uni.createCanvasContext('sharePoster');
   if (d.kind === 'persona') return drawPersonaPoster(ctx, qr, avatar, character);

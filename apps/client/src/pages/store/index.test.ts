@@ -36,6 +36,24 @@ describe('store page cart interaction', () => {
     expect(source).toContain('@error="markImageFailed(item.id)"');
   });
 
+  it('locks the page and only scrolls the category and menu panes without scrollbars', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('<page-meta page-style="height: 100%; overflow: hidden;"');
+    expect(source).toContain('class="category-sidebar" scroll-y enhanced');
+    expect(source).toContain('class="menu-content" scroll-y enhanced');
+    expect(source).toContain(':bounces="false"');
+    expect(source).toContain('.menu-content::-webkit-scrollbar');
+    expect(source).toContain('height: 100vh;');
+    expect(source).toContain('flex: 1;');
+    expect(source).toContain('class="category-scroll-content"');
+    expect(source).toContain('class="menu-scroll-content"');
+    expect(source).toContain('class="menu-bottom-spacer"');
+    expect(source).toContain('position: relative;');
+    expect(source).not.toContain('position: fixed;');
+    expect(source).not.toContain('height: calc(100vh - 650rpx)');
+  });
+
   it('adds dishes with a single available specification directly', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 

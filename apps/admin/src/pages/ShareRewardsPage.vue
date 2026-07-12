@@ -8,10 +8,10 @@ const loading = ref(false);
 const saving = ref(false);
 const form = reactive<ShareRewardConfig>({
   enabled: true,
-  initiatedRewardCents: 500,
-  inviterRewardCents: 3000,
-  inviteeRewardCents: 3000,
-  dailyInitiatedLimit: 1,
+  initiatedRewardCents: 100_000,
+  inviterRewardCents: 0,
+  inviteeRewardCents: 100_000,
+  dailyInitiatedLimit: 5,
   orderTitles: [],
   achievementTitles: [],
   invitationTitles: [],

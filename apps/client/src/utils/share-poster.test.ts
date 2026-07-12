@@ -23,6 +23,27 @@ describe('share poster model', () => {
     });
   });
 
+  it('renders a triggered delivery incident as the order easter egg', () => {
+    expect(buildSharePosterModel({
+      ...landing('order'),
+      easterEgg: {
+        id: 'incident-alien_abduction',
+        name: '您的外卖已抵达火星，配送失败',
+        rarity: 'rare',
+        verdict: '骑手遭遇了外星人袭击',
+        themeColor: '#F04B32',
+        decoration: 'delivery-incident',
+        collectionNumber: '0042',
+        triggeredAt: '2026-07-12T02:00:00.000Z',
+      },
+    })).toMatchObject({
+      eyebrow: '稀有彩蛋 · #0042',
+      title: '您的外卖已抵达火星，配送失败',
+      detail: '骑手遭遇了外星人袭击',
+      stamp: '稀有收藏',
+    });
+  });
+
   it('uses achievement totals for a report cover', () => {
     expect(buildSharePosterModel(landing('achievement'))).toMatchObject({
       background: '#FFF8DE',

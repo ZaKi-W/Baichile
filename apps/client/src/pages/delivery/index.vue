@@ -18,6 +18,7 @@ const cart = useCartStore();
 const orderId = ref('');
 const preparingShare = ref(false);
 const storeName = ref('商家');
+const storeCoverUrl = ref('');
 const storeDistanceKm = ref(3);
 const storeDeliveryMinutes = ref(30);
 const sheetExpanded = ref(false);
@@ -34,7 +35,6 @@ const safeTopStyle = { paddingTop: `${Math.max((systemInfo.statusBarHeight ?? 20
 
 const order = computed(() => orders.find(orderId.value));
 const displayStoreName = computed(() => order.value?.storeName || storeName.value);
-const storeThumbUrl = computed(() => order.value?.lines.find((line) => line.imageUrl)?.imageUrl || '');
 const sheetStyle = computed(() => ({
   transform: `translateY(${sheetDragOffset.value}px)`,
 }));
@@ -181,6 +181,12 @@ const incidentDefinition = computed(() => order.value?.incident
   : undefined);
 const hasIncident = computed(() => incidentPhase.value === 'incident');
 const hasFailed = computed(() => incidentPhase.value === 'failed');
+const canShareOrder = computed(() => {
+  if (!order.value) return false;
+  if (hasIncident.value || hasFailed.value) return true;
+  const deliveredAt = new Date(order.value.startedAt).getTime() + DELIVERY_START_MS + order.value.durationMs;
+  return now.value >= deliveredAt;
+});
 const timelineSteps = computed(() => {
   if (!hasIncident.value && !hasFailed.value) return STEPS;
   return STEPS.map((step, index) => index === FINAL_STEP
@@ -290,10 +296,12 @@ async function resolveStoreInfo() {
       detail = await catalogService.store(order.value.storeId);
     }
     storeName.value = detail.name;
+    storeCoverUrl.value = detail.coverUrl || '';
     storeDistanceKm.value = detail.distanceKm || 3;
     storeDeliveryMinutes.value = detail.virtualDeliveryMinutes || 30;
   } catch {
     storeName.value = '商家';
+    storeCoverUrl.value = '';
   }
 }
 
@@ -463,13 +471,15 @@ async function prepareTimelineShare() {
         </view>
       </view>
 
-      <button class="reorder-button" @tap="reorderCurrent">{{ hasFailed ? '重新点一单' : '再来一单' }}</button>
-      <button
-        v-if="!hasFailed && currentStepIndex === FINAL_STEP"
-        class="share-button"
-        :loading="preparingShare"
-        @tap="prepareTimelineShare"
-      >分享这顿空气外卖</button>
+      <view class="order-primary-actions">
+        <button class="order-primary-button reorder-button" @tap="reorderCurrent">{{ hasFailed ? '重新点一单' : '再来一单' }}</button>
+        <button
+          v-if="canShareOrder"
+          class="order-primary-button share-button"
+          :loading="preparingShare"
+          @tap="prepareTimelineShare"
+        >分享订单</button>
+      </view>
 
       <!-- 分隔线 -->
       <view class="divider" />
@@ -494,7 +504,7 @@ async function prepareTimelineShare() {
       <!-- 订单详情 -->
       <view class="order-detail">
         <view class="store-title-row" hover-class="store-title-row-active" @tap="goToStore">
-          <image v-if="storeThumbUrl" class="store-thumb" :src="storeThumbUrl" mode="aspectFill" />
+          <image v-if="storeCoverUrl" class="store-thumb" :src="storeCoverUrl" mode="aspectFill" />
           <view v-else class="store-thumb thumb-fallback">
             <text>{{ displayStoreName.slice(0, 1) }}</text>
           </view>
@@ -653,7 +663,28 @@ async function prepareTimelineShare() {
 .bottom-sheet-dragging {
   transition: none;
 }
-.share-button { margin-top: 18rpx; border: 0; border-radius: 20rpx; color: #171717; background: #ffd400; font-size: 27rpx; font-weight: 800; }
+.order-primary-actions {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin: 28rpx 0 8rpx;
+}
+.order-primary-button {
+  min-width: 0;
+  height: 82rpx;
+  flex: 1;
+  margin: 0;
+  padding: 0 20rpx;
+  border: 0;
+  border-radius: 999rpx;
+  font-size: 27rpx;
+  font-weight: 900;
+  line-height: 82rpx;
+  box-sizing: border-box;
+}
+.order-primary-button::after { border: 0; }
+.share-button { color: #171717; background: #ffd400; }
 .sheet-drag-zone {
   position: sticky;
   top: 0;
@@ -695,19 +726,9 @@ async function prepareTimelineShare() {
   margin-top: 4rpx;
 }
 .reorder-button {
-  width: 250rpx;
-  height: 88rpx;
-  margin: 28rpx auto 8rpx;
-  border: 0;
-  border-radius: 999rpx;
-  background: #ffcc16;
+  background: #fff;
+  border: 2rpx solid #d8d8d4;
   color: #1f1f1f;
-  font-size: 30rpx;
-  font-weight: 900;
-  line-height: 88rpx;
-}
-.reorder-button::after {
-  border: 0;
 }
 
 /* ── 时间轴 ── */

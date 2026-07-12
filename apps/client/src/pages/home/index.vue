@@ -33,16 +33,19 @@ let orderTimer: ReturnType<typeof setInterval> | undefined;
 const flashSaleSeconds = ref(0);
 let flashSaleTimer: ReturnType<typeof setInterval> | undefined;
 const settlementRequested = new Set<string>();
+const STATIC_CDN = 'https://cloud1-d8g7o18ula3c12f10-1318253748.tcloudbaseapp.com/baichile-home';
 const categoryImages = [
-  '/static/home-categories/burger.webp',
-  '/static/home-categories/pizza.webp',
-  '/static/home-categories/coffee.webp',
-  '/static/home-categories/drink.webp',
-  '/static/home-categories/dessert.webp',
-  '/static/home-categories/salad.webp',
-  '/static/home-categories/hotpot.webp',
-  '/static/home-categories/bbq.webp',
+  `${STATIC_CDN}/categories/burger.png`,
+  `${STATIC_CDN}/categories/pizza.png`,
+  `${STATIC_CDN}/categories/coffee.png`,
+  `${STATIC_CDN}/categories/drink.png`,
+  `${STATIC_CDN}/categories/dessert.png`,
+  `${STATIC_CDN}/categories/salad.png`,
+  `${STATIC_CDN}/categories/hotpot.png`,
+  `${STATIC_CDN}/categories/bbq.png`,
 ];
+const featuredCampaignImage = `${STATIC_CDN}/campaigns/featured.png`;
+const saleCampaignImage = `${STATIC_CDN}/campaigns/sale.png`;
 
 const sortedStores = computed(() => {
   let stores = [...(data.value?.stores ?? [])];
@@ -246,7 +249,7 @@ onUnload(handleHide);
               <text class="campaign-button">立即去吃</text>
             </view>
             <view class="campaign-image-wrap">
-              <image class="campaign-image" src="/static/home-campaigns/featured.webp" mode="aspectFill" />
+              <image class="campaign-image" :src="featuredCampaignImage" mode="aspectFill" />
             </view>
           </button>
           <button v-if="flashSaleItems.length" class="campaign-card sale-campaign" @tap="openFlashSale(flashSaleItems[0])">
@@ -263,7 +266,7 @@ onUnload(handleHide);
               <text class="sale-action">马上抢</text>
             </view>
             <view class="campaign-image-wrap">
-              <image class="campaign-image" src="/static/home-campaigns/sale.webp" mode="aspectFill" />
+              <image class="campaign-image" :src="saleCampaignImage" mode="aspectFill" />
             </view>
           </button>
         </section>
@@ -336,7 +339,7 @@ button::after { border: 0; }
 .category-grid { display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 22rpx; }
 .category-item { min-width: 0; display: flex; align-items: center; flex-direction: column; gap: 10rpx; }
 .category-image-wrap { width: 118rpx; height: 104rpx; overflow: hidden; border-radius: 34rpx; background: #f7f3e9; }
-.category-image { width: 100%; height: 100%; }
+.category-image { width: 100%; height: 100%; padding: 18rpx; box-sizing: border-box; }
 .category-name { max-width: 138rpx; overflow: hidden; font-size: 22rpx; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; margin-top: 20rpx; }
 .campaign-grid.single { grid-template-columns: 1fr; }
@@ -353,18 +356,18 @@ button::after { border: 0; }
 .campaign-fallback { font-size: 30rpx; font-weight: 900; }
 .sale-heading { display: flex; align-items: center; gap: 8rpx; }
 .sale-time { padding: 6rpx 8rpx; border-radius: 8rpx; color: #fff; background: #f04426; font-size: 15rpx; font-weight: 800; }
-.price-row { display: flex; align-items: baseline; gap: 8rpx; margin-top: auto; }
+.price-row { display: flex; align-items: baseline; gap: 8rpx; margin-top: auto; padding: 7rpx 10rpx; border-radius: 12rpx; background: rgba(255,255,255,.92); }
 .sale-price { color: #f04426; font-size: 34rpx; font-weight: 900; }
 .original-price { color: #999; font-size: 17rpx; text-decoration: line-through; }
-.sale-action { position: absolute; z-index: 3; right: 14rpx; bottom: 14rpx; padding: 10rpx 18rpx; border-radius: 22rpx; color: #fff; background: #f04426; font-size: 18rpx; font-weight: 900; }
+.sale-action { position: absolute; z-index: 3; right: 14rpx; bottom: 14rpx; display: block; padding: 10rpx 18rpx; border-radius: 22rpx; color: #fff; background: #f04426 !important; font-size: 18rpx; font-weight: 900; }
 .recommendation-section { margin-top: 30rpx; }
-.filter-row { width: calc(100% + 48rpx); margin-left: -24rpx; white-space: nowrap; border-top: 1rpx solid #ededed; border-bottom: 1rpx solid #ededed; background: #fff; }
-.filter-content { display: inline-flex; gap: 10rpx; padding: 0 24rpx; }
+.filter-row { width: calc(100% + 48rpx); height: 76rpx; margin-left: -24rpx; white-space: nowrap; border-top: 1rpx solid #ededed; border-bottom: 1rpx solid #ededed; background: #fff; box-sizing: border-box; }
+.filter-content { height: 76rpx; display: inline-flex; gap: 10rpx; padding: 0 24rpx; box-sizing: border-box; }
 .filter-chip { min-height: 76rpx; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; padding: 0 20rpx; color: #6c6c6c; font-size: 22rpx; font-weight: 600; }
 .filter-chip.active { color: #171717; font-weight: 900; }
 .filter-chip.active::after { content: ""; width: 8rpx; height: 8rpx; margin-left: 8rpx; border-radius: 50%; background: #ffd400; }
-.quick-filter-row { width: calc(100% + 48rpx); margin-left: -24rpx; white-space: nowrap; background: #fff; }
-.quick-filter-content { display: inline-flex; gap: 14rpx; padding: 16rpx 24rpx 20rpx; }
+.quick-filter-row { width: calc(100% + 48rpx); height: 94rpx; margin-left: -24rpx; white-space: nowrap; background: #fff; }
+.quick-filter-content { height: 94rpx; display: inline-flex; align-items: center; gap: 14rpx; padding: 0 24rpx; box-sizing: border-box; }
 .quick-filter-chip { min-width: 130rpx; min-height: 58rpx; display: inline-flex; align-items: center; justify-content: center; padding: 0 22rpx; border: 1rpx solid #e3e3e3; border-radius: 14rpx; color: #606060; background: #fafafa; font-size: 20rpx; font-weight: 600; }
 .quick-filter-chip.active { border-color: #ffd400; color: #171717; background: #ffd400; font-weight: 900; }
 .store-list { margin: 0 -4rpx; padding: 0 4rpx; background: #fff; }

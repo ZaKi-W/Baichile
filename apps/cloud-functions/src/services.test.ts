@@ -184,4 +184,59 @@ describe('share snapshots', () => {
     expect(card.title).toContain(landing.persona!.acronym);
     expect(card.title).toContain(landing.persona!.name);
   });
+
+  it('allows a triggered delivery-incident order to be shared', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_incident_share');
+    const now = new Date();
+    await db.collection<VirtualOrderDoc>(collections.virtualOrders).insert({
+      _id: 'order_incident_share',
+      id: 'order_incident_share',
+      visitorId: null,
+      accountId: 'account_incident_share',
+      status: 'created',
+      storeId: 'store_1',
+      storeName: '彩蛋小馆',
+      destinationId: 'addr_1',
+      startedAt: new Date(now.getTime() - 40_000).toISOString(),
+      durationMs: 60_000,
+      seed: 'incident-share',
+      itemsTotalCents: 1200,
+      deliveryFeeCents: 200,
+      packingFeeCents: 0,
+      totalCents: 1400,
+      itemsTotalCaloriesKcal: 600,
+      lines: [],
+      route: {
+        id: 'route_incident_share', cityCode: '310000',
+        origin: { lat: 31.24, lng: 121.48, coordSystem: 'gcj02' },
+        destination: { lat: 31.23, lng: 121.47, coordSystem: 'gcj02' },
+        polyline: [], routeSource: 'prebuilt', label: '虚拟配送路线',
+      },
+      incidentKey: 'alien_abduction',
+      incidentStartedAt: new Date(now.getTime() - 20_000).toISOString(),
+      failedAt: new Date(now.getTime() - 5_000).toISOString(),
+      refundedAt: now.toISOString(),
+      easterEgg: null,
+      adminStatus: 'normal',
+      adminNote: '',
+      createdAt: new Date(now.getTime() - 40_000).toISOString(),
+      updatedAt: now.toISOString(),
+    });
+
+    const card = await services.shares.create('account_incident_share', {
+      kind: 'order', orderId: 'order_incident_share', showIdentity: true,
+    });
+    const landing = await services.shares.landing(card.token);
+
+    expect(landing.kind).toBe('order');
+    expect(landing.storeName).toBe('彩蛋小馆');
+    expect(landing.easterEgg).toMatchObject({
+      id: 'incident-alien_abduction',
+      name: '您的外卖已抵达火星，配送失败',
+      verdict: '骑手遭遇了外星人袭击',
+      rarity: 'rare',
+    });
+  });
 });

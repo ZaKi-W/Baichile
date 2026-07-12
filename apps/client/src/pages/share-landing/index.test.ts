@@ -32,6 +32,13 @@ describe('share landing poster', () => {
     expect(source).not.toContain("data.value?.kind === 'persona' ? '/static/share/invitation-cover-v2.jpg'");
   });
 
+  it('downloads the persona character from CDN before drawing the saved poster', () => {
+    expect(source).toContain("cloud://cloud1-d8g7o18ula3c12f10/baichile-home/personas");
+    expect(source).toContain('await downloadCloudFile(`${PERSONA_CLOUD_PREFIX}/${data.value.persona.id}.png`)');
+    expect(source).toContain('cloud.downloadFile({ fileID })');
+    expect(source).not.toContain('await imagePath(data.value.persona.imageUrl)');
+  });
+
   it('does not block landing data on poster generation', () => {
     expect(source).not.toContain('onReady(');
     expect(source).not.toContain('onReady(');

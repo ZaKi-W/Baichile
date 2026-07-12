@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { onLoad } from '@dcloudio/uni-app';
 import type { PlaceSuggestion } from '@baichile/api-contract';
-import { nearbyPlaces, reverseGeocode, suggestPlaces } from '../../services/location';
+import { suggestPlaces } from '../../services/location';
 import { exchangeWechatPhoneCode, wechatPhoneFailureMessage } from '../../services/wechat-phone';
 import { useAddressStore } from '../../stores/address';
-import { locationSelection, placeSelection } from './location-state';
+import { placeSelection } from './location-state';
 
 const addressStore = useAddressStore();
 
@@ -19,12 +18,9 @@ const tags = ['家', '公司', '学校', '其他'];
 const saving = ref(false);
 const fetchingPhone = ref(false);
 
-/* ── GPS & nearby ── */
+/* ── 地图选点 ── */
 const currentLat = ref(0);
 const currentLng = ref(0);
-const locating = ref(false);
-const nearbyList = ref<PlaceSuggestion[]>([]);
-const nearbyLoading = ref(false);
 
 /* ── search ── */
 const searchResults = ref<PlaceSuggestion[]>([]);
@@ -47,59 +43,6 @@ function setSelectedAddress(value: string) {
   addressText.value = value;
 }
 
-/* ── 获取当前定位 ── */
-async function locateMe() {
-  if (locating.value) return;
-  locating.value = true;
-  try {
-    const res = await new Promise<UniApp.GetLocationSuccess>((resolve, reject) => {
-      uni.getLocation({ type: 'gcj02', isHighAccuracy: true, success: resolve, fail: reject });
-    });
-    currentLat.value = res.latitude;
-    currentLng.value = res.longitude;
-    selectedLat = res.latitude;
-    selectedLng = res.longitude;
-
-    try {
-      const area = await reverseGeocode(res.latitude, res.longitude);
-      const selection = locationSelection(res, area);
-      currentCity.value = area.city;
-      setSelectedAddress(selection.address);
-      uni.showToast({ title: '已获取当前位置', icon: 'success' });
-    } catch (error) {
-      uni.showToast({ title: errorMessage(error, '已定位，但地址解析失败'), icon: 'none' });
-    }
-
-    await loadNearby(res.latitude, res.longitude);
-  } catch (err: any) {
-    if (err?.errMsg?.includes('auth') || err?.errMsg?.includes('deny')) {
-      uni.showModal({
-        title: '需要定位权限',
-        content: '请在设置中开启位置权限后重试',
-        confirmText: '去设置',
-        success: (res) => { if (res.confirm) uni.openSetting(); },
-      });
-    } else {
-      uni.showToast({ title: '定位失败，请重试', icon: 'none' });
-    }
-  } finally {
-    locating.value = false;
-  }
-}
-
-/* ── 加载附近地点 ── */
-async function loadNearby(lat: number, lng: number) {
-  nearbyLoading.value = true;
-  try {
-    nearbyList.value = await nearbyPlaces(lat, lng);
-  } catch (error) {
-    nearbyList.value = [];
-    uni.showToast({ title: errorMessage(error, '附近地点加载失败'), icon: 'none' });
-  } finally {
-    nearbyLoading.value = false;
-  }
-}
-
 /* ── 地图选点 (uni.chooseLocation) ── */
 async function pickOnMap() {
   try {
@@ -116,10 +59,8 @@ async function pickOnMap() {
     setSelectedAddress(res.name || res.address || '');
     showResults.value = false;
     searchResults.value = [];
-    // Update nearby list centered on picked location
     currentLat.value = res.latitude;
     currentLng.value = res.longitude;
-    await loadNearby(res.latitude, res.longitude);
   } catch (err: any) {
     // User cancelled — do nothing
     if (err?.errMsg?.includes('cancel')) return;
@@ -161,7 +102,6 @@ function pickPlace(place: PlaceSuggestion) {
   setSelectedAddress(selection.address);
   selectedLat = selection.lat;
   selectedLng = selection.lng;
-  nearbyList.value = selection.nearbyList;
   showResults.value = false;
   searchResults.value = [];
 }
@@ -241,10 +181,6 @@ async function save() {
   }
 }
 
-/* ── lifecycle: auto-locate on page load ── */
-onLoad(() => {
-  locateMe();
-});
 </script>
 
 <template>
@@ -252,10 +188,6 @@ onLoad(() => {
     <!-- ── 选地址区域 ── -->
     <view class="form-section location-section">
       <view class="location-actions">
-        <view class="action-btn gps" :class="{ loading: locating }" @tap="locateMe">
-          <image class="action-icon" src="/static/icons/location.svg" mode="aspectFit" />
-          <text class="action-text">{{ locating ? '定位中...' : '获取当前位置' }}</text>
-        </view>
         <view class="action-btn map" @tap="pickOnMap">
           <image class="action-icon" src="/static/marker-store.png" mode="aspectFit" />
           <text class="action-text">地图选点</text>
@@ -286,19 +218,6 @@ onLoad(() => {
           <text class="place-title">{{ place.title }}</text>
           <text class="place-addr">{{ place.address }}</text>
         </view>
-      </view>
-    </view>
-
-    <!-- ── 附近地点 ── -->
-    <view v-if="nearbyLoading" class="nearby-section">
-      <text class="section-title">附近地点</text>
-      <view class="nearby-loading">加载中...</view>
-    </view>
-    <view v-else-if="nearbyList.length" class="nearby-section">
-      <text class="section-title">附近地点</text>
-      <view v-for="place in nearbyList" :key="place.id" class="place-item" @tap="pickPlace(place)">
-        <text class="place-title">{{ place.title }}</text>
-        <text class="place-addr">{{ place.address }}</text>
       </view>
     </view>
 
@@ -386,16 +305,9 @@ onLoad(() => {
   font-size: 26rpx;
   font-weight: 600;
 }
-.action-btn.gps {
-  color: #171717;
-  background: #fff7cf;
-}
-.action-btn.gps.loading {
-  opacity: 0.6;
-}
 .action-btn.map {
   color: #171717;
-  background: #fff;
+  background: #fff7cf;
 }
 .action-icon {
   width: 32rpx;
@@ -442,29 +354,6 @@ onLoad(() => {
 }
 .dropdown-hint {
   padding: 20rpx 0;
-  color: #999;
-  font-size: 24rpx;
-  text-align: center;
-}
-
-/* ── 附近地点 ── */
-.nearby-section {
-  margin-bottom: 24rpx;
-  padding: 20rpx 24rpx;
-  border-radius: 24rpx;
-  background: #fff;
-}
-.section-title {
-  display: block;
-  font-size: 26rpx;
-  font-weight: 700;
-  color: #999;
-  margin-bottom: 12rpx;
-  padding-bottom: 12rpx;
-  border-bottom: 1rpx solid #f0f0ee;
-}
-.nearby-loading {
-  padding: 24rpx 0;
   color: #999;
   font-size: 24rpx;
   text-align: center;

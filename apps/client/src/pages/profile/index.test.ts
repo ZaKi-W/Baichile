@@ -16,6 +16,7 @@ describe('profile page WeChat login', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
     expect(source).toContain(':src="auth.userProfile.avatarUrl"');
+    expect(source).toContain("!/^(cloud:\\/\\/|https:\\/\\/)/.test(auth.userProfile.avatarUrl)");
     expect(source).toContain('{{ auth.userProfile.nickname }}');
     expect(source).toContain('v-if="auth.accountId"');
   });
@@ -36,7 +37,7 @@ describe('profile page WeChat login', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
     expect(source).toContain('wallet.summary.balanceCents');
-    expect(source).toContain('签到领 ¥100');
+    expect(source).toContain('签到领 ¥500');
     expect(source).not.toContain('测试加 ¥1000');
     expect(source).not.toContain('addTestCredit');
     expect(source).toContain("'/pages/wallet/index'");
@@ -57,5 +58,12 @@ describe('profile page WeChat login', () => {
     expect(source).not.toContain('addresses.addresses.length');
     expect(source).toContain("shareService.create({ kind, showIdentity: true })");
     expect(source).not.toContain('/pages/share-center/index');
+  });
+
+  it('opens the personality quiz directly from the existing menu entry', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+    expect(source).toContain("uni.navigateTo({ url: '/pages/personality-test/index' })");
+    expect(source).toContain('<view class="menu-item" @tap="openPersonalityTest">');
+    expect(source).toContain('测测我的白吃人格');
   });
 });

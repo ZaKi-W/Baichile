@@ -2,10 +2,10 @@ import type { ShareRewardConfig } from '@baichile/api-contract';
 
 export const DEFAULT_SHARE_REWARD_CONFIG: ShareRewardConfig = {
   enabled: true,
-  initiatedRewardCents: 500,
-  inviterRewardCents: 3000,
-  inviteeRewardCents: 3000,
-  dailyInitiatedLimit: 3,
+  initiatedRewardCents: 100_000,
+  inviterRewardCents: 0,
+  inviteeRewardCents: 100_000,
+  dailyInitiatedLimit: 5,
   orderTitles: ['我刚刚忍住了这顿外卖', '这单我没点，但快乐省下了'],
   achievementTitles: ['我在这顿白吃攒下 {count} 次胜利', '今天也没有被外卖打败'],
   invitationTitles: ['来这顿白吃一起假装点外卖', '请你领一笔虚拟饭钱'],
