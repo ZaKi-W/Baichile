@@ -44,6 +44,7 @@ export async function resolveCloudFileUrls(fileIds: Array<string | null | undefi
 export async function createShareMiniProgramCode(token: string): Promise<string | undefined> {
   const cached = miniCodeCache.get(token);
   if (cached) return cached;
+  if (process.env.NODE_ENV === 'test') return undefined;
   try {
     const cloud = require('wx-server-sdk');
     cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });

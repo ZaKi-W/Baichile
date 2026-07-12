@@ -71,9 +71,8 @@ export function hashAdminToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-export function validateAdminPassword(password: string, environment = process.env.NODE_ENV): void {
-  if (environment === 'production' && password.length < 10) {
-    conflict('密码至少 10 位', 'WEAK_PASSWORD');
+export function validateAdminPassword(password: string): void {
+  if (password.length < 12 || !/[a-z]/i.test(password) || !/\d/.test(password)) {
+    conflict('密码至少 12 位且必须同时包含字母和数字', 'WEAK_PASSWORD');
   }
-  if (!password) conflict('密码不能为空', 'WEAK_PASSWORD');
 }

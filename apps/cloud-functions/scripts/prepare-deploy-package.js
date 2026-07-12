@@ -13,8 +13,8 @@ const runtimePackage = {
   type: 'commonjs',
   main: 'index.js',
   dependencies: {
-    '@cloudbase/node-sdk': '^2.11.0',
-    'wx-server-sdk': '^3.0.1',
+    '@cloudbase/node-sdk': '^3.18.3',
+    'wx-server-sdk': '^4.0.2',
   },
 };
 

@@ -128,8 +128,8 @@ export class AdminAuthService {
 
   async ensureBootstrapAdmin(): Promise<void> {
     if (await this.db.collection<AdminUserDoc>(collections.adminUsers).count()) return;
-    const username = process.env.ADMIN_BOOTSTRAP_USERNAME || (process.env.NODE_ENV === 'production' ? '' : 'admin');
-    const password = process.env.ADMIN_BOOTSTRAP_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'admin');
+    const username = process.env.ADMIN_BOOTSTRAP_USERNAME || '';
+    const password = process.env.ADMIN_BOOTSTRAP_PASSWORD || '';
     const displayName = process.env.ADMIN_BOOTSTRAP_DISPLAY_NAME || '开发管理员';
     if (!username || !password) return;
     await this.createAdmin({ username, password, displayName, role: 'super_admin' });

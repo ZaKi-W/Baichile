@@ -7,3 +7,5 @@ coverage/
 *.log
 apps/client/src/uni_modules/
 .worktrees/
+.workbuddy/
+白吃了图片/

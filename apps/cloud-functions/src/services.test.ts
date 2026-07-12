@@ -78,6 +78,23 @@ describe('home catalog', () => {
 });
 
 describe('order detail snapshots', () => {
+  it('rejects unsafe quantities and oversized carts', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem());
+    const services = new BaichileCloudServices(db);
+
+    await expect(services.orders.quote({
+      storeId: 'store_1', virtualDestinationId: 'addr_1',
+      lines: [{ menuItemId: 'dish_1', optionIds: [], quantity: 100 }],
+    })).rejects.toMatchObject({ code: 'INVALID_QUANTITY' });
+
+    await expect(services.orders.quote({
+      storeId: 'store_1', virtualDestinationId: 'addr_1',
+      lines: Array.from({ length: 51 }, () => ({ menuItemId: 'dish_1', optionIds: [], quantity: 1 })),
+    })).rejects.toMatchObject({ code: 'ORDER_TOO_LARGE' });
+  });
+
   it('returns and stores store, address, payment, and created time snapshots', async () => {
     const db = new MemoryDatabase();
     await db.collection<StoreDoc>(collections.stores).insert(activeStore());

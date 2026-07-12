@@ -74,7 +74,7 @@ export const useAuthStore = defineStore('auth', {
         },
         referralToken: uni.getStorageSync(REFERRAL_KEY) || undefined,
       };
-      const session = await requestApi<AccountSession>('POST', '/v1/auth/wechat-mini', '', payload)
+      const session = await requestApi<AccountSession>('POST', '/v1/auth/wechat-mini', this.accessToken, payload)
         .catch((error) => {
           throw new Error(errorMessage(error, '微信登录失败'));
         });
@@ -94,7 +94,7 @@ export const useAuthStore = defineStore('auth', {
     },
     applyAccount(session: AccountSession) {
       this.accountId = session.accountId;
-      this.accessToken = session.accessToken;
+      this.accessToken = session.accessToken || '';
       this.provider = session.provider;
       this.userProfile = { ...session.profile };
     },
@@ -114,12 +114,6 @@ export const useAuthStore = defineStore('auth', {
       const requested = this.loginRequested;
       this.loginRequested = false;
       return requested;
-    },
-    async devLogin() {
-      if (import.meta.env.PROD) throw new Error('生产环境不可使用模拟微信登录');
-      this.accountId = `account_dev_${Date.now()}`;
-      this.provider = 'dev-mock';
-      await requestApi('POST', '/v1/auth/merge-visitor', '', { visitorId: this.visitorId, accountId: this.accountId });
     },
   },
 });

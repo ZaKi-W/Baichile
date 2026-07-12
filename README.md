@@ -109,14 +109,7 @@ pnpm dev:admin
 VITE_CLOUDBASE_HTTP_API_URL=https://your-cloudbase-function-gateway
 ```
 
-开发环境初始账号由云函数启动时保证：
-
-```bash
-账号：admin
-密码：admin
-```
-
-生产环境首次启动前必须设置安全的 `ADMIN_BOOTSTRAP_*` 环境变量。
+后台不会创建默认账号。首次启动前必须设置 `ADMIN_BOOTSTRAP_*` 环境变量，密码至少 12 位且同时包含字母和数字；初始化完成后应从云函数环境中移除引导密码。
 
 ## 验证
 

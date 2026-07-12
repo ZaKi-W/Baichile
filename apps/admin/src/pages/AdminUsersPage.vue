@@ -12,7 +12,7 @@ const form=reactive({id:'',username:'',displayName:'',password:'',role:'operator
 async function load(){loading.value=true;try{const r=await adminApi.listAdminUsers(filters);items.value=r.items;total.value=r.total;}catch(e){ElMessage.error(e instanceof Error?e.message:'管理员加载失败');}finally{loading.value=false;}}
 function open(row?:AdminUser){creating.value=!row;Object.assign(form,row?{...row,password:''}:{id:'',username:'',displayName:'',password:'',role:'operator',status:'active'});dialog.value=true;}
 async function save(){if(creating.value)await adminApi.createAdmin(form);else await adminApi.updateAdmin(form.id,{displayName:form.displayName,role:form.role,status:form.status});ElMessage.success('管理员已保存');dialog.value=false;await load();}
-async function reset(row:AdminUser){const result=await ElMessageBox.prompt('输入至少 10 位的新密码','重置管理员密码',{inputType:'password',inputValidator:v=>v.length>=10||'密码至少 10 位'});await adminApi.resetAdminPassword(row.id,result.value);ElMessage.success('密码已重置，该账号现有会话已撤销');}
+async function reset(row:AdminUser){const result=await ElMessageBox.prompt('输入至少 12 位且同时包含字母和数字的新密码','重置管理员密码',{inputType:'password',inputValidator:v=>(v.length>=12&&/[a-z]/i.test(v)&&/\d/.test(v))||'密码至少 12 位且必须同时包含字母和数字'});await adminApi.resetAdminPassword(row.id,result.value);ElMessage.success('密码已重置，该账号现有会话已撤销');}
 onMounted(load);
 </script>
 <template>

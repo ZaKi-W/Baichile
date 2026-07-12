@@ -7,6 +7,7 @@ import type { CloudFunctionEvent, RequestContext } from './types';
 export class BaichileRouter {
   private readonly services: BaichileCloudServices;
   private readonly admin: AdminCloudServices;
+  private readonly rateLimits = new Map<string, { count: number; resetAt: number }>();
 
   constructor(private readonly db: Database = createCloudBaseDatabase()) {
     this.services = new BaichileCloudServices(db);
@@ -31,20 +32,26 @@ export class BaichileRouter {
     if (segments[1] === 'admin') return this.routeAdmin(request, segments.slice(2));
 
     if (request.method === 'GET' && path === '/v1/health') return { status: 'ok', service: 'baichile-cloud-functions' };
-    if (request.method === 'POST' && path === '/v1/auth/guest') return this.services.auth.createGuest();
+    if (request.method === 'POST' && path === '/v1/auth/guest') {
+      this.enforceRateLimit(`guest:${request.ipAddress ?? request.openId ?? 'unknown'}`, 20, 60 * 60_000);
+      return this.services.auth.createGuest();
+    }
     if (request.method === 'POST' && path === '/v1/auth/wechat-mini') {
+      if (!request.openId) unauthorized('仅允许微信小程序登录', 'WECHAT_CONTEXT_REQUIRED');
+      const guestIdentity = await this.services.auth.resolvePersistedIdentity(request.authorization);
+      const requestedVisitorId = typeof (request.data as any)?.visitorId === 'string' ? (request.data as any).visitorId : '';
+      if (requestedVisitorId && guestIdentity.visitorId !== requestedVisitorId) unauthorized('游客身份无效', 'INVALID_VISITOR_SESSION');
       const session = await this.services.auth.loginWechatMini(request.data as any, request.openId);
-      const visitorId = typeof (request.data as any)?.visitorId === 'string' ? (request.data as any).visitorId : '';
-      if (visitorId) await this.mergeIdentity(visitorId, session.accountId);
+      if (guestIdentity.visitorId) await this.mergeIdentity(guestIdentity.visitorId, session.accountId);
       return session;
     }
     if (request.method === 'POST' && path === '/v1/auth/wechat-phone') {
+      if (!request.openId) unauthorized('仅允许微信小程序获取手机号', 'WECHAT_CONTEXT_REQUIRED');
+      this.enforceRateLimit(`wechat-phone:${request.openId}`, 10, 60 * 60_000);
       return this.services.auth.getWechatPhoneNumber(String((request.data as any)?.code ?? ''));
     }
     if (request.method === 'POST' && path === '/v1/auth/merge-visitor') {
-      const body = request.data as { visitorId?: string; accountId?: string };
-      if (!body?.visitorId || !body.accountId) badRequest('合并身份参数不完整');
-      return this.mergeIdentity(body.visitorId, body.accountId);
+      unauthorized('该接口已停用', 'ENDPOINT_DISABLED');
     }
 
     if (request.method === 'GET' && path === '/v1/catalog/home') return this.services.catalog.home();
@@ -56,62 +63,68 @@ export class BaichileRouter {
     }
 
     if (request.method === 'GET' && path === '/v1/map/reverse-geocode') {
+      this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.map.reverseGeocode(Number(request.query.get('lat')), Number(request.query.get('lng')));
     }
     if (request.method === 'GET' && path === '/v1/map/nearby') {
+      this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.map.nearbyPlaces(Number(request.query.get('lat')), Number(request.query.get('lng')));
     }
     if (request.method === 'GET' && path === '/v1/map/suggest') {
+      this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.map.suggestPlaces(request.query.get('keyword') ?? '', request.query.get('region') ?? undefined);
     }
 
     if (request.method === 'GET' && path === '/v1/addresses/me') {
-      return this.services.addresses.list(await this.services.auth.resolvePersistedIdentity(request.authorization));
+      return this.services.addresses.list(await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId));
     }
     if (request.method === 'POST' && path === '/v1/addresses') {
-      return this.services.addresses.save(request.data as any, await this.services.auth.resolvePersistedIdentity(request.authorization));
+      return this.services.addresses.save(request.data as any, await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId));
     }
     if (request.method === 'POST' && segments[1] === 'addresses' && segments[3] === 'delete') {
-      return this.services.addresses.remove(decodeURIComponent(segments[2]), await this.services.auth.resolvePersistedIdentity(request.authorization));
+      return this.services.addresses.remove(decodeURIComponent(segments[2]), await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId));
     }
 
     if (request.method === 'POST' && path === '/v1/orders/quote') return this.services.orders.quote(request.data as any);
     if (request.method === 'POST' && path === '/v1/orders/virtual') {
-      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization);
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId);
       if (!identity.accountId) unauthorized();
       return this.services.orders.create(request.data as any, identity.accountId);
     }
     if (request.method === 'GET' && path === '/v1/orders/me') {
-      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization);
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId);
       return this.services.orders.list(identity.visitorId, identity.accountId);
     }
     if (request.method === 'GET' && segments[1] === 'orders' && segments[2]) {
-      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization);
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId);
       return this.services.orders.find(decodeURIComponent(segments[2]), identity);
     }
 
     if (request.method === 'GET' && path === '/v1/accounts/me/savings') {
-      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization);
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId);
       return this.services.orders.savings(identity.accountId);
     }
     if (request.method === 'GET' && path === '/v1/accounts/me/wallet') {
-      const accountId = await this.requireAccount(request.authorization);
+      const accountId = await this.requireAccount(request.authorization, request.openId);
       await this.services.orders.settleFailedOrders(accountId);
       return this.services.wallet.summary(accountId);
     }
     if (request.method === 'GET' && path === '/v1/accounts/me/wallet/transactions') {
-      const accountId = await this.requireAccount(request.authorization);
+      const accountId = await this.requireAccount(request.authorization, request.openId);
       await this.services.orders.settleFailedOrders(accountId);
       return this.services.wallet.listTransactions(accountId);
     }
-    if (request.method === 'POST' && path === '/v1/accounts/me/check-in') return this.services.wallet.checkIn(await this.requireAccount(request.authorization));
-    if (request.method === 'POST' && path === '/v1/shares') return this.services.shares.create(await this.requireAccount(request.authorization), request.data as any);
+    if (request.method === 'POST' && path === '/v1/accounts/me/check-in') return this.services.wallet.checkIn(await this.requireAccount(request.authorization, request.openId));
+    if (request.method === 'POST' && path === '/v1/shares') return this.services.shares.create(await this.requireAccount(request.authorization, request.openId), request.data as any);
     if (request.method === 'GET' && segments[1] === 'shares' && segments[2]) return this.services.shares.landing(decodeURIComponent(segments[2]));
     if (request.method === 'POST' && segments[1] === 'shares' && segments[2] && segments[3] === 'initiated-reward') {
-      return this.services.shares.rewardInitiatedShare(await this.requireAccount(request.authorization), decodeURIComponent(segments[2]));
+      return this.services.shares.rewardInitiatedShare(await this.requireAccount(request.authorization, request.openId), decodeURIComponent(segments[2]));
     }
 
-    if (request.method === 'POST' && path === '/v1/analytics/events') return this.services.analytics.record(request.data, request.authorization);
+    if (request.method === 'POST' && path === '/v1/analytics/events') {
+      this.enforceRateLimit(`analytics:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
+      return this.services.analytics.record(request.data, request.authorization, request.openId);
+    }
 
     badRequest('接口不存在', 'NOT_FOUND');
   }
@@ -119,6 +132,7 @@ export class BaichileRouter {
   private async routeAdmin(request: RequestContext, segments: string[]): Promise<unknown> {
     if (request.method === 'POST' && segments.join('/') === 'auth/login') {
       const body = request.data as { username?: string; password?: string };
+      this.enforceRateLimit(`admin-login:${request.ipAddress ?? 'unknown'}:${body?.username?.trim().toLowerCase() ?? ''}`, 5, 15 * 60_000);
       const result = await this.admin.auth.login(body?.username ?? '', body?.password ?? '');
       await this.admin.audit.record(result.admin, { action: 'auth.login', resourceType: 'admin_user', resourceId: result.admin.id, ipAddress: request.ipAddress });
       return result;
@@ -251,10 +265,21 @@ export class BaichileRouter {
     badRequest('后台接口不存在', 'NOT_FOUND');
   }
 
-  private async requireAccount(authorization?: string): Promise<string> {
-    const identity = await this.services.auth.resolvePersistedIdentity(authorization);
+  private async requireAccount(authorization?: string, openId?: string): Promise<string> {
+    const identity = await this.services.auth.resolvePersistedIdentity(authorization, openId);
     if (!identity.accountId) unauthorized();
     return identity.accountId;
+  }
+
+  private enforceRateLimit(key: string, limit: number, windowMs: number): void {
+    const now = Date.now();
+    const current = this.rateLimits.get(key);
+    if (!current || current.resetAt <= now) {
+      this.rateLimits.set(key, { count: 1, resetAt: now + windowMs });
+      return;
+    }
+    current.count += 1;
+    if (current.count > limit) unauthorized('请求过于频繁，请稍后再试', 'RATE_LIMITED');
   }
 
   private async mergeIdentity(visitorId: string, accountId: string) {
@@ -288,7 +313,7 @@ function normalizeRequest(event: CloudFunctionEvent, rawContext?: any): RequestC
     query,
     data: body.data ?? event.data,
     authorization: body.authorization ?? event.authorization ?? event.headers?.authorization ?? event.headers?.Authorization,
-    openId: rawContext?.OPENID ?? event.headers?.['x-wx-openid'],
+    openId: typeof rawContext?.OPENID === 'string' && rawContext.OPENID ? rawContext.OPENID : undefined,
     ipAddress: event.headers?.['x-forwarded-for'] ?? event.headers?.['x-real-ip'],
   };
 }
@@ -302,6 +327,7 @@ function parseGatewayBody(event: CloudFunctionEvent): Partial<CloudFunctionEvent
   if (!raw) return {};
   if (typeof raw === 'object') return raw as Partial<CloudFunctionEvent>;
   if (typeof raw !== 'string') return {};
+  if (Buffer.byteLength(raw, 'utf8') > 65_536) badRequest('请求数据过大', 'PAYLOAD_TOO_LARGE');
   try {
     return JSON.parse(raw) as Partial<CloudFunctionEvent>;
   } catch {

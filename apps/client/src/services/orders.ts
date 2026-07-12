@@ -8,7 +8,7 @@ export const orderService = {
   },
   async create(request: QuoteRequest): Promise<VirtualOrder> {
     const auth = useAuthStore();
-    if (auth.accessToken) return requestApi<VirtualOrder>('POST', '/v1/orders/virtual', auth.accessToken, request);
+    if (auth.accountId) return requestApi<VirtualOrder>('POST', '/v1/orders/virtual', auth.accessToken, request);
     throw new ApiRequestError('服务未配置，暂时无法创建订单');
   },
   async list(): Promise<VirtualOrder[]> {

@@ -136,25 +136,26 @@ export class AuthService {
 
   constructor(private readonly db: Database, private readonly services: BaichileCloudServices) {}
 
-  resolveIdentity(authorization?: string): { visitorId?: string; accountId?: string } {
+  private resolveGuestIdentity(authorization?: string): { visitorId?: string } {
     const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? authorization;
     if (!token) return {};
-    if (token.startsWith('guest.')) return { visitorId: `visitor_${token.slice('guest.'.length)}` };
-    if (token.startsWith('account.')) {
-      const subject = token.slice('account.'.length);
-      return { accountId: `account_${/^[a-f0-9]{64}$/i.test(subject) ? subject.slice(0, 24) : subject}` };
-    }
+    const subject = token.match(/^guest\.([0-9a-f-]{36})$/i)?.[1];
+    if (subject) return { visitorId: `visitor_${subject}` };
     return {};
   }
 
-  async resolvePersistedIdentity(authorization?: string) {
-    const identity = this.resolveIdentity(authorization);
-    if (identity.accountId) {
-      await this.ensureAccount(identity.accountId);
-      const account = await this.db.collection<AccountDoc>(collections.accounts).get(identity.accountId);
-      if (account?.status === 'disabled') unauthorized('账号已被禁用', 'ACCOUNT_DISABLED');
+  async resolvePersistedIdentity(authorization?: string, openId?: string) {
+    if (openId) {
+      const digest = createHash('sha256').update(openId).digest('hex');
+      const account = await this.db.collection<AccountDoc>(collections.accounts).findOne({ wechatOpenIdHash: digest });
+      if (!account) return {};
+      if (account.status === 'disabled') unauthorized('账号已被禁用', 'ACCOUNT_DISABLED');
+      return { accountId: account.id };
     }
-    return identity;
+    const identity = this.resolveGuestIdentity(authorization);
+    if (!identity.visitorId) return {};
+    const session = await this.db.collection<VisitorSessionDoc>(collections.visitorSessions).get(identity.visitorId);
+    return session?.visitorId === identity.visitorId ? { visitorId: identity.visitorId } : {};
   }
 
   async ensureAccount(accountId: string, patch: Partial<AccountDoc> = {}): Promise<AccountDoc> {
@@ -232,7 +233,7 @@ export class AuthService {
       await this.services.wallet.initializeAccount(accountId, tx);
     });
     if (!existing) await this.services.shares.completeReferral(accountId, input.referralToken);
-    return { accountId, accessToken: `account.${digest}`, provider: 'wechat', profile };
+    return { accountId, accessToken: '', provider: 'wechat', profile };
   }
 
   async getWechatPhoneNumber(code: string): Promise<WechatPhoneResult> {
@@ -485,6 +486,10 @@ export class OrderService {
 
   async quote(request: QuoteRequest): Promise<OrderQuote> {
     if (!request.lines?.length) badRequest('购物车不能为空');
+    if (request.lines.length > 50) badRequest('单个订单最多包含 50 项商品', 'ORDER_TOO_LARGE');
+    if (request.lines.some((line) => !Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 99)) {
+      badRequest('单项商品数量必须在 1 到 99 之间', 'INVALID_QUANTITY');
+    }
     const store = await this.catalog.find(request.storeId);
     const lines = request.lines.map((input) => {
       const item = store.menu.find((menuItem) => menuItem.id === input.menuItemId);
@@ -508,6 +513,9 @@ export class OrderService {
     });
     const itemsTotalCents = lines.reduce((sum, line) => sum + line.totalCents, 0);
     const itemsTotalCaloriesKcal = lines.reduce((sum, line) => sum + line.totalCaloriesKcal, 0);
+    if (!Number.isSafeInteger(itemsTotalCents) || itemsTotalCents < 0 || itemsTotalCents > 10_000_000) {
+      badRequest('订单金额超出允许范围', 'INVALID_ORDER_TOTAL');
+    }
     return {
       storeId: store.id,
       lines,
@@ -978,11 +986,13 @@ function virtualDeliveryDurationMs(minutes: number, seed: string): number {
 export class AnalyticsService {
   constructor(private readonly db: Database, private readonly auth: AuthService) {}
 
-  async record(body: unknown, authorization?: string) {
+  async record(body: unknown, authorization?: string, openId?: string) {
     const input = body && typeof body === 'object' ? body as Record<string, unknown> : {};
     const eventName = typeof input.eventName === 'string' ? input.eventName.trim() : '';
-    if (!eventName) badRequest('eventName 不能为空');
-    const identity = await this.auth.resolvePersistedIdentity(authorization);
+    if (!eventName || eventName.length > 64 || !/^[a-zA-Z0-9._-]+$/.test(eventName)) badRequest('eventName 格式不正确');
+    const payload = input.payload && typeof input.payload === 'object' ? input.payload as Record<string, unknown> : {};
+    if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > 8_192) badRequest('埋点数据过大', 'PAYLOAD_TOO_LARGE');
+    const identity = await this.auth.resolvePersistedIdentity(authorization, openId);
     const id = randomUUID();
     await this.db.collection<AnalyticsEventDoc>(collections.analyticsEvents).insert({
       _id: id,
@@ -990,7 +1000,7 @@ export class AnalyticsService {
       visitorId: identity.visitorId ?? null,
       accountId: identity.accountId ?? null,
       eventName,
-      payload: input.payload && typeof input.payload === 'object' ? input.payload as Record<string, unknown> : {},
+      payload,
       createdAt: this.db.now().toISOString(),
     });
     return { recorded: true };
@@ -999,6 +1009,7 @@ export class AnalyticsService {
 
 export class MapService {
   async reverseGeocode(lat: number, lng: number): Promise<AdministrativeArea> {
+    validateCoordinates(lat, lng);
     const key = requireTencentMapKey();
     const body = await mapGet<{ status: number; message: string; result?: { address?: string; ad_info: { adcode: string }; address_component: { province: string; city: string; district: string } } }>(
       `https://apis.map.qq.com/ws/geocoder/v1/?location=${lat},${lng}&key=${key}&get_poi=0`,
@@ -1010,6 +1021,7 @@ export class MapService {
   }
 
   async nearbyPlaces(lat: number, lng: number): Promise<PlaceSuggestion[]> {
+    validateCoordinates(lat, lng);
     const key = requireTencentMapKey();
     const params = new URLSearchParams({ keyword: '小区', boundary: `nearby(${lat},${lng},3000)`, page_size: '20', page_index: '1', key });
     return mapPlaces(`https://apis.map.qq.com/ws/place/v1/search/?${params.toString()}`);
@@ -1017,6 +1029,7 @@ export class MapService {
 
   async suggestPlaces(keyword: string, region?: string): Promise<PlaceSuggestion[]> {
     if (!keyword?.trim()) return [];
+    if (keyword.trim().length > 80 || (region?.length ?? 0) > 40) badRequest('地点搜索参数过长');
     const key = requireTencentMapKey();
     const params = new URLSearchParams({ keyword: keyword.trim(), key, page_size: '10' });
     if (region) {
@@ -1024,6 +1037,12 @@ export class MapService {
       params.set('region_fix', '1');
     }
     return mapPlaces(`https://apis.map.qq.com/ws/place/v1/suggestion/?${params.toString()}`);
+  }
+}
+
+function validateCoordinates(lat: number, lng: number): void {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    badRequest('经纬度参数不正确');
   }
 }
 
