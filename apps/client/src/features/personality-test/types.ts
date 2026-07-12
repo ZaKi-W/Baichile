@@ -26,6 +26,7 @@ export interface QuizQuestion {
 export interface PersonalityConfig {
   code: PersonalityCode;
   name: string;
+  imageUrl: string;
   coreTrait: string;
   referenceVector: AxisScores;
   description: string;

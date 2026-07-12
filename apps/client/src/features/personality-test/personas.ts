@@ -1,5 +1,7 @@
 import type { AxisKey, PersonalityCode, PersonalityConfig } from './types';
 
+export const PERSONALITY_IMAGE_BASE_URL = 'https://cloud1-d8g7o18ula3c12f10-1318253748.tcloudbaseapp.com/baichile-home/personality-test';
+
 export const PERSONALITY_PRIORITY: PersonalityCode[] = [
   'DAVE', 'MAYBE', 'FLEX', 'BIGG', 'SOLO', 'MATH', 'SAME', 'BETA',
   'DESS', 'LATE', 'NOPE', 'CARB', 'FIRE', 'CHECK', 'CHEAT', 'HOST',
@@ -12,7 +14,7 @@ export const AXIS_LABELS: Record<AxisKey, { name: string; low: string; high: str
   social: { name: '用餐气场', low: '独自开饭', high: '饭局中心' },
 };
 
-const configs: PersonalityConfig[] = [
+const configs: Array<Omit<PersonalityConfig, 'imageUrl'>> = [
   { code: 'DAVE', name: '大卫戴', coreTrait: '大份、碳水、肉、扎实、北方胃', referenceVector: { appetite: 2, explore: -1, control: -1, social: 0 }, description: '你相信一顿饭最重要的是扎实。肉要够、主食要足，吃完能扛住一整天才算交付完成。', quote: '份量到位，世界自然安静。', representativeFoods: ['大碗面', '肉夹馍', '盖饭'], recommendedScenes: ['忙碌工作日', '体力回血局'], hiddenTitle: '碳水大陆守门人' },
   { code: 'MAYBE', name: '薛定谔的饭盒', coreTrait: '点之前很饿，送到后又没胃口', referenceVector: { appetite: -1, explore: 0, control: -2, social: -1 }, description: '你的食欲存在于下单前的量子态里。菜单越翻越饿，饭一送到，胃口却可能先一步下线。', quote: '饭到了，饿意却撤回了。', representativeFoods: ['小份沙拉', '精致便当', '水果杯'], recommendedScenes: ['选择困难时', '少量多样局'], hiddenTitle: '食欲量子观测员' },
   { code: 'FLEX', name: '林黛玉倒拔大鸡腿', coreTrait: '平时小鸟胃，遇到真爱突然爆发', referenceVector: { appetite: -1, explore: 1, control: 0, social: 0 }, description: '你不是吃得少，只是值得你认真出手的食物不多。一旦遇见真爱菜品，小鸟胃会立刻切换战斗模式。', quote: '胃口不大，真爱除外。', representativeFoods: ['烤鸡腿', '限定料理', '精致小食'], recommendedScenes: ['本命美食局', '新品品鉴局'], hiddenTitle: '限定食欲爆发者' },
@@ -31,4 +33,7 @@ const configs: PersonalityConfig[] = [
   { code: 'HOST', name: '饭局发动机', coreTrait: '负责组局、点菜、照顾所有人', referenceVector: { appetite: 0, explore: 0, control: 2, social: 2 }, description: '一顿饭能顺利开场，往往是因为你在背后推进。组人、订位、点菜和照顾忌口都被你自然接管。', quote: '人我来叫，菜我来点。', representativeFoods: ['共享套餐', '多人火锅', '圆桌菜'], recommendedScenes: ['朋友聚会', '团队聚餐'], hiddenTitle: '饭局首席运营官' },
 ];
 
-export const PERSONALITIES = Object.fromEntries(configs.map((item) => [item.code, item])) as Record<PersonalityCode, PersonalityConfig>;
+export const PERSONALITIES = Object.fromEntries(configs.map((item) => [item.code, {
+  ...item,
+  imageUrl: `${PERSONALITY_IMAGE_BASE_URL}/${item.code}.png`,
+}])) as Record<PersonalityCode, PersonalityConfig>;
