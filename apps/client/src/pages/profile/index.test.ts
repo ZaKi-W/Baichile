@@ -50,4 +50,12 @@ describe('profile page WeChat login', () => {
     expect(source).toContain("import { CODE_VERSION }");
     expect(source).toContain('代码版本 {{ CODE_VERSION }}');
   });
+
+  it('opens orders, hides the address count, and shares directly', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+    expect(source).toContain("uni.switchTab({ url: '/pages/orders/index' })");
+    expect(source).not.toContain('addresses.addresses.length');
+    expect(source).toContain("shareService.create({ kind, showIdentity: true })");
+    expect(source).not.toContain('/pages/share-center/index');
+  });
 });

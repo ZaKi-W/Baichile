@@ -5,6 +5,11 @@ import type {
   AdminUserStatus,
   ManagedContentStatus,
   ShareKind,
+  OrderEasterEgg,
+  QuoteLine,
+  ShareIdentity,
+  SharePersona,
+  ShareMilestone,
   ShareRewardConfig,
   WalletTransactionType,
 } from '@baichile/api-contract';
@@ -133,6 +138,7 @@ export interface VirtualOrderDoc {
   incidentStartedAt?: string | null;
   failedAt?: string | null;
   refundedAt?: string | null;
+  easterEgg?: OrderEasterEgg | null;
   adminStatus: AdminOrderStatus;
   adminNote: string;
   createdAt: string;
@@ -167,10 +173,18 @@ export interface ShareInviteDoc {
   orderId?: string | null;
   title: string;
   snapshot: {
+    identity?: ShareIdentity;
+    storeName?: string;
+    orderLines?: QuoteLine[];
     dishNames: string[];
     savedMoneyCents: number;
     savedCaloriesKcal: number;
     completedOrderCount: number;
+    persona?: SharePersona;
+    milestone?: ShareMilestone;
+    easterEgg?: OrderEasterEgg;
+    miniProgramCodeUrl?: string;
+    posterTheme?: 'order' | 'persona' | 'achievement';
   };
   initiatedRewardGranted: boolean;
   inviteeAccountId?: string | null;

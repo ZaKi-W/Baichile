@@ -10,7 +10,7 @@ describe('home page sections', () => {
     expect(source).not.toContain('location.locate()');
     expect(source).toContain('uni.getMenuButtonBoundingClientRect()');
     expect(source).toContain(':style="brandRowStyle"');
-    expect(source).toContain('class="brand-name">白吃了');
+    expect(source).toContain('class="brand-name">这顿白吃');
     expect(source).toContain('class="address-name">{{ displayAddress }}');
     expect(source).toContain('点击添加收货地址');
     expect(source).toContain('@tap="openAddressList"');

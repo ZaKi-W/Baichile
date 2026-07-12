@@ -13,6 +13,7 @@ describe('orders card presentation', () => {
     expect(source).toContain('dishSummary(order)');
     expect(source).toContain('实付');
     expect(source).toContain('再来一单');
+    expect(source).toContain('reorderOrder(order)');
     expect(source).toContain('订单详情');
   });
 

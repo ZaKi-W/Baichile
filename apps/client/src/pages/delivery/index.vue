@@ -7,6 +7,7 @@ import { useCartStore } from '../../stores/cart';
 import { useOrderStore } from '../../stores/orders';
 import { DELIVERY_START_MS, getOrderStepIndex, ORDER_STEPS } from '../../utils/order-status';
 import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
+import { reorder } from '../../utils/reorder';
 import { shareService } from '../../services/shares';
 import { shareLandingUrl } from '../../utils/share-navigation';
 
@@ -378,19 +379,18 @@ function goToStore() {
   uni.redirectTo({ url: `/pages/store/index?id=${order.value.storeId}` });
 }
 
+async function reorderCurrent() {
+  if (!order.value) return;
+  try { await reorder(order.value); uni.showToast({ title: '原订单已加入购物车', icon: 'success' }); }
+  catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '再来一单失败', icon: 'none' }); }
+}
+
 async function prepareTimelineShare() {
   if (!order.value || preparingShare.value) return;
   preparingShare.value = true;
-  try {
-    const card = await shareService.create({ kind: 'order', orderId: order.value.id });
-    uni.navigateTo({
-      url: shareLandingUrl(card),
-    });
-  } catch (error) {
-    uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' });
-  } finally {
-    preparingShare.value = false;
-  }
+  try { const card = await shareService.create({ kind: 'order', orderId: order.value.id, showIdentity: true }); uni.navigateTo({ url: shareLandingUrl(card) }); }
+  catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' }); }
+  finally { preparingShare.value = false; }
 }
 </script>
 
@@ -463,13 +463,13 @@ async function prepareTimelineShare() {
         </view>
       </view>
 
-      <button class="reorder-button" @tap="goToStore">{{ hasFailed ? '重新点一单' : '再来一单' }}</button>
+      <button class="reorder-button" @tap="reorderCurrent">{{ hasFailed ? '重新点一单' : '再来一单' }}</button>
       <button
         v-if="!hasFailed && currentStepIndex === FINAL_STEP"
         class="share-button"
         :loading="preparingShare"
         @tap="prepareTimelineShare"
-      >生成朋友圈分享</button>
+      >分享这顿空气外卖</button>
 
       <!-- 分隔线 -->
       <view class="divider" />

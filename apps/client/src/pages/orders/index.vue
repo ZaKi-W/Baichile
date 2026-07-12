@@ -4,6 +4,7 @@ import { onHide, onShow } from '@dcloudio/uni-app';
 import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { catalogService } from '../../services/catalog';
+import { reorder } from '../../utils/reorder';
 import { getOrderStep } from '../../utils/order-status';
 import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
 import type { VirtualOrder } from '@baichile/api-contract';
@@ -13,7 +14,14 @@ const now = ref(Date.now());
 const storeCovers = ref<Record<string, string>>({});
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 const openOrder = (id: string) => uni.navigateTo({ url: `/pages/delivery/index?id=${id}` });
-const openStore = (storeId: string) => uni.navigateTo({ url: `/pages/store/index?id=${storeId}` });
+const reorderLoading = ref('');
+async function reorderOrder(order: VirtualOrder) {
+  if (reorderLoading.value) return;
+  reorderLoading.value = order.id;
+  try { await reorder(order); uni.showToast({ title: '原订单已加入购物车', icon: 'success' }); }
+  catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '再来一单失败', icon: 'none' }); }
+  finally { reorderLoading.value = ''; }
+}
 const openLogin = () => uni.switchTab({ url: '/pages/profile/index' });
 const statusLabel = (order: VirtualOrder) => {
   if (order.incident) {
@@ -35,7 +43,7 @@ const isCompleted = (startedAt: string, durationMs: number) =>
   getOrderStep(new Date(startedAt).getTime(), durationMs, now.value).key === 'completed';
 const isFailed = (order: VirtualOrder) =>
   order.status === 'failed' || Boolean(order.incident && getDeliveryIncidentPhase(order.incident, now.value) === 'failed');
-const storeName = (order: VirtualOrder) => order.storeName || '白吃了订单';
+const storeName = (order: VirtualOrder) => order.storeName || '这顿白吃订单';
 const storeThumb = (order: VirtualOrder) => storeCovers.value[order.storeId] || '';
 async function loadStoreCovers() {
   try {
@@ -101,7 +109,7 @@ onHide(() => clearInterval(statusTimer));
       <view class="order-actions">
         <button v-if="!isFailed(order) && !isCompleted(order.startedAt, order.durationMs)" class="action-button primary-action" @tap.stop="openOrder(order.id)">查看配送</button>
         <button v-else-if="isCompleted(order.startedAt, order.durationMs)" class="action-button primary-action" @tap.stop="openOrder(order.id)">确认收货</button>
-        <button class="action-button ghost-action" @tap.stop="openStore(order.storeId)">再来一单</button>
+        <button class="action-button ghost-action" :loading="reorderLoading === order.id" @tap.stop="reorderOrder(order)">再来一单</button>
         <button class="action-button ghost-action" @tap.stop="openOrder(order.id)">订单详情</button>
       </view>
     </view>

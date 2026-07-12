@@ -7,24 +7,33 @@ const source = readFileSync(
 );
 
 describe('share landing poster', () => {
-  it('uses finished cover assets without runtime canvas rendering', () => {
-    expect(source).not.toContain('<canvas');
-    expect(source).not.toContain('canvasToTempFilePath');
-    expect(source).toContain('posterUrl.value = buildSharePosterModel(data.value).background');
+  it('renders and saves a dynamic canvas poster', () => {
+    expect(source).toContain('<canvas');
+    expect(source).toContain('canvasToTempFilePath');
+    expect(source).toContain('saveImageToPhotosAlbum');
   });
 
-  it('does not repeat poster copy below the poster preview', () => {
-    expect(source).not.toContain('class="numbers"');
-    expect(source).not.toContain('class="eyebrow"');
-    expect(source).not.toContain('class="benefit"');
+  it('shows the poster story and mini program code', () => {
+    expect(source).toContain('class="eyebrow"');
+    expect(source).toContain('data.miniProgramCodeUrl');
+    expect(source).toContain('class="persona-poster"');
+    expect(source).toContain('class="persona-portrait"');
+    expect(source).toContain('drawPersonaPoster');
   });
 
   it('shows the claim action only to invited visitors', () => {
-    expect(source).toContain('v-if="!sharing"');
+    expect(source).toContain('v-if="sharing && data.active"');
+    expect(source).toContain('v-else class="claim"');
+  });
+
+  it('shares persona identity instead of the legacy invitation coupon', () => {
+    expect(source).toContain('我的这顿白吃人格是');
+    expect(source).toContain('persona?.imageUrl');
+    expect(source).not.toContain("data.value?.kind === 'persona' ? '/static/share/invitation-cover-v2.jpg'");
   });
 
   it('does not block landing data on poster generation', () => {
     expect(source).not.toContain('onReady(');
-    expect(source).not.toContain('renderPoster(');
+    expect(source).not.toContain('onReady(');
   });
 });

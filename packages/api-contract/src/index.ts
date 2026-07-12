@@ -142,7 +142,41 @@ export type WalletTransactionType =
   | 'referral_inviter'
   | 'referral_invitee';
 
-export type ShareKind = 'order' | 'achievement' | 'invitation';
+export type ShareKind = 'order' | 'persona' | 'achievement' | 'invitation';
+
+export type EasterEggRarity = 'common' | 'rare' | 'legendary';
+
+export interface OrderEasterEgg {
+  id: string;
+  name: string;
+  rarity: EasterEggRarity;
+  verdict: string;
+  themeColor: string;
+  decoration: string;
+  collectionNumber: string;
+  triggeredAt: string;
+}
+
+export interface ShareIdentity {
+  nickname: string;
+  avatarUrl: string;
+}
+
+export interface SharePersona {
+  id: string;
+  acronym: string;
+  name: string;
+  verdict: string;
+  callToAction: string;
+  description: string;
+  imageUrl: string;
+}
+
+export interface ShareMilestone {
+  id: string;
+  title: string;
+  stamp: string;
+}
 
 export interface ShareRewardConfig {
   enabled: boolean;
@@ -158,6 +192,7 @@ export interface ShareRewardConfig {
 export interface ShareCreateRequest {
   kind: ShareKind;
   orderId?: string;
+  showIdentity?: boolean;
 }
 
 export interface ShareCard {
@@ -178,14 +213,23 @@ export interface ShareRewardResult {
 
 export interface ShareLanding {
   active: boolean;
+  expired?: boolean;
   kind?: ShareKind;
   title?: string;
+  identity?: ShareIdentity;
+  storeName?: string;
+  orderLines?: QuoteLine[];
   dishNames: string[];
   savedMoneyCents: number;
   savedCaloriesKcal: number;
   completedOrderCount: number;
   inviteeRewardCents: number;
   benefitText: string;
+  persona?: SharePersona;
+  milestone?: ShareMilestone;
+  easterEgg?: OrderEasterEgg;
+  miniProgramCodeUrl?: string;
+  posterTheme?: 'order' | 'persona' | 'achievement';
 }
 
 export interface WalletSummary {
@@ -221,6 +265,7 @@ export interface VirtualOrder extends OrderQuote {
   incident?: DeliveryIncidentAssignment;
   failedAt?: string;
   refundStatus?: 'pending' | 'refunded';
+  easterEgg?: OrderEasterEgg;
 }
 
 export interface GuestSession {

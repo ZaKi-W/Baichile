@@ -3,6 +3,7 @@ const BATCH_SIZE = 50;
 
 const fileUrlCache = new Map<string, { url: string; expiresAt: number }>();
 let cloudbaseApp: any;
+const miniCodeCache = new Map<string, string>();
 
 export async function resolveCloudFileUrls(fileIds: Array<string | null | undefined>): Promise<Map<string, string>> {
   const uniqueFileIds = [...new Set(fileIds.filter(isCloudFileId))];
@@ -38,6 +39,32 @@ export async function resolveCloudFileUrls(fileIds: Array<string | null | undefi
   }
 
   return result;
+}
+
+export async function createShareMiniProgramCode(token: string): Promise<string | undefined> {
+  const cached = miniCodeCache.get(token);
+  if (cached) return cached;
+  try {
+    const cloud = require('wx-server-sdk');
+    cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
+    const result = await cloud.openapi.wxacode.getUnlimited({
+      scene: token,
+      page: 'pages/share-landing/index',
+      checkPath: false,
+      envVersion: process.env.MINIPROGRAM_ENV_VERSION || 'release',
+      width: 430,
+    });
+    if (!result?.buffer) return undefined;
+    const cloudPath = `share-codes/${token}.png`;
+    const uploaded = await cloud.uploadFile({ cloudPath, fileContent: result.buffer });
+    if (!uploaded?.fileID) return undefined;
+    const urls = await resolveCloudFileUrls([uploaded.fileID]);
+    const url = urls.get(uploaded.fileID);
+    if (url) miniCodeCache.set(token, url);
+    return url;
+  } catch {
+    return undefined;
+  }
 }
 
 function isCloudFileId(value: string | null | undefined): value is string {

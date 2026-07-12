@@ -168,3 +168,20 @@ describe('order detail snapshots', () => {
     expect(order.createdAt).toBe(now);
   });
 });
+
+describe('share snapshots', () => {
+  it('creates a stable persona share with optional anonymous identity', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_share');
+    const card = await services.shares.create('account_share', { kind: 'persona', showIdentity: false });
+    const landing = await services.shares.landing(card.token);
+    expect(card.token).toHaveLength(32);
+    expect(landing.kind).toBe('persona');
+    expect(landing.identity).toBeUndefined();
+    expect(landing.persona?.acronym).toMatch(/^[A-Z]{4}$/);
+    expect(landing.posterTheme).toBe('persona');
+    expect(card.title).toContain(landing.persona!.acronym);
+    expect(card.title).toContain(landing.persona!.name);
+  });
+});

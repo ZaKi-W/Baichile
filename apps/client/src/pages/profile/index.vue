@@ -7,10 +7,10 @@ import { useAddressStore } from '../../stores/address';
 import { useWalletStore } from '../../stores/wallet';
 import { useCartStore } from '../../stores/cart';
 import { CODE_VERSION } from '../../config/code-version';
-import { shareService } from '../../services/shares';
 import { orderService } from '../../services/orders';
 import { ApiRequestError } from '../../services/http';
 import { consumePendingOrders } from '../../utils/pending-order';
+import { shareService } from '../../services/shares';
 import { shareLandingUrl } from '../../utils/share-navigation';
 
 interface ChooseAvatarEvent {
@@ -52,24 +52,18 @@ function openWallet() {
   uni.navigateTo({ url: '/pages/wallet/index' });
 }
 
-async function prepareTimelineShare(kind: 'achievement' | 'invitation' = 'invitation') {
+async function shareNow(kind: 'achievement' | 'persona' = 'persona') {
   if (!auth.accountId) {
     openLogin();
     return;
   }
   if (preparingShare.value) return;
   preparingShare.value = true;
-  try {
-    const card = await shareService.create({ kind });
-    uni.navigateTo({
-      url: shareLandingUrl(card),
-    });
-  } catch (error) {
-    uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' });
-  } finally {
-    preparingShare.value = false;
-  }
+  try { const card = await shareService.create({ kind, showIdentity: true }); uni.navigateTo({ url: shareLandingUrl(card) }); }
+  catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' }); }
+  finally { preparingShare.value = false; }
 }
+function openOrders() { uni.switchTab({ url: '/pages/orders/index' }); }
 
 async function checkIn() {
   if (wallet.summary.checkedInToday || walletAction.value) return;
@@ -185,7 +179,7 @@ async function submitPendingOrderAfterLogin() {
     <!-- Not logged in hero -->
     <view v-else class="hero guest">
       <view class="guest-icon"><image src="/static/tabbar/profile.svg" mode="aspectFit" /></view>
-      <text class="guest-title">登录白吃了</text>
+      <text class="guest-title">登录这顿白吃</text>
       <text class="guest-desc">登录后会合并游客订单，并在这里显示你的头像和昵称</text>
       <button class="login-btn" @tap="openLogin">
         <text class="login-btn-text">微信登录</text>
@@ -215,8 +209,7 @@ async function submitPendingOrderAfterLogin() {
         <button
           class="wallet-action share-reward"
           :loading="preparingShare"
-          :disabled="preparingShare"
-          @tap="prepareTimelineShare('invitation')"
+          @tap="shareNow('persona')"
         >
           分享领饭钱
         </button>
@@ -226,37 +219,35 @@ async function submitPendingOrderAfterLogin() {
     <!-- Menu section -->
     <view class="menu-card">
       <view
-        v-if="auth.accountId && orders.savings.completedOrderCount >= 5 && orders.savings.completedOrderCount % 5 === 0"
         class="menu-item"
-        @tap="prepareTimelineShare('achievement')"
+        @tap="shareNow('achievement')"
       >
         <text class="menu-icon">战</text>
         <text class="menu-text">晒晒我的白吃战绩</text>
         <text class="menu-arrow">›</text>
       </view>
-      <view v-if="auth.accountId && orders.savings.completedOrderCount >= 5 && orders.savings.completedOrderCount % 5 === 0" class="menu-divider" />
+      <view class="menu-divider" />
       <view v-if="auth.accountId" class="menu-item" @tap="openWallet">
         <text class="menu-icon">钱</text>
         <text class="menu-text">我的钱包</text>
         <text class="menu-arrow">›</text>
       </view>
       <view v-if="auth.accountId" class="menu-divider" />
-      <view class="menu-item">
+      <view class="menu-item" @tap="openOrders">
         <text class="menu-icon">单</text>
         <text class="menu-text">我的订单</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-divider" />
-      <view class="menu-item" @tap="prepareTimelineShare('invitation')">
+      <view class="menu-item" @tap="shareNow('persona')">
         <text class="menu-icon">享</text>
-        <text class="menu-text">分享朋友圈，领虚拟饭钱</text>
+        <text class="menu-text">测测我的白吃人格</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-divider" />
       <view class="menu-item" @tap="openAddresses">
         <image class="menu-icon image-icon" src="/static/icons/location.svg" mode="aspectFit" />
         <text class="menu-text">收货地址</text>
-        <text class="menu-count">{{ addresses.addresses.length }}</text>
         <text class="menu-arrow">›</text>
       </view>
     </view>
@@ -264,7 +255,7 @@ async function submitPendingOrderAfterLogin() {
     <!-- About section -->
     <view class="about-card">
       <view class="about-header">
-        <text class="about-title">关于白吃了</text>
+        <text class="about-title">关于这顿白吃</text>
       </view>
       <text class="about-desc">这是互动模拟产品，不提供真实支付、接单或配送。</text>
       <view class="about-meta">

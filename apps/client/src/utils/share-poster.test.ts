@@ -17,25 +17,25 @@ const landing = (kind: ShareLanding['kind']): ShareLanding => ({
 describe('share poster model', () => {
   it('uses a receipt cover for an order share', () => {
     expect(buildSharePosterModel(landing('order'))).toMatchObject({
-      background: '/static/share/order-cover.jpg',
-      eyebrow: '本单已送达到想象里',
-      primary: '省下 ¥46.80',
+      background: '#FFF8DE',
+      eyebrow: '本单荒诞结算单',
+      primary: '点了 ¥46.80，实际摄入 0',
     });
   });
 
   it('uses achievement totals for a report cover', () => {
     expect(buildSharePosterModel(landing('achievement'))).toMatchObject({
-      background: '/static/share/achievement-cover.jpg',
-      eyebrow: '白吃战报',
+      background: '#FFF8DE',
+      eyebrow: '白吃阶段战报',
       primary: '累计白吃 18 顿',
     });
   });
 
-  it('uses the configured invitee reward for an invitation cover', () => {
-    expect(buildSharePosterModel(landing('invitation'))).toMatchObject({
-      background: '/static/share/invitation-cover-v2.jpg',
-      eyebrow: '朋友请客券',
-      primary: '送你 ¥30 虚拟饭钱',
+  it('uses a dynamic persona result', () => {
+    expect(buildSharePosterModel({ ...landing('persona'), persona: { id: 'teaa', acronym: 'TEAA', name: '茶饮炼金师', verdict: '杯子可以加大，摄入必须归零。', callToAction: '测测你', description: '饮料调和情绪。', imageUrl: '/static/personas/teaa.png' } })).toMatchObject({
+      background: '#FFD400',
+      eyebrow: '这顿白吃人格 · TEAA',
+      title: '茶饮炼金师',
     });
   });
 });

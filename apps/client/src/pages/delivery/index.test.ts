@@ -28,7 +28,7 @@ describe('delivery page status initialization', () => {
     expect(source).toContain('已退款');
     expect(source).toContain('重新点一单');
     expect(source).toContain('再来一单');
-    expect(source).toContain('goToStore');
+    expect(source).toContain('reorderCurrent');
   });
 
   it('shows order detail, payment, order number, and delivery information', () => {

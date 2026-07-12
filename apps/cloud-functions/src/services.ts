@@ -53,7 +53,8 @@ import type {
   WalletTransactionDoc,
 } from './models';
 import { buildSharePath, chooseShareTitle, DEFAULT_SHARE_REWARD_CONFIG, parseShareRewardConfig } from './share-domain';
-import { resolveCloudFileUrls } from './storage';
+import { classifyPersona, selectMilestone, selectOrderEasterEgg } from './share-insights';
+import { createShareMiniProgramCode, resolveCloudFileUrls } from './storage';
 
 interface AnalyticsEventDoc {
   _id: string;
@@ -527,6 +528,9 @@ export class OrderService {
     const route = this.route(id, request.virtualDestinationPoint);
     const deliveryAddress = normalizeDeliveryAddressSnapshot(request.deliveryAddressSnapshot);
     const createdAt = startedAt.toISOString();
+    const durationMs = virtualDeliveryDurationMs(store.virtualDeliveryMinutes, id);
+    const completedAt = new Date(startedAt.getTime() + DELIVERY_START_MS + durationMs).toISOString();
+    const easterEgg = incident ? undefined : selectOrderEasterEgg(id, id.slice(0, 8), completedAt);
     const order: VirtualOrder = {
       ...quote,
       id,
@@ -539,12 +543,13 @@ export class OrderService {
       status: 'created',
       startedAt: createdAt,
       createdAt,
-      durationMs: virtualDeliveryDurationMs(store.virtualDeliveryMinutes, id),
+      durationMs,
       seed: id.slice(0, 8),
       route,
       incident,
       failedAt: incident?.failedAt,
       refundStatus: incident ? 'pending' : undefined,
+      easterEgg,
     };
     await this.db.transaction(async (tx) => {
       const now = tx.now().toISOString();
@@ -573,6 +578,7 @@ export class OrderService {
         incidentStartedAt: incident?.startedAt ?? null,
         failedAt: incident?.failedAt ?? null,
         refundedAt: null,
+        easterEgg: easterEgg ?? null,
         adminStatus: 'normal',
         adminNote: '',
         createdAt: order.createdAt,
@@ -676,6 +682,7 @@ export class OrderService {
       incident,
       failedAt: row.failedAt ?? undefined,
       refundStatus: incident ? (row.refundedAt ? 'refunded' : 'pending') : undefined,
+      easterEgg: this.currentStatus(row) === 'completed' ? row.easterEgg ?? undefined : undefined,
     };
   }
 
@@ -802,14 +809,17 @@ export class ShareService {
   }
 
   async create(accountId: string, input: ShareCreateRequest): Promise<ShareCard> {
-    if (!['order', 'achievement', 'invitation'].includes(input?.kind)) badRequest('分享类型不正确', 'INVALID_SHARE_KIND');
+    if (!['order', 'persona', 'achievement', 'invitation'].includes(input?.kind)) badRequest('分享类型不正确', 'INVALID_SHARE_KIND');
     return this.db.transaction(async (tx) => {
       const config = await this.config(tx);
       if (!config.enabled) badRequest('分享活动暂未开放', 'SHARE_DISABLED');
       const snapshot = await this.snapshot(tx, accountId, input);
-      const token = randomUUID();
+      const token = randomUUID().replace(/-/g, '');
       const titles = input.kind === 'order' ? config.orderTitles : input.kind === 'achievement' ? config.achievementTitles : config.invitationTitles;
-      const title = chooseShareTitle(titles, input.orderId ?? `${accountId}:${shanghaiBusinessDate()}`).replace('{count}', String(snapshot.completedOrderCount));
+      const persona = (snapshot as ShareInviteDoc['snapshot']).persona;
+      const title = input.kind === 'persona' && persona
+        ? `我的这顿白吃人格是 ${persona.acronym} · ${persona.name}`
+        : chooseShareTitle(titles, input.orderId ?? `${accountId}:${shanghaiBusinessDate()}`).replace('{count}', String(snapshot.completedOrderCount));
       await tx.collection<ShareInviteDoc>(collections.shareInvites).insert({
         _id: token,
         token,
@@ -852,10 +862,13 @@ export class ShareService {
   async landing(token: string): Promise<ShareLanding> {
     const config = await this.config();
     const invite = await this.db.collection<ShareInviteDoc>(collections.shareInvites).get(token);
-    if (!config.enabled || !invite || new Date(invite.expiresAt).getTime() <= Date.now()) {
+    if (!invite) {
       return { active: false, dishNames: [], savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0, inviteeRewardCents: 0, benefitText: BENEFIT_TEXT };
     }
-    return { active: true, kind: invite.kind, title: invite.title, ...invite.snapshot, inviteeRewardCents: config.inviteeRewardCents, benefitText: BENEFIT_TEXT };
+    const active = config.enabled && new Date(invite.expiresAt).getTime() > Date.now();
+    const kind = invite.kind === 'invitation' ? 'persona' : invite.kind;
+    const miniProgramCodeUrl = active ? await createShareMiniProgramCode(token) : undefined;
+    return { active, expired: !active, kind, title: invite.title, ...invite.snapshot, miniProgramCodeUrl, inviteeRewardCents: active ? config.inviteeRewardCents : 0, benefitText: BENEFIT_TEXT };
   }
 
   async completeReferral(inviteeAccountId: string, token?: string): Promise<void> {
@@ -875,6 +888,11 @@ export class ShareService {
 
   private async snapshot(db: Database, accountId: string, input: ShareCreateRequest) {
     const orders = db.collection<VirtualOrderDoc>(collections.virtualOrders);
+    const account = await db.collection<AccountDoc>(collections.accounts).get(accountId);
+    const identity = input.showIdentity === false ? undefined : {
+      nickname: account?.nickname || '一位白吃选手',
+      avatarUrl: account?.avatarUrl || '',
+    };
     if (input.kind === 'order') {
       if (!input.orderId) badRequest('请选择要分享的订单', 'ORDER_REQUIRED');
       const order = await orders.get(input.orderId);
@@ -882,20 +900,33 @@ export class ShareService {
       const deliveredAt = new Date(order.startedAt).getTime() + DELIVERY_START_MS + order.durationMs;
       if (order.status === 'failed' || Date.now() < deliveredAt) badRequest('订单送达后才能分享', 'ORDER_NOT_COMPLETED');
       return {
-        dishNames: order.lines.slice(0, 3).map((line) => line && typeof line === 'object' && 'name' in line ? String(line.name) : '神秘菜品'),
+        identity,
+        storeName: order.storeName || '神秘小馆',
+        orderLines: order.lines as VirtualOrder['lines'],
+        dishNames: (order.lines as VirtualOrder['lines']).map((line) => line.name),
         savedMoneyCents: order.totalCents,
         savedCaloriesKcal: order.itemsTotalCaloriesKcal,
         completedOrderCount: 1,
+        easterEgg: order.easterEgg ?? undefined,
+        posterTheme: 'order' as const,
       };
     }
     const rows = (await orders.list({ where: { accountId } })).filter((order) => (
       order.status !== 'failed' && Date.now() >= new Date(order.startedAt).getTime() + DELIVERY_START_MS + order.durationMs
     ));
+    const savedMoneyCents = rows.reduce((sum, order) => sum + order.totalCents, 0);
+    const savedCaloriesKcal = rows.reduce((sum, order) => sum + order.itemsTotalCaloriesKcal, 0);
+    const completedOrderCount = rows.length;
+    const allLines = rows.flatMap((order) => order.lines as VirtualOrder['lines']);
     return {
+      identity,
       dishNames: [],
-      savedMoneyCents: rows.reduce((sum, order) => sum + order.totalCents, 0),
-      savedCaloriesKcal: rows.reduce((sum, order) => sum + order.itemsTotalCaloriesKcal, 0),
-      completedOrderCount: rows.length,
+      savedMoneyCents,
+      savedCaloriesKcal,
+      completedOrderCount,
+      ...(input.kind === 'achievement'
+        ? { milestone: selectMilestone(completedOrderCount, savedMoneyCents, savedCaloriesKcal), posterTheme: 'achievement' as const }
+        : { persona: classifyPersona(allLines, completedOrderCount, savedMoneyCents, savedCaloriesKcal), posterTheme: 'persona' as const }),
     };
   }
 }

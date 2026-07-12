@@ -20,7 +20,7 @@ const imageFailed = ref(false);
     <view class="merchant-visual" aria-hidden="true">
       <image v-if="store.coverUrl && !imageFailed" class="merchant-cover" :src="store.coverUrl" mode="aspectFill" @error="imageFailed = true" />
       <view v-else class="merchant-fallback">
-        <text class="fallback-brand">白吃了</text>
+        <text class="fallback-brand">这顿白吃</text>
         <text class="fallback-name">{{ store.name.slice(0, 2) }}</text>
       </view>
       <text v-if="index < 3" class="merchant-badge">{{ index === 0 ? '口碑' : index === 1 ? '人气' : '新店' }}</text>

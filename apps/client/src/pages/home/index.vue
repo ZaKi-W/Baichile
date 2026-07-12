@@ -183,7 +183,7 @@ onUnload(handleHide);
     <header class="platform-header" :style="safeTopStyle">
       <view class="brand-row" :style="brandRowStyle">
         <view>
-          <text class="brand-name">白吃了</text>
+          <text class="brand-name">这顿白吃</text>
           <text class="brand-slogan">好吃不贵 · 准时必达</text>
         </view>
       </view>

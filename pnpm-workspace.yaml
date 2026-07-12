@@ -8,4 +8,5 @@ allowBuilds:
   core-js: true
   core-js-pure: true
   esbuild: true
+  protobufjs: true
   vue-demi: true

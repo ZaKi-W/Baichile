@@ -14,6 +14,7 @@ const runtimePackage = {
   main: 'index.js',
   dependencies: {
     '@cloudbase/node-sdk': '^2.11.0',
+    'wx-server-sdk': '^3.0.1',
   },
 };
 
