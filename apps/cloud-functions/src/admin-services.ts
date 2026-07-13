@@ -8,6 +8,7 @@ import type {
   ManagedContentStatus,
 } from '@baichile/api-contract';
 import { collections } from './collections';
+import { refreshStoreSearchText } from './catalog-search';
 import type { Database } from './database';
 import { badRequest, conflict, forbidden, notFound, unauthorized } from './errors';
 import type {
@@ -296,8 +297,9 @@ export class AdminMutationService {
       if (existing) conflict('商家 ID 已存在', 'STORE_EXISTS');
       await stores.insert(row);
     }
-    await this.audit.record(actor, { action: id ? 'store.update' : 'store.create', resourceType: 'store', resourceId: row.id, beforeData: existing, afterData: row, ipAddress });
-    return row;
+    const searchable = await refreshStoreSearchText(this.db, row.id) ?? row;
+    await this.audit.record(actor, { action: id ? 'store.update' : 'store.create', resourceType: 'store', resourceId: row.id, beforeData: existing, afterData: searchable, ipAddress });
+    return searchable;
   }
 
   async saveMenuItem(storeId: string, id: string | undefined, value: unknown, actor: AuthenticatedAdmin, ipAddress?: string | null) {
@@ -313,6 +315,7 @@ export class AdminMutationService {
       if (existing) conflict('菜品 ID 已存在', 'MENU_ITEM_EXISTS');
       await items.insert(row);
     }
+    await refreshStoreSearchText(this.db, storeId);
     await this.audit.record(actor, { action: id ? 'menu_item.update' : 'menu_item.create', resourceType: 'menu_item', resourceId: row.id, beforeData: existing, afterData: row, ipAddress });
     return row;
   }
@@ -324,6 +327,10 @@ export class AdminMutationService {
     const item = await this.db.collection<MenuItemDoc>(collections.menuItems).get(id);
     if (!item || item.storeId !== storeId) notFound('菜品不存在', 'MENU_ITEM_NOT_FOUND');
     const saved = await this.db.collection<MenuItemDoc>(collections.menuItems).update(id, { storeId: targetStoreId, updatedAt: this.db.now().toISOString() });
+    await Promise.all([
+      refreshStoreSearchText(this.db, storeId),
+      refreshStoreSearchText(this.db, targetStoreId),
+    ]);
     await this.audit.record(actor, { action: 'menu_item.transfer', resourceType: 'menu_item', resourceId: id, beforeData: { storeId }, afterData: { storeId: targetStoreId }, ipAddress });
     return saved;
   }

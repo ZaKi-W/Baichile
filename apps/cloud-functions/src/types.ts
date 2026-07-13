@@ -4,6 +4,8 @@ export interface CloudFunctionEvent {
   method?: HttpMethod;
   path?: string;
   query?: Record<string, string | number | undefined>;
+  queryStringParameters?: Record<string, string | number | undefined>;
+  rawQueryString?: string;
   data?: unknown;
   headers?: Record<string, string | undefined>;
   authorization?: string;

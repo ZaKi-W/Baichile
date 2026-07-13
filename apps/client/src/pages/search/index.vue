@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { StoreDetail } from '@baichile/api-contract';
+import type { StoreSummary } from '@baichile/api-contract';
 import StoreCard from '../../components/StoreCard.vue';
 import { catalogService } from '../../services/catalog';
 
 const query = ref('');
-const stores = ref<StoreDetail[]>([]);
+const stores = ref<StoreSummary[]>([]);
 const searched = ref(false);
 async function search() {
   searched.value = true;

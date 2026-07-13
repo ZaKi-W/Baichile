@@ -38,6 +38,7 @@ import {
 } from '@baichile/domain';
 import type { DeliveryStatus, GeoPoint, VirtualRoute } from '@baichile/map-core';
 import { resolveCatalogImageUrl } from './catalog-images';
+import { buildStoreSearchText, normalizeCatalogSearchText } from './catalog-search';
 import { collections } from './collections';
 import type { CollectionStore, Database, ListOptions } from './database';
 import { badRequest, conflict, notFound, unauthorized } from './errors';
@@ -301,18 +302,42 @@ export class AuthService {
 }
 
 export class CatalogService {
+  private homeCache?: { expiresAt: number; value: HomeResponse };
+  private homeRequest?: Promise<HomeResponse>;
+
   constructor(private readonly db: Database) {}
 
   async home(): Promise<HomeResponse> {
+    if (this.homeCache && this.homeCache.expiresAt > Date.now()) return this.homeCache.value;
+    if (this.homeRequest) return this.homeRequest;
+    this.homeRequest = this.loadHome();
+    try {
+      const value = await this.homeRequest;
+      this.homeCache = { value, expiresAt: Date.now() + 30_000 };
+      return value;
+    } finally {
+      this.homeRequest = undefined;
+    }
+  }
+
+  async categories(): Promise<HomeResponse['categories']> {
+    const rows = await listAll(this.db.collection<CategoryDoc>(collections.categories), {
+      orderBy: [['sortOrder', 'asc']],
+    });
+    return rows.map(({ id, name, icon }) => ({ id, name, icon }));
+  }
+
+  private async loadHome(): Promise<HomeResponse> {
     const [categories, storeRows, menuItems] = await Promise.all([
       listAll(this.db.collection<CategoryDoc>(collections.categories), { orderBy: [['sortOrder', 'asc']] }),
       listAll(this.db.collection<StoreDoc>(collections.stores), {
         where: { status: 'active' },
         orderBy: [['sortOrder', 'asc']],
       }),
-      listAll(this.db.collection<MenuItemDoc>(collections.menuItems), {
+      this.db.collection<MenuItemDoc>(collections.menuItems).list({
         where: { status: 'active' },
         orderBy: [['sortOrder', 'asc']],
+        limit: 3,
       }),
     ]);
     const imageUrls = await resolveCloudFileUrls([
@@ -346,22 +371,39 @@ export class CatalogService {
     };
   }
 
-  async list(categoryId?: string, query?: string): Promise<StoreDetail[]> {
-    const stores = await listAll(this.db.collection<StoreDoc>(collections.stores), {
+  async list(categoryId?: string, query?: string): Promise<StoreSummary[]> {
+    const storeRows = await listAll(this.db.collection<StoreDoc>(collections.stores), {
       where: { ...(categoryId ? { categoryId } : {}), status: 'active' },
       orderBy: [['sortOrder', 'asc']],
     });
-    const details = await this.assemble(stores);
-    const normalized = query?.trim().toLowerCase();
-    return normalized
-      ? details.filter((store) => store.name.toLowerCase().includes(normalized)
-        || store.menu.some((item) => item.name.toLowerCase().includes(normalized)))
-      : details;
+    const imageUrls = await resolveCloudFileUrls(storeRows.map((row) => row.coverUrl));
+    const normalized = normalizeCatalogSearchText(query ?? '');
+    if (!normalized) return storeRows.map((row) => toStoreSummary(row, imageUrls));
+
+    let searchableRows = storeRows;
+    if (storeRows.some((row) => typeof row.searchText !== 'string')) {
+      const menuItems = await listAll(this.db.collection<MenuItemDoc>(collections.menuItems), {
+        where: { status: 'active' },
+      });
+      const itemsByStore = new Map<string, MenuItemDoc[]>();
+      for (const item of menuItems) {
+        const rows = itemsByStore.get(item.storeId) ?? [];
+        rows.push(item);
+        itemsByStore.set(item.storeId, rows);
+      }
+      searchableRows = storeRows.map((row) => ({
+        ...row,
+        searchText: row.searchText ?? buildStoreSearchText(row, itemsByStore.get(row.id) ?? []),
+      }));
+    }
+    return searchableRows
+      .filter((row) => row.searchText?.includes(normalized))
+      .map((row) => toStoreSummary(row, imageUrls));
   }
 
   async find(storeId: string): Promise<StoreDetail> {
-    const store = await this.db.collection<StoreDoc>(collections.stores).findOne({ id: storeId, status: 'active' });
-    if (!store) notFound('店铺不存在', 'STORE_NOT_FOUND');
+    const store = await this.db.collection<StoreDoc>(collections.stores).get(storeId);
+    if (!store || store.status !== 'active') notFound('店铺不存在', 'STORE_NOT_FOUND');
     return (await this.assemble([store]))[0];
   }
 
@@ -444,7 +486,8 @@ export class WalletService {
     const businessDate = shanghaiBusinessDate();
     return this.db.transaction(async (tx) => {
       const txs = tx.collection<WalletTransactionDoc>(collections.walletTransactions);
-      if (await txs.findOne({ accountId, type: 'daily_checkin', businessDate })) {
+      const transactionId = `daily_checkin_${accountId}_${businessDate}`;
+      if (await txs.get(transactionId) || await txs.findOne({ accountId, type: 'daily_checkin', businessDate })) {
         conflict('今日已签到', 'ALREADY_CHECKED_IN');
       }
       const accounts = tx.collection<AccountDoc>(collections.accounts);
@@ -452,7 +495,11 @@ export class WalletService {
       if (!account) notFound('用户不存在', 'ACCOUNT_NOT_FOUND');
       const balanceCents = account.balanceCents + DAILY_CHECKIN_CENTS;
       await accounts.update(accountId, { balanceCents, updatedAt: tx.now().toISOString() });
-      await txs.insert(walletTx(tx, accountId, 'daily_checkin', DAILY_CHECKIN_CENTS, balanceCents, '每日签到', { businessDate }));
+      await txs.insert(walletTx(tx, accountId, 'daily_checkin', DAILY_CHECKIN_CENTS, balanceCents, '每日签到', {
+        _id: transactionId,
+        id: transactionId,
+        businessDate,
+      }));
       return { balanceCents, checkedInToday: true };
     });
   }
@@ -656,12 +703,16 @@ export class OrderService {
         if (!order.accountId) continue;
         const account = await tx.collection<AccountDoc>(collections.accounts).get(order.accountId);
         if (!account) continue;
-        if (await tx.collection<WalletTransactionDoc>(collections.walletTransactions)
-          .findOne({ orderId: order.id, type: 'order_refund' })) continue;
+        const refunds = tx.collection<WalletTransactionDoc>(collections.walletTransactions);
+        const refundId = `order_refund_${order.id}`;
+        if (await refunds.get(refundId) || await refunds.findOne({ orderId: order.id, type: 'order_refund' })) continue;
         const balanceCents = account.balanceCents + order.totalCents;
         await tx.collection<AccountDoc>(collections.accounts).update(account.id, { balanceCents, updatedAt: tx.now().toISOString() });
-        await tx.collection<WalletTransactionDoc>(collections.walletTransactions)
-          .insert(walletTx(tx, account.id, 'order_refund', order.totalCents, balanceCents, '配送失败退款', { orderId: order.id }));
+        await refunds.insert(walletTx(tx, account.id, 'order_refund', order.totalCents, balanceCents, '配送失败退款', {
+          _id: refundId,
+          id: refundId,
+          orderId: order.id,
+        }));
         await orders.update(order.id, { status: 'failed', refundedAt: tx.now().toISOString(), updatedAt: tx.now().toISOString() });
       }
     });
@@ -846,7 +897,6 @@ export class ShareService {
         title,
         snapshot,
         initiatedRewardGranted: false,
-        inviteeAccountId: null,
         completedAt: null,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         createdAt: tx.now().toISOString(),
@@ -1075,9 +1125,7 @@ function walletTx(
     type,
     amountCents,
     balanceAfterCents,
-    orderId: null,
     description,
-    businessDate: null,
     createdAt: db.now().toISOString(),
     ...extras,
   };

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { AdminAuditService, AdminAuthService, AdminMutationService } from './admin-services';
 import { collections } from './collections';
 import { MemoryDatabase } from './database';
-import type { MenuItemDoc, StoreDoc, VirtualOrderDoc } from './models';
+import type { MenuItemDoc, StoreDoc, VirtualOrderDoc, WalletTransactionDoc } from './models';
+import { BaichileRouter } from './router';
 import { BaichileCloudServices } from './services';
 
 function activeStore(overrides: Partial<StoreDoc> = {}): StoreDoc {
@@ -74,6 +76,108 @@ describe('home catalog', () => {
     expect(home.flashSaleItems).toHaveLength(3);
     expect(home.flashSaleItems.map((item) => item.menuItemId)).toEqual(['dish_1', 'dish_2', 'dish_3']);
     expect(home.flashSaleItems.every((item) => item.imageUrl && item.flashPriceCents < item.originalPriceCents)).toBe(true);
+  });
+
+  it('reads only three menu items and shares one in-flight home request', async () => {
+    const calls: Array<{ name: string; limit?: number }> = [];
+    const db = new MemoryDatabase((name, options) => calls.push({ name, limit: options.limit }));
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await Promise.all(Array.from({ length: 120 }, (_, index) => db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem({
+      _id: `dish_${index + 1}`,
+      id: `dish_${index + 1}`,
+      sortOrder: index + 1,
+    }))));
+    const catalog = new BaichileCloudServices(db).catalog;
+
+    const [first, second] = await Promise.all([catalog.home(), catalog.home()]);
+
+    expect(first).toEqual(second);
+    expect(calls.filter((call) => call.name === collections.menuItems)).toEqual([
+      { name: collections.menuItems, limit: 3 },
+    ]);
+  });
+
+  it('loads categories without touching stores or menu items', async () => {
+    const calls: string[] = [];
+    const db = new MemoryDatabase((name) => calls.push(name));
+    await db.collection(collections.categories).insert({ _id: 'cat_1', id: 'cat_1', name: '盖饭', icon: 'rice', sortOrder: 1 });
+
+    const categories = await new BaichileCloudServices(db).catalog.categories();
+
+    expect(categories).toEqual([{ id: 'cat_1', name: '盖饭', icon: 'rice' }]);
+    expect(calls).toEqual([collections.categories]);
+  });
+
+  it('returns summaries for category and indexed search without loading menus', async () => {
+    const calls: string[] = [];
+    const db = new MemoryDatabase((name) => calls.push(name));
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore({ searchText: '白吃小馆\n招牌牛肉面' }));
+    const catalog = new BaichileCloudServices(db).catalog;
+
+    const categoryRows = await catalog.list('cat_1');
+    const searchRows = await catalog.list(undefined, '牛肉面');
+
+    expect(categoryRows).toHaveLength(1);
+    expect(searchRows).toHaveLength(1);
+    expect(categoryRows[0]).not.toHaveProperty('menu');
+    expect(searchRows[0]).not.toHaveProperty('menu');
+    expect(calls).toEqual([collections.stores, collections.stores]);
+  });
+
+  it('falls back to menu-name search before search text is backfilled', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem({ name: '香辣鸡腿饭' }));
+
+    const rows = await new BaichileCloudServices(db).catalog.list(undefined, '鸡腿');
+
+    expect(rows.map((row) => row.id)).toEqual(['store_1']);
+  });
+
+  it('accepts query parameters supplied by the HTTP gateway', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore({ searchText: '白吃小馆 招牌牛肉面' }));
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore({
+      _id: 'store_2', id: 'store_2', categoryId: 'cat_2', name: '第二食堂', searchText: '第二食堂 炒饭',
+    }));
+    const router = new BaichileRouter(db);
+
+    const category = await router.handle({
+      method: 'GET', path: '/v1/catalog/stores', queryStringParameters: { categoryId: 'cat_1' },
+    });
+    const search = await router.handle({
+      method: 'GET', path: '/v1/catalog/search', rawQueryString: 'q=%E7%89%9B%E8%82%89%E9%9D%A2',
+    });
+
+    expect(category).toMatchObject({ ok: true, data: [{ id: 'store_1' }] });
+    expect(search).toMatchObject({ ok: true, data: [{ id: 'store_1' }] });
+  });
+});
+
+describe('catalog search maintenance', () => {
+  const actor = {
+    id: 'admin_1',
+    username: 'admin',
+    displayName: '管理员',
+    role: 'super_admin' as const,
+    permissions: [],
+  };
+
+  it('refreshes store search text after menu edits and transfers', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore({
+      _id: 'store_2', id: 'store_2', name: '第二食堂', searchText: '第二食堂',
+    }));
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem());
+    const mutations = new AdminMutationService(db, new AdminAuthService(db), new AdminAuditService(db));
+
+    await mutations.saveMenuItem('store_1', 'dish_1', { ...activeMenuItem(), name: '香辣鸡腿饭' }, actor);
+    expect((await db.collection<StoreDoc>(collections.stores).get('store_1'))?.searchText).toContain('香辣鸡腿饭');
+
+    await mutations.transferMenuItem('store_1', 'dish_1', { targetStoreId: 'store_2' }, actor);
+    expect((await db.collection<StoreDoc>(collections.stores).get('store_1'))?.searchText).not.toContain('香辣鸡腿饭');
+    expect((await db.collection<StoreDoc>(collections.stores).get('store_2'))?.searchText).toContain('香辣鸡腿饭');
   });
 });
 
@@ -183,6 +287,23 @@ describe('order detail snapshots', () => {
     expect(order.storeName).toBeUndefined();
     expect(order.paymentMethod).toBe('virtual_balance');
     expect(order.createdAt).toBe(now);
+  });
+});
+
+describe('wallet idempotency', () => {
+  it('uses a deterministic daily check-in transaction id', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_me');
+
+    await services.wallet.checkIn('account_me');
+
+    const rows = await db.collection<WalletTransactionDoc>(collections.walletTransactions).list({
+      where: { accountId: 'account_me', type: 'daily_checkin' },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toMatch(/^daily_checkin_account_me_\d{4}-\d{2}-\d{2}$/);
+    await expect(services.wallet.checkIn('account_me')).rejects.toMatchObject({ code: 'ALREADY_CHECKED_IN' });
   });
 });
 

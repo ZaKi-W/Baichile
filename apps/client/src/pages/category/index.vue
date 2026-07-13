@@ -14,22 +14,9 @@ onLoad(async (options) => {
   name.value = requestedName || '分类';
 
   try {
-    // 首页和分类页使用同一份目录响应，先按 id/名称解析真实分类，避免路由参数异常导致查空。
-    const home = await catalogService.home();
-    const category = home.categories.find((item) => item.id === requestedId || item.name === requestedName);
-    const categoryId = category?.id || requestedId;
-    if (category?.name) name.value = category.name;
-    stores.value = home.stores.filter((store) => store.categoryId === categoryId);
-
-    // 首页目录没有命中时，再请求详情接口，兼容首页数据裁剪的旧云函数版本。
-    if (!stores.value.length && categoryId) stores.value = await catalogService.byCategory(categoryId);
+    stores.value = requestedId ? await catalogService.byCategory(requestedId) : [];
   } catch {
-    // 首页完整目录请求失败时，分类接口返回体更小，直接按当前分类重试。
-    try {
-      if (requestedId) stores.value = await catalogService.byCategory(requestedId);
-    } catch {
-      stores.value = [];
-    }
+    stores.value = [];
   } finally {
     loading.value = false;
   }

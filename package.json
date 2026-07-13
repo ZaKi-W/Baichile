@@ -11,6 +11,7 @@
     "cloudbase:build": "pnpm --filter @baichile/cloud-functions build",
     "cloudbase:prepare-deploy": "pnpm --filter @baichile/cloud-functions prepare:deploy",
     "cloudbase:seed": "pnpm --filter @baichile/cloud-functions seed:catalog",
+    "cloudbase:backfill-search": "pnpm --filter @baichile/cloud-functions backfill:catalog-search",
     "cloudbase:import": "pnpm --filter @baichile/cloud-functions import:cloudbase",
     "cloudbase:verify": "pnpm --filter @baichile/cloud-functions verify:cloudbase",
     "catalog-images:migrate": "pnpm --filter @baichile/cloud-functions migrate:catalog-images",

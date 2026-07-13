@@ -2,6 +2,7 @@ import { categories, stores } from '@baichile/catalog-data';
 import { requireCatalogImageBaseUrl, rewriteCatalogRecordImages } from '../src/catalog-images';
 import type { ManagedContentStatus } from '@baichile/api-contract';
 import { collections } from '../src/collections';
+import { buildStoreSearchText } from '../src/catalog-search';
 import { createCloudBaseDatabase, type Database } from '../src/database';
 import type { CategoryDoc, MenuItemDoc, StoreDoc, StoreSubCategoryDoc } from '../src/models';
 
@@ -68,6 +69,10 @@ export async function seedCatalog(db: Database) {
       recentViewers: store.recentViewers,
       systemHeat: store.systemHeat,
       sourceType: store.sourceType,
+      searchText: buildStoreSearchText(
+        { name: store.name },
+        store.menu.map((item) => ({ name: item.name, status: activeStatus })),
+      ),
       sortOrder: store.sortOrder,
       status: activeStatus,
       createdAt: now,

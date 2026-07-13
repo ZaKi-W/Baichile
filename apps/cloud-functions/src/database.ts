@@ -36,13 +36,17 @@ export interface Database {
   id(): string;
 }
 
+export type MemoryListObserver = (collectionName: string, options: ListOptions) => void;
+
 export class MemoryDatabase implements Database {
   private readonly rows = new Map<string, Map<string, any>>();
+
+  constructor(private readonly onList?: MemoryListObserver) {}
 
   collection<T extends Record<string, any>>(name: string): CollectionStore<T> {
     if (!this.rows.has(name)) this.rows.set(name, new Map());
     const bucket = this.rows.get(name)!;
-    return new MemoryCollection<T>(bucket);
+    return new MemoryCollection<T>(bucket, (options) => this.onList?.(name, options));
   }
 
   async transaction<T>(fn: (tx: Database) => Promise<T>): Promise<T> {
@@ -69,7 +73,10 @@ export class MemoryDatabase implements Database {
 }
 
 class MemoryCollection<T extends Record<string, any>> implements CollectionStore<T> {
-  constructor(private readonly rows: Map<string, T>) {}
+  constructor(
+    private readonly rows: Map<string, T>,
+    private readonly onList?: (options: ListOptions) => void,
+  ) {}
 
   async get(id: string): Promise<T | null> {
     return clone(this.rows.get(id) ?? null);
@@ -80,6 +87,7 @@ class MemoryCollection<T extends Record<string, any>> implements CollectionStore
   }
 
   async list(options: ListOptions = {}): Promise<T[]> {
+    this.onList?.(options);
     const filtered = [...this.rows.values()].filter((row) => matches(row, options.where ?? {}));
     for (const [field, direction] of [...(options.orderBy ?? [])].reverse()) {
       filtered.sort((a, b) => compareValues(a[field], b[field]) * (direction === 'asc' ? 1 : -1));

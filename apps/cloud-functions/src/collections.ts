@@ -54,6 +54,7 @@ export const collectionSpecs: CollectionSpec[] = [
     { name: 'store_sort', fields: { storeId: 1, sortOrder: 1 } },
   ] },
   { name: collections.menuItems, indexes: [
+    { name: 'status_sort', fields: { status: 1, sortOrder: 1 } },
     { name: 'store_status_sort', fields: { storeId: 1, status: 1, sortOrder: 1 } },
     { name: 'category_id', fields: { categoryId: 1 } },
   ] },
@@ -64,8 +65,6 @@ export const collectionSpecs: CollectionSpec[] = [
   ] },
   { name: collections.walletTransactions, indexes: [
     { name: 'account_created', fields: { accountId: 1, createdAt: -1 } },
-    { name: 'daily_checkin_unique', fields: { accountId: 1, type: 1, businessDate: 1 }, unique: true, sparse: true },
-    { name: 'order_refund_unique', fields: { orderId: 1, type: 1 }, unique: true, sparse: true },
   ] },
   { name: collections.shareRewardConfigs, indexes: [] },
   { name: collections.shareInvites, indexes: [

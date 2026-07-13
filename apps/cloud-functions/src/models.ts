@@ -86,6 +86,7 @@ export interface StoreDoc {
   recentViewers: number;
   systemHeat: number;
   sourceType: string;
+  searchText?: string;
   sortOrder: number;
   status: ManagedContentStatus;
   createdAt: string;

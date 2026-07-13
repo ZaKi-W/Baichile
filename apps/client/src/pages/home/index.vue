@@ -33,6 +33,9 @@ let orderTimer: ReturnType<typeof setInterval> | undefined;
 const flashSaleSeconds = ref(0);
 let flashSaleTimer: ReturnType<typeof setInterval> | undefined;
 const settlementRequested = new Set<string>();
+let pageVisible = false;
+let primaryLoaded = false;
+let secondaryLoad: Promise<void> | undefined;
 const STATIC_CDN = 'https://cloud1-d8g7o18ula3c12f10-1318253748.tcloudbaseapp.com/baichile-home';
 const categoryImages = [
   `${STATIC_CDN}/categories/burger.png`,
@@ -75,6 +78,8 @@ async function load() {
     error.value = cause instanceof Error ? cause.message : '加载失败';
   } finally {
     loading.value = false;
+    primaryLoaded = true;
+    if (pageVisible) loadSecondaryData();
   }
 }
 const openSearch = () => uni.navigateTo({ url: '/pages/search/index' });
@@ -161,16 +166,27 @@ function stopOrderTimer() {
 }
 
 function handleShow() {
+  pageVisible = true;
   settlementRequested.clear();
   startFlashSaleTimer();
   startOrderTimer();
-  void address.load().catch(() => undefined);
-  void refreshOrders();
+  if (primaryLoaded) loadSecondaryData();
 }
 
 function handleHide() {
+  pageVisible = false;
   stopFlashSaleTimer();
   stopOrderTimer();
+}
+
+function loadSecondaryData() {
+  if (secondaryLoad) return;
+  secondaryLoad = Promise.allSettled([
+    address.load(),
+    refreshOrders(),
+  ]).then(() => undefined).finally(() => {
+    secondaryLoad = undefined;
+  });
 }
 
 onLoad(() => {

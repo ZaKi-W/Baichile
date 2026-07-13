@@ -71,7 +71,7 @@ export class BaichileRouter {
     }
 
     if (request.method === 'GET' && path === '/v1/catalog/home') return this.services.catalog.home();
-    if (request.method === 'GET' && path === '/v1/catalog/categories') return (await this.services.catalog.home()).categories;
+    if (request.method === 'GET' && path === '/v1/catalog/categories') return this.services.catalog.categories();
     if (request.method === 'GET' && path === '/v1/catalog/stores') return this.services.catalog.list(request.query.get('categoryId') ?? undefined);
     if (request.method === 'GET' && path === '/v1/catalog/search') return this.services.catalog.list(undefined, request.query.get('q') ?? '');
     if (request.method === 'GET' && segments[1] === 'catalog' && segments[2] === 'stores' && segments[3]) {
@@ -316,12 +316,18 @@ function normalizeRequest(event: CloudFunctionEvent, rawContext?: any): RequestC
   const query = new URLSearchParams();
   const [, queryString] = path.split('?');
   if (queryString) new URLSearchParams(queryString).forEach((value, key) => query.set(key, value));
+  if (event.rawQueryString) {
+    new URLSearchParams(event.rawQueryString).forEach((value, key) => query.set(key, value));
+  }
   if (body.query) {
     for (const [key, value] of Object.entries(body.query)) {
       if (value !== undefined) query.set(key, String(value));
     }
   }
   for (const [key, value] of Object.entries(event.query ?? {})) {
+    if (value !== undefined) query.set(key, String(value));
+  }
+  for (const [key, value] of Object.entries(event.queryStringParameters ?? {})) {
     if (value !== undefined) query.set(key, String(value));
   }
   return {
