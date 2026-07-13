@@ -18,7 +18,13 @@ onLoad(async (options) => {
   token.value = decodeURIComponent(String(options?.token || options?.t || options?.scene || '')); sharing.value = options?.share === '1';
   rewardCents.value = Number(options?.reward || 0) || 0;
   if (token.value) auth.rememberReferral(token.value);
-  try { data.value = await shareService.landing(token.value); }
+  try {
+    const landing = await shareService.landing(token.value);
+    if (landing.persona) {
+      const imageUrl = await resolvePersonaImage(landing.persona.id).catch(() => '');
+      data.value = { ...landing, persona: { ...landing.persona, imageUrl } };
+    } else data.value = landing;
+  }
   catch { data.value = { active: false, dishNames: [], savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0, inviteeRewardCents: 0, benefitText: '' }; }
   finally { loading.value = false; }
   if (sharing.value) uni.showShareMenu({ menus: ['shareAppMessage', 'shareTimeline'] });
@@ -26,7 +32,7 @@ onLoad(async (options) => {
 
 function sharePayload() {
   const persona = data.value?.persona;
-  const imageUrl = data.value?.kind === 'achievement' ? '/static/share/achievement-cover.jpg' : data.value?.kind === 'persona' ? persona?.imageUrl : '/static/share/order-cover.jpg';
+  const imageUrl = data.value?.kind === 'achievement' ? '/static/share/achievement-cover.jpg' : data.value?.kind === 'persona' ? persona?.imageUrl || '/static/share/order-cover.jpg' : '/static/share/order-cover.jpg';
   const title = data.value?.kind === 'persona' && persona
     ? `我的这顿白吃人格是 ${persona.acronym} · ${persona.name}`
     : data.value?.title || poster.value?.title || '朋友请你来白吃一顿';
@@ -63,6 +69,13 @@ async function savePoster() {
 }
 
 function download(url: string): Promise<string> { return new Promise((resolve, reject) => uni.downloadFile({ url, success: (r) => r.statusCode === 200 ? resolve(r.tempFilePath) : reject(new Error('素材下载失败')), fail: reject })); }
+async function resolvePersonaImage(personaId: string): Promise<string> {
+  const cloud = typeof wx === 'undefined' ? undefined : wx.cloud;
+  if (!cloud) throw new Error('云存储未初始化');
+  const fileID = `${PERSONA_CLOUD_PREFIX}/${personaId}.png`;
+  const result = await cloud.getTempFileURL({ fileList: [fileID] });
+  return result.fileList[0]?.tempFileURL || '';
+}
 async function downloadCloudFile(fileID: string): Promise<string> {
   const cloud = typeof wx === 'undefined' ? undefined : wx.cloud;
   if (!cloud) throw new Error('云存储未初始化');
@@ -132,7 +145,7 @@ function start() { uni.switchTab({ url: '/pages/profile/index' }); auth.requestL
         <view class="persona-brand"><text>这顿白吃 · 人格档案</text><small>THE BAICHILE TYPE FILE</small></view>
         <view class="persona-hero">
           <view class="persona-meta"><text class="persona-acronym">{{ data.persona.acronym }}</text><text class="persona-index">TYPE / 12</text></view>
-          <image class="persona-portrait" :src="data.persona.imageUrl" mode="aspectFit" />
+          <image v-if="data.persona.imageUrl" class="persona-portrait" :src="data.persona.imageUrl" mode="aspectFit" />
           <text class="persona-name">{{ data.persona.name }}</text>
         </view>
         <view class="persona-story">

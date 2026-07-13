@@ -29,11 +29,14 @@ describe('share landing poster', () => {
   it('shares persona identity instead of the legacy invitation coupon', () => {
     expect(source).toContain('我的这顿白吃人格是');
     expect(source).toContain('persona?.imageUrl');
+    expect(source).toContain("persona?.imageUrl || '/static/share/order-cover.jpg'");
     expect(source).not.toContain("data.value?.kind === 'persona' ? '/static/share/invitation-cover-v2.jpg'");
   });
 
-  it('downloads the persona character from CDN before drawing the saved poster', () => {
+  it('resolves persona images from CloudBase and downloads them before drawing the saved poster', () => {
     expect(source).toContain("cloud://cloud1-d8g7o18ula3c12f10/baichile-home/personas");
+    expect(source).toContain('await resolvePersonaImage(landing.persona.id)');
+    expect(source).toContain('cloud.getTempFileURL({ fileList: [fileID] })');
     expect(source).toContain('await downloadCloudFile(`${PERSONA_CLOUD_PREFIX}/${data.value.persona.id}.png`)');
     expect(source).toContain('cloud.downloadFile({ fileID })');
     expect(source).not.toContain('await imagePath(data.value.persona.imageUrl)');

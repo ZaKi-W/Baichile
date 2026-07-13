@@ -19,6 +19,16 @@ interface WxCloud {
   downloadFile(options: {
     fileID: string;
   }): Promise<{ tempFilePath: string; statusCode?: number }>;
+  getTempFileURL(options: {
+    fileList: string[];
+  }): Promise<{
+    fileList: Array<{
+      fileID: string;
+      tempFileURL: string;
+      status?: number;
+      errMsg?: string;
+    }>;
+  }>;
   callFunction(options: {
     name: string;
     data?: Record<string, unknown>;
