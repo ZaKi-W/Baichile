@@ -52,6 +52,7 @@ export class AdminAuthService {
   constructor(private readonly db: Database) {}
 
   async login(username: string, password: string) {
+    await this.cleanupExpiredSessions();
     await this.ensureBootstrapAdmin();
     const normalized = username.trim().toLowerCase();
     const user = await this.db.collection<AdminUserDoc>(collections.adminUsers).findOne({ username: normalized });
@@ -76,6 +77,17 @@ export class AdminAuthService {
       updatedAt: this.db.now().toISOString(),
     });
     return { accessToken: token, expiresAt, admin: toAdmin(user) };
+  }
+
+  private async cleanupExpiredSessions(): Promise<void> {
+    const sessions = await this.db.collection<AdminSessionDoc>(collections.adminSessions).list({
+      orderBy: [['expiresAt', 'asc']],
+      limit: 100,
+    });
+    const now = Date.now();
+    await Promise.all(sessions
+      .filter((session) => new Date(session.expiresAt).getTime() <= now || Boolean(session.revokedAt))
+      .map((session) => this.db.collection<AdminSessionDoc>(collections.adminSessions).remove(session.id)));
   }
 
   async resolveToken(token?: string): Promise<AuthenticatedAdmin> {
@@ -440,7 +452,9 @@ function filterRows<T extends Record<string, any>>(
   keywordFields: string[],
   exactFields: string[],
 ): T[] {
-  const keyword = query.keyword?.trim().toLowerCase();
+  const keyword = query.keyword?.trim().slice(0, 100).toLowerCase();
+  if (query.dateFrom && !isIsoDate(query.dateFrom)) badRequest('开始日期格式不正确', 'INVALID_QUERY');
+  if (query.dateTo && !isIsoDate(query.dateTo)) badRequest('结束日期格式不正确', 'INVALID_QUERY');
   return rows.filter((row) => {
     if (keyword && !keywordFields.some((field) => String(row[field] ?? '').toLowerCase().includes(keyword))) return false;
     for (const field of exactFields) {
@@ -476,13 +490,13 @@ function optionalString(value: unknown, name: string, max = 500): string | null 
   return stringField(value, name, max);
 }
 
-function integer(value: unknown, name: string, min = 0): number {
-  if (!Number.isInteger(value) || (value as number) < min) badRequest(`${name}必须是不小于 ${min} 的整数`, 'INVALID_INPUT');
+function integer(value: unknown, name: string, min = 0, max = Number.MAX_SAFE_INTEGER): number {
+  if (!Number.isSafeInteger(value) || (value as number) < min || (value as number) > max) badRequest(`${name}必须是 ${min}–${max} 范围内的整数`, 'INVALID_INPUT');
   return value as number;
 }
 
-function finite(value: unknown, name: string, min = 0): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min) badRequest(`${name}格式不正确`, 'INVALID_INPUT');
+function finite(value: unknown, name: string, min = 0, max = Number.MAX_SAFE_INTEGER): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) badRequest(`${name}格式不正确`, 'INVALID_INPUT');
   return value;
 }
 
@@ -497,15 +511,15 @@ function parseStore(value: unknown): Omit<StoreDoc, '_id' | 'createdAt' | 'updat
     description: stringField(input.description, '商家简介', 1000),
     coverUrl: optionalString(input.coverUrl, '封面地址', 1000),
     tags: Array.isArray(input.tags) ? input.tags.map((item) => stringField(item, '标签', 30)).slice(0, 20) : [],
-    deliveryFeeCents: integer(input.deliveryFeeCents, '配送费'),
-    packingFeeCents: integer(input.packingFeeCents, '包装费'),
-    minimumOrderCents: integer(input.minimumOrderCents, '起送金额'),
-    virtualDeliveryMinutes: integer(input.virtualDeliveryMinutes, '虚拟配送时间', 1),
-    monthlySales: integer(input.monthlySales, '月销量'),
-    distanceKm: finite(input.distanceKm, '距离'),
-    rating: Math.min(5, finite(input.rating, '评分')),
-    recentViewers: integer(input.recentViewers, '最近浏览人数'),
-    systemHeat: integer(input.systemHeat, '系统热度'),
+    deliveryFeeCents: integer(input.deliveryFeeCents, '配送费', 0, 100_000),
+    packingFeeCents: integer(input.packingFeeCents, '包装费', 0, 100_000),
+    minimumOrderCents: integer(input.minimumOrderCents, '起送金额', 0, 10_000_000),
+    virtualDeliveryMinutes: integer(input.virtualDeliveryMinutes, '虚拟配送时间', 1, 24 * 60),
+    monthlySales: integer(input.monthlySales, '月销量', 0, 100_000_000),
+    distanceKm: finite(input.distanceKm, '距离', 0, 10_000),
+    rating: finite(input.rating, '评分', 0, 5),
+    recentViewers: integer(input.recentViewers, '最近浏览人数', 0, 100_000_000),
+    systemHeat: integer(input.systemHeat, '系统热度', 0, 100_000_000),
     sourceType: stringField(input.sourceType, '来源类型', 30),
     sortOrder: integer(input.sortOrder, '排序'),
     status: status as ManagedContentStatus,
@@ -525,11 +539,11 @@ function parseMenuItem(value: unknown): Omit<MenuItemDoc, '_id' | 'createdAt' | 
     name: stringField(input.name, '菜品名称', 120),
     subtitle: optionalString(input.subtitle, '副标题', 500),
     imageUrl: optionalString(input.imageUrl, '图片地址', 1000),
-    basePriceCents: integer(input.basePriceCents, '基础价格'),
-    caloriesKcal: integer(input.caloriesKcal, '热量'),
-    calorieSource: input.calorieSource ?? {},
-    monthlySales: integer(input.monthlySales, '月销量'),
-    specGroups: input.specGroups,
+    basePriceCents: integer(input.basePriceCents, '基础价格', 0, 10_000_000),
+    caloriesKcal: integer(input.caloriesKcal, '热量', 0, 100_000),
+    calorieSource: safeStructuredValue(input.calorieSource ?? {}, '热量来源', 16_384),
+    monthlySales: integer(input.monthlySales, '月销量', 0, 100_000_000),
+    specGroups: safeStructuredValue(input.specGroups, '规格组', 65_536) as unknown[],
     sourceType: stringField(input.sourceType, '来源类型', 30),
     sortOrder: integer(input.sortOrder, '排序'),
     status: status as ManagedContentStatus,
@@ -556,7 +570,9 @@ function parseOrderUpdate(value: unknown): Pick<VirtualOrderDoc, 'adminStatus' |
 
 function parseWalletAdjustment(value: unknown): { amountCents: number; reason: string } {
   const input = object(value);
-  if (!Number.isInteger(input.amountCents) || input.amountCents === 0) badRequest('调整金额必须是非零整数分');
+  if (!Number.isSafeInteger(input.amountCents) || input.amountCents === 0 || Math.abs(input.amountCents as number) > 10_000_000) {
+    badRequest('调整金额必须是绝对值不超过 10000000 的非零整数分');
+  }
   const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
   if (reason.length < 2 || reason.length > 200) badRequest('调整原因长度必须为 2–200 个字符');
   return { amountCents: input.amountCents as number, reason };
@@ -570,4 +586,21 @@ function parseRole(value: unknown): AdminRole {
 function parseAdminStatus(value: unknown): AdminUserStatus {
   if (value === 'active' || value === 'disabled') return value;
   badRequest('管理员状态不正确');
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value) && Number.isFinite(new Date(value).getTime());
+}
+
+function safeStructuredValue(value: unknown, name: string, maxBytes: number): unknown {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    badRequest(`${name}格式不正确`, 'INVALID_INPUT');
+  }
+  if (!serialized || Buffer.byteLength(serialized, 'utf8') > maxBytes || /"(?:__proto__|prototype|constructor)"\s*:/.test(serialized)) {
+    badRequest(`${name}格式不正确或内容过大`, 'INVALID_INPUT');
+  }
+  return JSON.parse(serialized) as unknown;
 }

@@ -56,7 +56,7 @@ import type {
 } from './models';
 import { buildSharePath, chooseShareTitle, DEFAULT_SHARE_REWARD_CONFIG, parseShareRewardConfig } from './share-domain';
 import { classifyPersona, selectMilestone, selectOrderEasterEgg } from './share-insights';
-import { createShareMiniProgramCode, resolveCloudFileUrls } from './storage';
+import { createShareMiniProgramCode, removeCloudFiles, resolveCloudFileUrls, uploadValidatedAvatar } from './storage';
 
 interface AnalyticsEventDoc {
   _id: string;
@@ -92,13 +92,7 @@ async function listAll<T extends Record<string, any>>(
 
 function normalizeDeliveryAddressSnapshot(input: QuoteRequest['deliveryAddressSnapshot']): OrderDeliveryAddressSnapshot | undefined {
   if (!input) return undefined;
-  return {
-    name: String(input.name ?? '').trim(),
-    phone: String(input.phone ?? '').trim(),
-    address: String(input.address ?? '').trim(),
-    detail: String(input.detail ?? '').trim(),
-    tag: String(input.tag ?? '').trim(),
-  };
+  return validateAddressText(input);
 }
 
 function isDeliveryAddressSnapshot(value: unknown): value is OrderDeliveryAddressSnapshot {
@@ -212,7 +206,12 @@ export class AuthService {
       const txAccounts = tx.collection<AccountDoc>(collections.accounts);
       const current = await txAccounts.get(accountId);
       if (current) {
-        await txAccounts.update(accountId, { nickname: profile.nickname, avatarUrl: profile.avatarUrl, updatedAt: now });
+        await txAccounts.update(accountId, {
+          wechatOpenIdHash: digest,
+          nickname: profile.nickname,
+          avatarUrl: profile.avatarUrl,
+          updatedAt: now,
+        });
       } else {
         await txAccounts.insert({
           _id: accountId,
@@ -252,6 +251,14 @@ export class AuthService {
       badRequest('微信手机号授权已失效，请重试');
     }
     return body.phone_info;
+  }
+
+  async uploadAvatar(openId: string, contentBase64: string): Promise<{ fileID: string }> {
+    const digest = createHash('sha256').update(openId).digest('hex');
+    const account = await this.db.collection<AccountDoc>(collections.accounts).findOne({ wechatOpenIdHash: digest });
+    const fileID = await uploadValidatedAvatar(openId, contentBase64);
+    if (account?.avatarUrl && account.avatarUrl !== fileID) await removeCloudFiles([account.avatarUrl]);
+    return { fileID };
   }
 
   async linkVisitorToAccount(visitorId: string, accountId: string, db = this.db): Promise<void> {
@@ -749,21 +756,22 @@ export class AddressService {
 
   async save(input: Omit<Address, 'id'> & { id?: string }, identity: { visitorId?: string; accountId?: string }): Promise<Address> {
     if (!identity.accountId && !identity.visitorId) badRequest('请先建立用户身份');
+    const validated = validateAddressInput(input);
     return this.db.transaction(async (tx) => {
       const addresses = tx.collection<AddressDoc>(collections.addresses);
-      const id = input.id || `addr_${randomUUID()}`;
+      const id = validated.id || `addr_${randomUUID()}`;
       const existing = await addresses.get(id);
       if (existing && !belongsTo(existing, identity)) badRequest('无权修改该地址');
       const where = identity.accountId ? { accountId: identity.accountId } : { visitorId: identity.visitorId };
       const siblings = await addresses.list({ where });
-      const isDefault = input.isDefault || siblings.length === 0;
+      const isDefault = validated.isDefault || siblings.length === 0;
       if (isDefault) {
         await Promise.all(siblings.map((row) => addresses.update(row.id, { isDefault: false, updatedAt: tx.now().toISOString() })));
       }
       const now = tx.now().toISOString();
       const saved = await addresses.upsert(id, {
         ...existing,
-        ...input,
+        ...validated,
         id,
         visitorId: identity.visitorId ?? null,
         accountId: identity.accountId ?? null,
@@ -1154,8 +1162,39 @@ function belongsTo(row: AddressDoc, identity: { visitorId?: string; accountId?: 
 function validateProfile(profile: UserProfile | undefined, code: string) {
   const avatarUrl = profile?.avatarUrl?.trim();
   const nickname = profile?.nickname?.trim();
-  if (!code?.trim() || !avatarUrl || !nickname || nickname.length > 32) badRequest('登录资料不完整');
+  if (!code?.trim() || code.trim().length > 256 || !avatarUrl || avatarUrl.length > 1_000 || !nickname || nickname.length > 32) {
+    badRequest('登录资料不完整');
+  }
+  if (!/^(cloud:\/\/|https:\/\/)/.test(avatarUrl)) badRequest('头像地址不受信任', 'INVALID_AVATAR_URL');
   return { avatarUrl, nickname };
+}
+
+function validateAddressInput(input: Omit<Address, 'id'> & { id?: string }) {
+  if (!input || typeof input !== 'object') badRequest('地址格式不正确', 'INVALID_ADDRESS');
+  const id = input.id?.trim();
+  if (id && !/^addr_[a-zA-Z0-9-]{1,80}$/.test(id)) badRequest('地址 ID 格式不正确', 'INVALID_ADDRESS');
+  if (!Number.isFinite(input.lat) || input.lat < -90 || input.lat > 90 || !Number.isFinite(input.lng) || input.lng < -180 || input.lng > 180) {
+    badRequest('地址坐标不正确', 'INVALID_ADDRESS');
+  }
+  return {
+    ...(id ? { id } : {}),
+    ...validateAddressText(input),
+    lat: input.lat,
+    lng: input.lng,
+    isDefault: input.isDefault === true,
+  };
+}
+
+function validateAddressText(input: Pick<OrderDeliveryAddressSnapshot, 'name' | 'phone' | 'address' | 'detail' | 'tag'>) {
+  const name = String(input.name ?? '').trim();
+  const phone = String(input.phone ?? '').trim();
+  const address = String(input.address ?? '').trim();
+  const detail = String(input.detail ?? '').trim();
+  const tag = String(input.tag ?? '').trim();
+  if (!name || name.length > 40) badRequest('联系人姓名格式不正确', 'INVALID_ADDRESS');
+  if (!/^\+?[0-9 -]{6,20}$/.test(phone)) badRequest('联系电话格式不正确', 'INVALID_ADDRESS');
+  if (!address || address.length > 200 || detail.length > 200 || tag.length > 20) badRequest('地址内容格式不正确', 'INVALID_ADDRESS');
+  return { name, phone, address, detail, tag };
 }
 
 function requireTencentMapKey(): string {

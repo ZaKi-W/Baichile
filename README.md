@@ -106,7 +106,7 @@ pnpm dev:admin
 默认访问 `http://localhost:5174`。本地调后台时需要配置能访问 `api` 云函数的 HTTP 网关地址：
 
 ```bash
-VITE_CLOUDBASE_HTTP_API_URL=https://your-cloudbase-function-gateway
+VITE_CLOUDBASE_HTTP_API_URL=https://cloud1-d8g7o18ula3c12f10.service.tcloudbase.com/admin-api
 ```
 
 后台不会创建默认账号。首次启动前必须设置 `ADMIN_BOOTSTRAP_*` 环境变量，密码至少 12 位且同时包含字母和数字；初始化完成后应从云函数环境中移除引导密码。

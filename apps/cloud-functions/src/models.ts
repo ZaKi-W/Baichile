@@ -34,6 +34,15 @@ export interface VisitorSessionDoc {
   createdAt: string;
 }
 
+export interface RateLimitDoc {
+  _id: string;
+  id: string;
+  count: number;
+  windowStartedAt: string;
+  expiresAt: string;
+  updatedAt: string;
+}
+
 export interface AddressDoc {
   _id: string;
   id: string;

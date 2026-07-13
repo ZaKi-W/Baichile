@@ -8,6 +8,7 @@ describe('profile page WeChat login', () => {
     expect(source).toContain('open-type="chooseAvatar"');
     expect(source).toContain('type="nickname"');
     expect(source).toContain('if (!avatarUrl.value || !trimmedNickname)');
+    expect(source).toContain('avatarUrl.value = event.detail.avatarUrl');
     expect(source).toContain('if (loading.value) return');
     expect(source).toContain('await auth.wechatLogin');
   });

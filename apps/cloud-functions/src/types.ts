@@ -17,6 +17,7 @@ export interface RequestContext {
   authorization?: string;
   openId?: string;
   ipAddress?: string;
+  origin?: string;
 }
 
 export interface CloudResult<T = unknown> {

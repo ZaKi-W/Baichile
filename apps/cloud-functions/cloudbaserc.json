@@ -21,6 +21,13 @@
               "runtime": "Nodejs18.15",
               "installDependency": true,
               "handler": "index.main"
+            },
+            {
+              "name": "admin-api",
+              "timeout": 20,
+              "runtime": "Nodejs18.15",
+              "installDependency": true,
+              "handler": "index.main"
             }
           ]
         }

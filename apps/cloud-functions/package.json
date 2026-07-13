@@ -18,7 +18,8 @@
     "@baichile/domain": "workspace:*",
     "@baichile/map-core": "workspace:*",
     "@cloudbase/node-sdk": "^3.18.3",
-    "wx-server-sdk": "^4.0.2"
+    "wx-server-sdk": "^4.0.2",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

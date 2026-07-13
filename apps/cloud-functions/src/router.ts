@@ -1,17 +1,22 @@
 import { AdminCloudServices, requireAdmin } from './admin-services';
 import { createCloudBaseDatabase, type Database } from './database';
-import { badRequest, toErrorBody, unauthorized } from './errors';
+import { badRequest, forbidden, notFound, toErrorBody, unauthorized } from './errors';
 import { BaichileCloudServices } from './services';
 import type { CloudFunctionEvent, RequestContext } from './types';
+import { PersistentRateLimiter } from './rate-limit';
 
 export class BaichileRouter {
   private readonly services: BaichileCloudServices;
   private readonly admin: AdminCloudServices;
-  private readonly rateLimits = new Map<string, { count: number; resetAt: number }>();
+  private readonly rateLimits: PersistentRateLimiter;
 
-  constructor(private readonly db: Database = createCloudBaseDatabase()) {
+  constructor(
+    private readonly db: Database = createCloudBaseDatabase(),
+    private readonly surface: 'public' | 'admin' | 'all' = 'all',
+  ) {
     this.services = new BaichileCloudServices(db);
     this.admin = new AdminCloudServices(db);
+    this.rateLimits = new PersistentRateLimiter(db);
   }
 
   async handle(event: CloudFunctionEvent, rawContext?: any) {
@@ -29,11 +34,17 @@ export class BaichileRouter {
     const segments = path.split('/').filter(Boolean);
     if (segments[0] !== 'v1') badRequest('接口路径不正确');
 
-    if (segments[1] === 'admin') return this.routeAdmin(request, segments.slice(2));
+    if (segments[1] === 'admin') {
+      if (this.surface === 'public') notFound('接口不存在', 'NOT_FOUND');
+      this.requireAllowedAdminOrigin(request.origin);
+      return this.routeAdmin(request, segments.slice(2));
+    }
+
+    if (this.surface === 'admin' && path !== '/v1/health') notFound('接口不存在', 'NOT_FOUND');
 
     if (request.method === 'GET' && path === '/v1/health') return { status: 'ok', service: 'baichile-cloud-functions' };
     if (request.method === 'POST' && path === '/v1/auth/guest') {
-      this.enforceRateLimit(`guest:${request.ipAddress ?? request.openId ?? 'unknown'}`, 20, 60 * 60_000);
+      await this.enforceRateLimit(`guest:${request.ipAddress ?? request.openId ?? 'unknown'}`, 20, 60 * 60_000);
       return this.services.auth.createGuest();
     }
     if (request.method === 'POST' && path === '/v1/auth/wechat-mini') {
@@ -47,8 +58,13 @@ export class BaichileRouter {
     }
     if (request.method === 'POST' && path === '/v1/auth/wechat-phone') {
       if (!request.openId) unauthorized('仅允许微信小程序获取手机号', 'WECHAT_CONTEXT_REQUIRED');
-      this.enforceRateLimit(`wechat-phone:${request.openId}`, 10, 60 * 60_000);
+      await this.enforceRateLimit(`wechat-phone:${request.openId}`, 10, 60 * 60_000);
       return this.services.auth.getWechatPhoneNumber(String((request.data as any)?.code ?? ''));
+    }
+    if (request.method === 'POST' && path === '/v1/auth/avatar') {
+      if (!request.openId) unauthorized('仅允许微信小程序上传头像', 'WECHAT_CONTEXT_REQUIRED');
+      await this.enforceRateLimit(`avatar:${request.openId}`, 10, 60 * 60_000);
+      return this.services.auth.uploadAvatar(request.openId, String((request.data as any)?.contentBase64 ?? ''));
     }
     if (request.method === 'POST' && path === '/v1/auth/merge-visitor') {
       unauthorized('该接口已停用', 'ENDPOINT_DISABLED');
@@ -63,15 +79,15 @@ export class BaichileRouter {
     }
 
     if (request.method === 'GET' && path === '/v1/map/reverse-geocode') {
-      this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
+      await this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.map.reverseGeocode(Number(request.query.get('lat')), Number(request.query.get('lng')));
     }
     if (request.method === 'GET' && path === '/v1/map/nearby') {
-      this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
+      await this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.map.nearbyPlaces(Number(request.query.get('lat')), Number(request.query.get('lng')));
     }
     if (request.method === 'GET' && path === '/v1/map/suggest') {
-      this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
+      await this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.map.suggestPlaces(request.query.get('keyword') ?? '', request.query.get('region') ?? undefined);
     }
 
@@ -122,7 +138,7 @@ export class BaichileRouter {
     }
 
     if (request.method === 'POST' && path === '/v1/analytics/events') {
-      this.enforceRateLimit(`analytics:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
+      await this.enforceRateLimit(`analytics:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.analytics.record(request.data, request.authorization, request.openId);
     }
 
@@ -132,7 +148,7 @@ export class BaichileRouter {
   private async routeAdmin(request: RequestContext, segments: string[]): Promise<unknown> {
     if (request.method === 'POST' && segments.join('/') === 'auth/login') {
       const body = request.data as { username?: string; password?: string };
-      this.enforceRateLimit(`admin-login:${request.ipAddress ?? 'unknown'}:${body?.username?.trim().toLowerCase() ?? ''}`, 5, 15 * 60_000);
+      await this.enforceRateLimit(`admin-login:${request.ipAddress ?? 'unknown'}:${body?.username?.trim().toLowerCase() ?? ''}`, 5, 15 * 60_000);
       const result = await this.admin.auth.login(body?.username ?? '', body?.password ?? '');
       await this.admin.audit.record(result.admin, { action: 'auth.login', resourceType: 'admin_user', resourceId: result.admin.id, ipAddress: request.ipAddress });
       return result;
@@ -271,15 +287,16 @@ export class BaichileRouter {
     return identity.accountId;
   }
 
-  private enforceRateLimit(key: string, limit: number, windowMs: number): void {
-    const now = Date.now();
-    const current = this.rateLimits.get(key);
-    if (!current || current.resetAt <= now) {
-      this.rateLimits.set(key, { count: 1, resetAt: now + windowMs });
-      return;
-    }
-    current.count += 1;
-    if (current.count > limit) unauthorized('请求过于频繁，请稍后再试', 'RATE_LIMITED');
+  private enforceRateLimit(key: string, limit: number, windowMs: number): Promise<void> {
+    return this.rateLimits.consume(key, limit, windowMs);
+  }
+
+  private requireAllowedAdminOrigin(origin?: string): void {
+    const configured = (process.env.ADMIN_ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!configured.length || !origin || !configured.includes(origin)) forbidden('后台来源不受信任', 'ADMIN_ORIGIN_FORBIDDEN');
   }
 
   private async mergeIdentity(visitorId: string, accountId: string) {
@@ -315,6 +332,7 @@ function normalizeRequest(event: CloudFunctionEvent, rawContext?: any): RequestC
     authorization: body.authorization ?? event.authorization ?? event.headers?.authorization ?? event.headers?.Authorization,
     openId: typeof rawContext?.OPENID === 'string' && rawContext.OPENID ? rawContext.OPENID : undefined,
     ipAddress: event.headers?.['x-forwarded-for'] ?? event.headers?.['x-real-ip'],
+    origin: event.headers?.origin ?? event.headers?.Origin,
   };
 }
 

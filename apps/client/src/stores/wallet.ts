@@ -14,6 +14,7 @@ export const useWalletStore = defineStore('wallet', {
   actions: {
     async load(includeTransactions = false) {
       const auth = useAuthStore();
+      await auth.ensureGuest();
       if (!auth.accountId) {
         this.summary = emptySummary();
         this.transactions = [];
@@ -32,6 +33,7 @@ export const useWalletStore = defineStore('wallet', {
       }
     },
     async checkIn() {
+      await useAuthStore().ensureGuest();
       this.summary = await walletService.checkIn();
     },
     recordPayment(amountCents: number) {

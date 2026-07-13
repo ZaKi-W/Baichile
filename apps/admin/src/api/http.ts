@@ -1,4 +1,5 @@
-const CLOUDBASE_HTTP_API_URL = import.meta.env.VITE_CLOUDBASE_HTTP_API_URL ?? '';
+const CLOUDBASE_HTTP_API_URL = import.meta.env.VITE_CLOUDBASE_HTTP_API_URL
+  ?? 'https://cloud1-d8g7o18ula3c12f10.service.tcloudbase.com/admin-api';
 const TOKEN_KEY = 'baichile_admin_token';
 
 export class ApiRequestError extends Error {

@@ -6,6 +6,8 @@ const VISITOR_KEY = 'baichile:visitor';
 const ACCOUNT_KEY = 'baichile:account';
 const EMPTY_PROFILE: UserProfile = { avatarUrl: '', nickname: '' };
 const REFERRAL_KEY = 'baichile:referral-token';
+const WECHAT_BINDING_KEY = 'baichile:wechat-native-bound:v2';
+let guestInitialization: Promise<void> | undefined;
 
 function errorMessage(value: unknown, fallback: string): string {
   if (value instanceof Error) return value.message || fallback;
@@ -16,8 +18,44 @@ function errorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
-async function persistWechatAvatar(filePath: string, visitorId: string): Promise<string> {
-  if (!filePath || /^(cloud:\/\/|https:\/\/)/.test(filePath)) return filePath;
+function readFileAsBase64(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    wx?.getFileSystemManager().readFile({
+      filePath,
+      encoding: 'base64',
+      success: (result) => typeof result.data === 'string' ? resolve(result.data) : reject(new Error('头像数据格式不正确')),
+      fail: reject,
+    });
+  });
+}
+
+function compressImage(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    wx?.compressImage({
+      src: filePath,
+      quality: 80,
+      success: (result) => resolve(result.tempFilePath),
+      fail: reject,
+    });
+  });
+}
+
+export async function prepareWechatAvatar(filePath: string): Promise<{ filePath: string; contentBase64: string }> {
+  if (typeof wx === 'undefined') throw new Error('微信运行环境未初始化');
+  try {
+    return { filePath, contentBase64: await readFileAsBase64(filePath) };
+  } catch (readError) {
+    try {
+      const compressedPath = await compressImage(filePath);
+      return { filePath: compressedPath, contentBase64: await readFileAsBase64(compressedPath) };
+    } catch (fallbackError) {
+      console.warn('[auth] WeChat avatar file could not be read', { readError, fallbackError });
+      throw new Error('头像读取失败，请重新选取头像');
+    }
+  }
+}
+
+async function uploadWechatAvatarFile(filePath: string, visitorId: string): Promise<string> {
   const cloud = typeof wx === 'undefined' ? undefined : wx.cloud;
   if (!cloud) throw new Error('云开发环境未初始化');
   const extension = filePath.match(/\.([a-zA-Z0-9]+)(?:\?|$)/)?.[1]?.toLowerCase() || 'jpg';
@@ -27,6 +65,22 @@ async function persistWechatAvatar(filePath: string, visitorId: string): Promise
     filePath,
   });
   if (!result.fileID) throw new Error('头像上传失败');
+  return result.fileID;
+}
+
+async function persistWechatAvatar(filePath: string, accessToken: string, visitorId: string): Promise<string> {
+  if (!filePath || /^(cloud:\/\/|https:\/\/)/.test(filePath)) return filePath;
+  let contentBase64: string;
+  try {
+    contentBase64 = (await prepareWechatAvatar(filePath)).contentBase64;
+  } catch (readError) {
+    console.warn('[auth] Falling back to direct avatar upload', readError);
+    return uploadWechatAvatarFile(filePath, visitorId);
+  }
+  if (contentBase64.length > Math.ceil(2 * 1024 * 1024 * 4 / 3) + 8) {
+    throw new Error('头像文件过大，请重新选择');
+  }
+  const result = await requestApi<{ fileID: string }>('POST', '/v1/auth/avatar', accessToken, { contentBase64 });
   return result.fileID;
 }
 
@@ -41,12 +95,21 @@ export const useAuthStore = defineStore('auth', {
   }),
   actions: {
     async ensureGuest() {
+      if (!guestInitialization) {
+        guestInitialization = this.initializeGuest().finally(() => {
+          guestInitialization = undefined;
+        });
+      }
+      return guestInitialization;
+    },
+    async initializeGuest() {
       const account = uni.getStorageSync(ACCOUNT_KEY) as AccountSession | '';
       if (account) this.applyAccount(account);
       const saved = uni.getStorageSync(VISITOR_KEY) as { visitorId: string; accessToken: string } | '';
       if (saved) {
         this.visitorId = saved.visitorId;
         if (!account) this.accessToken = saved.accessToken;
+        if (account) await this.ensureWechatBinding(account);
         return;
       }
       const data = await requestApi<{ visitorId: string; accessToken: string }>('POST', '/v1/auth/guest', '');
@@ -54,10 +117,13 @@ export const useAuthStore = defineStore('auth', {
       this.accessToken = data.accessToken;
       const guestAccessToken = this.accessToken;
       uni.setStorageSync(VISITOR_KEY, { visitorId: this.visitorId, accessToken: guestAccessToken });
-      if (account) this.applyAccount(account);
+      if (account) {
+        this.applyAccount(account);
+        await this.ensureWechatBinding(account);
+      }
     },
     async wechatLogin(profile: UserProfile) {
-      const persistedAvatarUrl = await persistWechatAvatar(profile.avatarUrl.trim(), this.visitorId);
+      const persistedAvatarUrl = await persistWechatAvatar(profile.avatarUrl.trim(), this.accessToken, this.visitorId);
       const code = await new Promise<string>((resolve, reject) => {
         uni.login({
           provider: 'weixin',
@@ -80,7 +146,16 @@ export const useAuthStore = defineStore('auth', {
         });
       this.applyAccount(session);
       this.persistAccount();
+      uni.setStorageSync(WECHAT_BINDING_KEY, true);
       uni.removeStorageSync(REFERRAL_KEY);
+    },
+    async ensureWechatBinding(account: AccountSession) {
+      if (account.provider !== 'wechat' || uni.getStorageSync(WECHAT_BINDING_KEY)) return;
+      try {
+        await this.wechatLogin(account.profile);
+      } catch (error) {
+        console.warn('[auth] Failed to restore native WeChat account binding', error);
+      }
     },
     rememberReferral(token: string) {
       if (token && !this.accountId) uni.setStorageSync(REFERRAL_KEY, token);

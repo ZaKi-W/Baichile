@@ -31,6 +31,10 @@ export function conflict(message: string, code = 'CONFLICT'): never {
   throw new CloudApiError(409, code, message);
 }
 
+export function tooManyRequests(message = '请求过于频繁，请稍后再试', code = 'RATE_LIMITED'): never {
+  throw new CloudApiError(429, code, message);
+}
+
 export function toErrorBody(error: unknown) {
   if (error instanceof CloudApiError) {
     return { ok: false, status: error.status, code: error.code, message: error.message };

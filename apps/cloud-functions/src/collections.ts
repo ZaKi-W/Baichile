@@ -14,6 +14,7 @@ export const collections = {
   adminUsers: 'admin_users',
   adminSessions: 'admin_sessions',
   adminAuditLogs: 'admin_audit_logs',
+  rateLimits: 'rate_limits',
 } as const;
 
 export const collectionNames = Object.values(collections);
@@ -89,5 +90,8 @@ export const collectionSpecs: CollectionSpec[] = [
     { name: 'admin_created', fields: { adminUserId: 1, createdAt: -1 } },
     { name: 'action_created', fields: { action: 1, createdAt: -1 } },
     { name: 'resource_created', fields: { resourceType: 1, createdAt: -1 } },
+  ] },
+  { name: collections.rateLimits, indexes: [
+    { name: 'expires_at', fields: { expiresAt: 1 } },
   ] },
 ];

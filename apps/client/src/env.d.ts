@@ -27,7 +27,25 @@ interface WxCloud {
   }): Promise<WxCloudCallFunctionResult>;
 }
 
-declare const wx: { cloud?: WxCloud } | undefined;
+interface WxFileSystemManager {
+  readFile(options: {
+    filePath: string;
+    encoding: 'base64';
+    success: (result: { data: string | ArrayBuffer }) => void;
+    fail: (error: unknown) => void;
+  }): void;
+}
+
+declare const wx: {
+  cloud?: WxCloud;
+  getFileSystemManager(): WxFileSystemManager;
+  compressImage(options: {
+    src: string;
+    quality?: number;
+    success: (result: { tempFilePath: string }) => void;
+    fail: (error: unknown) => void;
+  }): void;
+} | undefined;
 
 declare module '*.vue' {
   import type { DefineComponent } from 'vue';
