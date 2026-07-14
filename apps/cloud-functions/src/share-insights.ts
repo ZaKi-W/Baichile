@@ -33,7 +33,9 @@ function persona(id: string, acronym: string, name: string, verdict: string, des
 export function stableHash(value: string): number { return Math.abs(value.split('').reduce((sum, char) => ((sum << 5) - sum + char.charCodeAt(0)) | 0, 0)); }
 
 export function selectOrderEasterEgg(orderId: string, seed: string, triggeredAt: string): OrderEasterEgg | undefined {
-  const hash = stableHash(`${orderId}:${seed}:egg`); if (hash % 1000 >= 80) return undefined;
+  const hash = stableHash(`${orderId}:${seed}:egg`);
+  // Temporary QA override: make the collection selector itself return an egg every time.
+  if (hash % 1000 >= 1000) return undefined;
   const rarity = hash % 10000 < 8 ? 'legendary' : hash % 100 < 28 ? 'rare' : 'common';
   const pool = EGGS.filter((egg) => egg[2] === rarity); const egg = pool[hash % pool.length];
   return { id: egg[0], name: egg[1], rarity: egg[2], verdict: egg[3], themeColor: egg[4], decoration: egg[5], collectionNumber: String(hash % 10000).padStart(4, '0'), triggeredAt };

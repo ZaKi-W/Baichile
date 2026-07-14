@@ -25,11 +25,14 @@ describe('orders card presentation', () => {
     expect(source).toContain("order.status === 'failed'");
   });
 
-  it('shows the incident story directly in the order list', () => {
+  it('shows unified incident and collection egg stories directly in the order list', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
-    expect(source).toContain('incidentText(order)');
-    expect(source).toContain('findDeliveryIncident');
-    expect(source).toContain('incident-story');
+    expect(source).toContain('createOrderEggPresentation');
+    expect(source).toContain('eggPresentation(order)');
+    expect(source).toContain('egg-story');
+    expect(source).toContain('查看彩蛋');
+    expect(source).toContain("revealEgg ? '&revealEgg=1' : ''");
+    expect(source).toContain('@tap.stop="openEgg(order)"');
   });
 });

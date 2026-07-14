@@ -3,9 +3,10 @@ import { createPinia, setActivePinia } from 'pinia';
 
 const listOrders = vi.fn();
 const loadSavings = vi.fn();
+const loadDetail = vi.fn();
 
 vi.mock('../services/orders', () => ({
-  orderService: { list: listOrders, savings: loadSavings },
+  orderService: { list: listOrders, savings: loadSavings, detail: loadDetail },
 }));
 
 describe('order store ownership', () => {
@@ -15,6 +16,7 @@ describe('order store ownership', () => {
     vi.resetModules();
     listOrders.mockReset();
     loadSavings.mockReset();
+    loadDetail.mockReset();
     loadSavings.mockResolvedValue({
       savedMoneyCents: 0,
       savedCaloriesKcal: 0,
@@ -154,5 +156,27 @@ describe('order store ownership', () => {
 
     expect(orders.orders).toEqual(mine);
     expect(storage.get('baichile:orders:account_me')).toBeUndefined();
+  });
+
+  it('force refreshes a cached order detail at completion', async () => {
+    storage.set('baichile:account', {
+      accountId: 'account_me',
+      accessToken: 'account.token',
+      provider: 'wechat',
+      profile: { avatarUrl: 'avatar', nickname: '我' },
+    });
+    const cached = { id: 'order-egg', accountId: 'account_me' };
+    const refreshed = { id: 'order-egg', accountId: 'account_me', easterEgg: { id: 'egg' } };
+    const { useOrderStore } = await import('./orders');
+    const orders = useOrderStore();
+    orders.orders = [cached] as never[];
+    loadDetail.mockResolvedValue(refreshed);
+
+    expect(await orders.fetchDetail('order-egg')).toEqual(cached);
+    expect(loadDetail).not.toHaveBeenCalled();
+
+    expect(await orders.fetchDetail('order-egg', { force: true })).toEqual(refreshed);
+    expect(loadDetail).toHaveBeenCalledWith('order-egg');
+    expect(orders.orders[0]).toEqual(refreshed);
   });
 });

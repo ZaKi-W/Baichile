@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref } from 'vue';
+import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { catalogService } from '../../services/catalog';
 import { useAddressStore } from '../../stores/address';
@@ -10,6 +10,11 @@ import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain
 import { reorder } from '../../utils/reorder';
 import { shareService } from '../../services/shares';
 import { shareLandingUrl } from '../../utils/share-navigation';
+import {
+  createOrderEggPresentation,
+  hasSeenOrderEgg,
+  markOrderEggSeen,
+} from '../../utils/order-easter-egg';
 
 const orders = useOrderStore();
 const addressStore = useAddressStore();
@@ -27,11 +32,19 @@ const sheetDragOffset = ref(0);
 const suppressNextSheetTap = ref(false);
 let mapCtx: UniApp.MapContext | null = null;
 const mapReady = ref(false);
+const now = ref(Date.now());
+const eggRevealVisible = ref(false);
+const eggRevealImageFailed = ref(false);
+const forceEggRevealRequested = ref(false);
 let cameraFramed = false;
 
 const systemInfo = uni.getSystemInfoSync();
 const menuButtonRect = uni.getMenuButtonBoundingClientRect();
 const safeTopStyle = { paddingTop: `${Math.max((systemInfo.statusBarHeight ?? 20) + 8, menuButtonRect.bottom + 8)}px` };
+const eggRevealBackdropStyle = {
+  paddingTop: `${Math.max((systemInfo.statusBarHeight ?? 20) + 16, menuButtonRect.bottom + 16)}px`,
+  paddingBottom: `${Math.max(systemInfo.screenHeight - (systemInfo.safeArea?.bottom ?? systemInfo.screenHeight), 16) + 16}px`,
+};
 
 const order = computed(() => orders.find(orderId.value));
 const displayStoreName = computed(() => order.value?.storeName || storeName.value);
@@ -169,9 +182,9 @@ const STEPS = ORDER_STEPS;
 const FINAL_STEP = ORDER_STEPS.length - 1;
 
 const currentStepIndex = ref(0);
-const now = ref(Date.now());
 let stepTimer: ReturnType<typeof setInterval> | undefined;
 let failureRefreshRequested = false;
+let completionRefreshRequested = false;
 
 const incidentPhase = computed(() => order.value?.incident
   ? getDeliveryIncidentPhase(order.value.incident, now.value)
@@ -181,6 +194,9 @@ const incidentDefinition = computed(() => order.value?.incident
   : undefined);
 const hasIncident = computed(() => incidentPhase.value === 'incident');
 const hasFailed = computed(() => incidentPhase.value === 'failed');
+const eggPresentation = computed(() => order.value
+  ? createOrderEggPresentation(order.value, now.value)
+  : undefined);
 const canShareOrder = computed(() => {
   if (!order.value) return false;
   if (hasIncident.value || hasFailed.value) return true;
@@ -213,14 +229,37 @@ function startStepTimer() {
 }
 
 function updateDeliveryState(startedAt: number) {
+  const currentOrder = order.value;
+  if (!currentOrder) return;
   currentStepIndex.value = hasIncident.value || hasFailed.value
     ? FINAL_STEP
-    : getOrderStepIndex(startedAt, order.value!.durationMs, now.value);
+    : getOrderStepIndex(startedAt, currentOrder.durationMs, now.value);
+  if (!currentOrder.incident && currentStepIndex.value >= FINAL_STEP && !completionRefreshRequested) {
+    completionRefreshRequested = true;
+    void orders.fetchDetail(currentOrder.id, { force: true }).catch(() => undefined);
+  }
   if (hasFailed.value && !failureRefreshRequested) {
     failureRefreshRequested = true;
     void orders.load();
   }
 }
+
+watch(
+  () => order.value && eggPresentation.value
+    ? `${order.value.id}:${eggPresentation.value.id}`
+    : '',
+  (revealId) => {
+    if (!revealId || !order.value || !eggPresentation.value) return;
+    eggRevealImageFailed.value = false;
+    if (forceEggRevealRequested.value) {
+      forceEggRevealRequested.value = false;
+      eggRevealVisible.value = true;
+      return;
+    }
+    if (!hasSeenOrderEgg(order.value.id, eggPresentation.value.id)) eggRevealVisible.value = true;
+  },
+  { immediate: true },
+);
 
 const statusText = computed(() => {
   if (hasFailed.value) return '配送失败';
@@ -362,11 +401,12 @@ function toggleSheet() {
 
 /* ── lifecycle ── */
 onLoad(async (options) => {
+  forceEggRevealRequested.value = options?.revealEgg === '1';
   orderId.value = options?.id || '';
   void addressStore.load();
   if (orderId.value) {
     try {
-      await orders.fetchDetail(orderId.value);
+      await orders.fetchDetail(orderId.value, { force: forceEggRevealRequested.value });
     } catch (error) {
       uni.showToast({ title: error instanceof Error ? error.message : '订单加载失败', icon: 'none' });
     }
@@ -399,6 +439,26 @@ async function prepareTimelineShare() {
   try { const card = await shareService.create({ kind: 'order', orderId: order.value.id, showIdentity: true }); uni.navigateTo({ url: shareLandingUrl(card) }); }
   catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' }); }
   finally { preparingShare.value = false; }
+}
+
+function openEggReveal() {
+  if (!eggPresentation.value) return;
+  eggRevealImageFailed.value = false;
+  eggRevealVisible.value = true;
+}
+
+function closeEggReveal() {
+  if (order.value && eggPresentation.value) markOrderEggSeen(order.value.id, eggPresentation.value.id);
+  eggRevealVisible.value = false;
+}
+
+async function shareEgg() {
+  closeEggReveal();
+  await prepareTimelineShare();
+}
+
+function handleEggRevealImageError() {
+  eggRevealImageFailed.value = true;
 }
 </script>
 
@@ -468,6 +528,25 @@ async function prepareTimelineShare() {
             }" />
           </view>
           <text class="step-label" :class="{ active: idx <= currentStepIndex }">{{ step.label }}</text>
+        </view>
+      </view>
+
+      <view
+        v-if="eggPresentation"
+        class="egg-card"
+        :class="{ 'egg-card-active': eggPresentation.state === 'active' }"
+        :style="{ borderColor: eggPresentation.themeColor }"
+        @tap="openEggReveal"
+      >
+        <view class="egg-card-accent" :style="{ background: eggPresentation.themeColor }" />
+        <view class="egg-card-copy">
+          <view class="egg-card-head">
+            <text class="egg-card-badge">{{ eggPresentation.eyebrow }}</text>
+            <text class="egg-card-meta">{{ eggPresentation.meta }}</text>
+          </view>
+          <text class="egg-card-title">{{ eggPresentation.title }}</text>
+          <text class="egg-card-description">{{ eggPresentation.description }}</text>
+          <text class="egg-card-link">点击查看彩蛋详情</text>
         </view>
       </view>
 
@@ -587,6 +666,55 @@ async function prepareTimelineShare() {
           <view class="route-text">
             <text class="route-label">送达</text>
             <text class="route-value">{{ deliveryAddress }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view
+      v-if="eggRevealVisible && eggPresentation"
+      class="egg-reveal-backdrop"
+      :style="eggRevealBackdropStyle"
+      @tap.stop
+    >
+      <view
+        class="egg-reveal-dialog"
+        :style="{ borderColor: eggPresentation.themeColor }"
+        role="dialog"
+        aria-label="订单彩蛋揭晓"
+      >
+        <view class="egg-reveal-rail" :style="{ background: eggPresentation.themeColor }" />
+        <button class="egg-reveal-close" aria-label="关闭彩蛋揭晓" @tap="closeEggReveal">×</button>
+        <view class="egg-reveal-scroll">
+          <view class="egg-reveal-visual" :style="{ background: eggPresentation.themeColor }">
+            <image
+              v-if="!eggRevealImageFailed"
+              class="egg-reveal-image"
+              :src="eggPresentation.imageUrl"
+              mode="aspectFill"
+              @error="handleEggRevealImageError"
+            />
+            <view v-else class="egg-reveal-image-fallback">
+              <text>彩蛋图鉴</text>
+              <text>{{ eggPresentation.kind === 'collection' ? '收藏款' : '配送款' }}</text>
+            </view>
+          </view>
+          <view class="egg-reveal-copy">
+            <view class="egg-reveal-heading">
+              <text class="egg-reveal-eyebrow">{{ eggPresentation.eyebrow }}</text>
+              <text class="egg-reveal-meta">{{ eggPresentation.meta }}</text>
+            </view>
+            <text class="egg-reveal-title">{{ eggPresentation.title }}</text>
+            <text class="egg-reveal-description">{{ eggPresentation.description }}</text>
+            <view class="egg-reveal-footer">
+              <view class="egg-reveal-stamp" :style="{ color: eggPresentation.themeColor, borderColor: eggPresentation.themeColor }">
+                {{ eggPresentation.kind === 'collection' ? '收藏有效' : '突发认证' }}
+              </view>
+              <view class="egg-reveal-actions">
+                <button class="egg-reveal-button accept" @tap="closeEggReveal">收下彩蛋</button>
+                <button class="egg-reveal-button share" :loading="preparingShare" @tap="shareEgg">分享这枚彩蛋</button>
+              </view>
+            </view>
           </view>
         </view>
       </view>
@@ -798,6 +926,248 @@ async function prepareTimelineShare() {
 .step-label.active {
   color: #333;
   font-weight: 600;
+}
+
+/* ── 订单彩蛋 ── */
+.egg-card {
+  position: relative;
+  display: flex;
+  margin: 4rpx 0 26rpx;
+  overflow: hidden;
+  border: 3rpx solid #f04b32;
+  border-radius: 24rpx 10rpx 24rpx 24rpx;
+  background: #fff8de;
+  box-shadow: 8rpx 8rpx 0 rgba(25, 23, 19, 0.12);
+}
+.egg-card-active {
+  background: #fff1ec;
+}
+.egg-card-accent {
+  width: 14rpx;
+  flex-shrink: 0;
+}
+.egg-card-copy {
+  min-width: 0;
+  flex: 1;
+  padding: 24rpx 24rpx 22rpx;
+}
+.egg-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+.egg-card-badge {
+  padding: 7rpx 12rpx;
+  color: #ffd400;
+  background: #191713;
+  border-radius: 8rpx;
+  font-size: 20rpx;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.egg-card-meta {
+  color: #756b5c;
+  font-size: 20rpx;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: right;
+}
+.egg-card-title,
+.egg-card-description,
+.egg-card-link {
+  display: block;
+}
+.egg-card-title {
+  margin-top: 18rpx;
+  color: #191713;
+  font-size: 31rpx;
+  font-weight: 950;
+  line-height: 1.32;
+}
+.egg-card-description {
+  margin-top: 10rpx;
+  color: #62594e;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+.egg-card-link {
+  margin-top: 14rpx;
+  color: #191713;
+  font-size: 21rpx;
+  font-weight: 900;
+}
+.egg-reveal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  padding-right: 34rpx;
+  padding-left: 34rpx;
+  background: rgba(25, 23, 19, 0.72);
+  box-sizing: border-box;
+}
+.egg-reveal-dialog {
+  position: relative;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  border: 4rpx solid #f04b32;
+  border-radius: 34rpx 14rpx 34rpx 34rpx;
+  background: #fff8de;
+  box-shadow: 14rpx 16rpx 0 rgba(0, 0, 0, 0.22);
+  box-sizing: border-box;
+  animation: egg-reveal-in 240ms ease-out both;
+}
+.egg-reveal-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 18rpx;
+}
+.egg-reveal-close {
+  position: absolute;
+  top: 18rpx;
+  right: 18rpx;
+  width: 72rpx;
+  height: 72rpx;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 2rpx solid #191713;
+  border-radius: 50%;
+  color: #191713;
+  background: #fff;
+  font-size: 38rpx;
+  font-weight: 700;
+  line-height: 66rpx;
+  z-index: 3;
+}
+.egg-reveal-close::after,
+.egg-reveal-button::after { border: 0; }
+.egg-reveal-scroll {
+  width: 100%;
+}
+.egg-reveal-visual {
+  position: relative;
+  height: 112vw;
+  min-height: 680rpx;
+  max-height: 840rpx;
+  margin-left: 18rpx;
+  overflow: hidden;
+  background: #f04b32;
+}
+.egg-reveal-image {
+  width: 100%;
+  height: 100%;
+}
+.egg-reveal-image-fallback {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  color: #ffd400;
+  background: #191713;
+  font-size: 24rpx;
+  font-weight: 900;
+  letter-spacing: 3rpx;
+}
+.egg-reveal-copy {
+  margin-left: 18rpx;
+  padding: 28rpx 30rpx 30rpx;
+  background: #fff8de;
+}
+.egg-reveal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+.egg-reveal-eyebrow,
+.egg-reveal-meta,
+.egg-reveal-title,
+.egg-reveal-description {
+  display: block;
+}
+.egg-reveal-eyebrow {
+  width: fit-content;
+  padding: 9rpx 16rpx;
+  color: #ffd400;
+  background: #191713;
+  border-radius: 8rpx;
+  font-size: 23rpx;
+  font-weight: 950;
+  letter-spacing: 1rpx;
+}
+.egg-reveal-meta {
+  color: #756b5c;
+  font-size: 21rpx;
+  font-weight: 800;
+  text-align: right;
+}
+.egg-reveal-title {
+  max-width: 540rpx;
+  margin-top: 22rpx;
+  color: #191713;
+  font-size: 40rpx;
+  font-weight: 950;
+  line-height: 1.2;
+}
+.egg-reveal-description {
+  max-width: 520rpx;
+  margin-top: 14rpx;
+  color: #62594e;
+  font-size: 25rpx;
+  line-height: 1.5;
+}
+.egg-reveal-footer {
+  display: flex;
+  flex-direction: column;
+}
+.egg-reveal-stamp {
+  width: fit-content;
+  margin: 22rpx 4rpx 0 auto;
+  padding: 8rpx 15rpx;
+  border: 3rpx solid;
+  font-size: 20rpx;
+  font-weight: 950;
+  transform: rotate(-5deg);
+}
+.egg-reveal-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+.egg-reveal-button {
+  min-width: 0;
+  height: 78rpx;
+  flex: 1;
+  margin: 0;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  font-weight: 950;
+  line-height: 78rpx;
+}
+.egg-reveal-button.accept {
+  color: #191713;
+  background: #ffd400;
+}
+.egg-reveal-button.share {
+  color: #fff;
+  background: #191713;
+}
+@keyframes egg-reveal-in {
+  from { opacity: 0; transform: translateY(22rpx) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .egg-reveal-dialog { animation: none; }
 }
 
 /* ── 分隔线 ── */

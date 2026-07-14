@@ -6,14 +6,17 @@ import { useOrderStore } from '../../stores/orders';
 import { catalogService } from '../../services/catalog';
 import { reorder } from '../../utils/reorder';
 import { getOrderStep } from '../../utils/order-status';
-import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
+import { getDeliveryIncidentPhase } from '@baichile/domain';
 import type { VirtualOrder } from '@baichile/api-contract';
+import { createOrderEggPresentation } from '../../utils/order-easter-egg';
 const auth = useAuthStore();
 const orders = useOrderStore();
 const now = ref(Date.now());
 const storeCovers = ref<Record<string, string>>({});
 let statusTimer: ReturnType<typeof setInterval> | undefined;
-const openOrder = (id: string) => uni.navigateTo({ url: `/pages/delivery/index?id=${id}` });
+const openOrder = (id: string, revealEgg = false) => uni.navigateTo({
+  url: `/pages/delivery/index?id=${id}${revealEgg ? '&revealEgg=1' : ''}`,
+});
 const reorderLoading = ref('');
 async function reorderOrder(order: VirtualOrder) {
   if (reorderLoading.value) return;
@@ -32,13 +35,8 @@ const statusLabel = (order: VirtualOrder) => {
   const step = getOrderStep(new Date(order.startedAt).getTime(), order.durationMs, now.value);
   return step.listLabel || step.label;
 };
-const incidentText = (order: VirtualOrder) => {
-  if (!order.incident) return '';
-  const phase = getDeliveryIncidentPhase(order.incident, now.value);
-  if (phase === 'pending') return '';
-  const incident = findDeliveryIncident(order.incident.key);
-  return phase === 'failed' ? incident.failedText : incident.activeText;
-};
+const eggPresentation = (order: VirtualOrder) => createOrderEggPresentation(order, now.value);
+const openEgg = (order: VirtualOrder) => openOrder(order.id, true);
 const isCompleted = (startedAt: string, durationMs: number) =>
   getOrderStep(new Date(startedAt).getTime(), durationMs, now.value).key === 'completed';
 const isFailed = (order: VirtualOrder) =>
@@ -104,11 +102,24 @@ onHide(() => clearInterval(statusTimer));
           <text>· 实付 </text>
           <text class="paid-money">{{ formatMoney(order.totalCents) }}</text>
         </view>
-        <text v-if="incidentText(order)" class="incident-story">{{ incidentText(order) }}</text>
+        <view
+          v-if="eggPresentation(order)"
+          class="egg-story"
+          :class="{ active: eggPresentation(order)?.state === 'active' }"
+          :style="{ borderColor: eggPresentation(order)?.themeColor }"
+        >
+          <view class="egg-story-head">
+            <text class="egg-story-badge">{{ eggPresentation(order)?.eyebrow }}</text>
+            <text class="egg-story-meta">{{ eggPresentation(order)?.meta }}</text>
+          </view>
+          <text class="egg-story-title">{{ eggPresentation(order)?.title }}</text>
+          <text class="egg-story-description">{{ eggPresentation(order)?.description }}</text>
+        </view>
       </view>
       <view class="order-actions">
-        <button v-if="!isFailed(order) && !isCompleted(order.startedAt, order.durationMs)" class="action-button primary-action" @tap.stop="openOrder(order.id)">查看配送</button>
-        <button v-else-if="isCompleted(order.startedAt, order.durationMs)" class="action-button primary-action" @tap.stop="openOrder(order.id)">确认收货</button>
+        <button v-if="eggPresentation(order)" class="action-button primary-action" @tap.stop="openEgg(order)">查看彩蛋</button>
+        <button v-else-if="!isFailed(order) && !isCompleted(order.startedAt, order.durationMs)" class="action-button primary-action" @tap.stop="openOrder(order.id)">查看配送</button>
+        <button v-else-if="!isFailed(order) && isCompleted(order.startedAt, order.durationMs)" class="action-button primary-action" @tap.stop="openOrder(order.id)">确认收货</button>
         <button class="action-button ghost-action" :loading="reorderLoading === order.id" @tap.stop="reorderOrder(order)">再来一单</button>
         <button class="action-button ghost-action" @tap.stop="openOrder(order.id)">订单详情</button>
       </view>
@@ -209,11 +220,53 @@ onHide(() => clearInterval(statusTimer));
   font-size: 27rpx;
   font-weight: 900;
 }
-.incident-story {
+.egg-story {
+  margin-top: 18rpx;
+  padding: 18rpx 20rpx;
+  border: 2rpx solid #f04b32;
+  border-left-width: 10rpx;
+  border-radius: 18rpx 8rpx 18rpx 18rpx;
+  background: #fff8de;
+}
+.egg-story.active {
+  background: #fff1ec;
+}
+.egg-story-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14rpx;
+}
+.egg-story-badge {
+  padding: 6rpx 10rpx;
+  color: #ffd400;
+  background: #191713;
+  border-radius: 7rpx;
+  font-size: 19rpx;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.egg-story-meta {
+  color: #7b7164;
+  font-size: 19rpx;
+  font-weight: 800;
+  text-align: right;
+}
+.egg-story-title,
+.egg-story-description {
   display: block;
-  margin-top: 12rpx;
-  color: #f04426;
-  font-size: 24rpx;
+}
+.egg-story-title {
+  margin-top: 13rpx;
+  color: #191713;
+  font-size: 27rpx;
+  font-weight: 900;
+  line-height: 1.38;
+}
+.egg-story-description {
+  margin-top: 7rpx;
+  color: #6b6256;
+  font-size: 22rpx;
   line-height: 1.45;
 }
 .order-actions {

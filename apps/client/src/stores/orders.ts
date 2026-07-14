@@ -37,9 +37,9 @@ export const useOrderStore = defineStore('orders', {
     find(id: string) {
       return this.orders.find((order) => order.id === id);
     },
-    async fetchDetail(id: string) {
+    async fetchDetail(id: string, options: { force?: boolean } = {}) {
       const current = this.find(id);
-      if (current) {
+      if (current && !options.force) {
         this.current = current;
         return current;
       }

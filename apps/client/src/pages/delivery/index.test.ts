@@ -44,6 +44,34 @@ describe('delivery page status initialization', () => {
     expect(source).not.toContain('.share-button { margin-top:');
   });
 
+  it('reveals and persists unified order easter eggs', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('createOrderEggPresentation');
+    expect(source).toContain('hasSeenOrderEgg');
+    expect(source).toContain('markOrderEggSeen');
+    expect(source).toContain('class="egg-card"');
+    expect(source).toContain('class="egg-reveal-backdrop"');
+    expect(source).toContain('class="egg-reveal-image"');
+    expect(source).toContain(':src="eggPresentation.imageUrl"');
+    expect(source).toContain('handleEggRevealImageError');
+    expect(source).toContain('menuButtonRect.bottom + 16');
+    expect(source).toContain(':style="eggRevealBackdropStyle"');
+    expect(source).toContain('max-height: 100%;');
+    expect(source).not.toContain('height: calc(100vh - 108rpx);');
+    expect(source).not.toContain('<scroll-view class="egg-reveal-scroll"');
+    expect(source).not.toContain('class="egg-card-image"');
+    expect(source).not.toContain('handleEggCardImageError');
+    expect(source).toContain("options?.revealEgg === '1'");
+    expect(source).toContain('forceEggRevealRequested.value = false');
+    expect(source).toContain('{ force: forceEggRevealRequested.value }');
+    expect(source).toContain('收下彩蛋');
+    expect(source).toContain('分享这枚彩蛋');
+    expect(source).toContain('分享准备失败');
+    expect(source).toContain("orders.fetchDetail(currentOrder.id, { force: true })");
+    expect(source).toContain('@media (prefers-reduced-motion: reduce)');
+  });
+
   it('shows order detail, payment, order number, and delivery information', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 

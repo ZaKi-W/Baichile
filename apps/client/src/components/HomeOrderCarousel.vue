@@ -56,7 +56,10 @@ function onChange(event: { detail: { current: number } }) {
             >×</button>
           </view>
           <text class="order-items">{{ summary.itemText }}</text>
-          <text v-if="summary.incidentText" class="order-incident">{{ summary.incidentText }}</text>
+          <view v-if="summary.incidentText" class="order-incident-block">
+            <text class="order-incident-badge">配送彩蛋</text>
+            <text class="order-incident">{{ summary.incidentText }}</text>
+          </view>
           <view class="order-meta">
             <text>{{ remainingText(summary) }}</text>
             <text>¥{{ (summary.order.totalCents / 100).toFixed(2) }}</text>
@@ -82,7 +85,9 @@ function onChange(event: { detail: { current: number } }) {
 .order-close { width: 44rpx; height: 44rpx; min-height: 0; padding: 0; border: 1rpx solid #d6d6d6; border-radius: 50%; color: #777; background: #fff; font-size: 28rpx; line-height: 40rpx; }
 .order-close::after { border: 0; }
 .order-items { display: block; margin-top: 13rpx; overflow: hidden; color: #666; font-size: 20rpx; white-space: nowrap; text-overflow: ellipsis; }
-.order-incident { display: block; margin-top: 8rpx; overflow: hidden; color: #b33d25; font-size: 20rpx; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
+.order-incident-block { display: flex; align-items: center; gap: 10rpx; margin-top: 8rpx; overflow: hidden; }
+.order-incident-badge { flex-shrink: 0; padding: 4rpx 8rpx; border-radius: 6rpx; color: #ffd400; background: #191713; font-size: 16rpx; font-weight: 900; line-height: 1.2; }
+.order-incident { min-width: 0; flex: 1; overflow: hidden; color: #b33d25; font-size: 20rpx; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; }
 .order-meta { margin-top: 15rpx; color: #555; font-size: 19rpx; font-weight: 600; }
 .order-progress { height: 7rpx; margin-top: 15rpx; overflow: hidden; border-radius: 7rpx; background: #efefef; }
 .order-progress-fill { height: 100%; border-radius: inherit; background: #ffd400; transition: width .3s linear; }

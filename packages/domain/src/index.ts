@@ -90,7 +90,8 @@ export function selectDeliveryIncident(
   orderStartedAt = Date.now(),
 ): DeliveryIncidentAssignment | undefined {
   const hash = stableHash(seed);
-  if (hash % 10 >= 3) return undefined;
+  // Temporary QA override: keep every new order on the delivery-incident path.
+  if (hash % 10 >= 10) return undefined;
   const startedAt = orderStartedAt + 30_000;
   return {
     key: DELIVERY_INCIDENTS[Math.floor(hash / 10) % DELIVERY_INCIDENTS.length].key,

@@ -9,6 +9,8 @@ describe('home order carousel', () => {
     expect(source).toContain('<swiper-item');
     expect(source).toContain('订单进行中');
     expect(source).toContain('incidentText');
+    expect(source).toContain('配送彩蛋');
+    expect(source).toContain('order-incident-badge');
     expect(source).toContain('remainingText');
     expect(source).toContain('activeIndex + 1');
     expect(source).toContain('订单进行中');

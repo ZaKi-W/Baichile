@@ -51,14 +51,14 @@ describe('SKU validation', () => {
 });
 
 describe('delivery incidents', () => {
-  it('selects one stable incident for three tenths of hash buckets', () => {
+  it('selects one stable incident for every hash bucket during QA', () => {
     const orderStartedAt = Date.parse('2026-07-02T00:00:00.000Z');
     const incident = selectDeliveryIncident('seed-0', 20, orderStartedAt);
     expect(incident).toEqual(selectDeliveryIncident('seed-0', 20, orderStartedAt));
     expect(incident?.startedAt).toBe('2026-07-02T00:00:30.000Z');
     expect(incident?.failedAt).toBe('2026-07-02T00:00:45.000Z');
     expect(Array.from({ length: 100 }, (_, index) => selectDeliveryIncident(`seed-${index}`, 20))
-      .filter(Boolean)).toHaveLength(30);
+      .filter(Boolean)).toHaveLength(100);
     expect(DELIVERY_INCIDENTS).toHaveLength(8);
   });
 

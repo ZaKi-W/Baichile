@@ -301,7 +301,7 @@ const checkout = () => {
 
 .merchant-hero {
   position: relative;
-  min-height: 398rpx;
+  min-height: 356rpx;
   flex: 0 0 auto;
   padding: max(24rpx, env(safe-area-inset-top)) 30rpx 28rpx;
   overflow: hidden;
