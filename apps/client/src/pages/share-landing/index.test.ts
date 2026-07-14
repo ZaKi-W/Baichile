@@ -21,6 +21,13 @@ describe('share landing poster', () => {
     expect(source).toContain('drawPersonaPoster');
   });
 
+  it('shows the matching easter egg image for shared orders', () => {
+    expect(source).toContain("import { orderEggImageUrl } from '../../utils/order-easter-egg'");
+    expect(source).toContain('const easterEggImageUrl = computed');
+    expect(source).toContain('class="egg-illustration"');
+    expect(source).toContain(':src="easterEggImageUrl"');
+  });
+
   it('shows the claim action only to invited visitors', () => {
     expect(source).toContain('v-if="sharing && data.active"');
     expect(source).toContain('v-else class="claim"');
