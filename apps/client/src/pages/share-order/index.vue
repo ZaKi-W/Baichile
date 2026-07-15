@@ -126,7 +126,7 @@ async function savePoster() {
 
 .order-hero {
   position: relative;
-  min-height: 372rpx;
+  min-height: 312rpx;
   overflow: hidden;
   border-radius: 48rpx;
   background: #11110f;
@@ -156,7 +156,7 @@ async function savePoster() {
   position: relative;
   z-index: 1;
   display: flex;
-  min-height: 372rpx;
+  min-height: 312rpx;
   flex-direction: column;
   padding: 36rpx 32rpx 30rpx;
 }

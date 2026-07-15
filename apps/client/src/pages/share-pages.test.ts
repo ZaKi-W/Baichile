@@ -57,6 +57,7 @@ describe('gacha share pages', () => {
 
   it('uses a complete order report layout with readable metrics and protected action space', () => {
     expect(order).toContain('.order-hero {');
+    expect(order).toContain('min-height: 312rpx;');
     expect(order).toContain('.order-section {');
     expect(order).toContain('.order-store-avatar');
     expect(order).not.toContain('本次白吃扭蛋 · 订单已完成');
