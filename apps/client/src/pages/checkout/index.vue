@@ -9,6 +9,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useWalletStore } from '../../stores/wallet';
 import { ApiRequestError } from '../../services/http';
 import { savePendingOrder } from '../../utils/pending-order';
+import { isDefaultDeliveryAddress } from '../../config/default-delivery-address';
 
 const cart = useCartStore();
 const orders = useOrderStore();
@@ -120,6 +121,7 @@ async function submit() {
         </view>
         <text class="address-text">{{ selectedAddress.address }}</text>
         <text v-if="selectedAddress.detail" class="address-detail">{{ selectedAddress.detail }}</text>
+        <text v-if="isDefaultDeliveryAddress(selectedAddress)" class="default-address-hint">新用户已安排默认收货点，点此可换成自己的</text>
       </view>
       <view v-else class="address-empty">
         <text class="empty-text">请选择收货地址</text>
@@ -205,6 +207,7 @@ async function submit() {
   line-height: 1.4;
 }
 .address-detail { display: block; margin-top: 4rpx; font-size: 24rpx; color: #999; }
+.default-address-hint { display: block; margin-top: 10rpx; color: #b8860b; font-size: 22rpx; font-weight: 600; }
 .address-empty { flex: 1; }
 .empty-text { font-size: 28rpx; color: #999; }
 .address-arrow { font-size: 40rpx; color: #ccc; font-weight: 300; }

@@ -14,5 +14,6 @@ describe('checkout wallet payment', () => {
     expect(source).toContain("error.code === 'INSUFFICIENT_BALANCE'");
     expect(source).toContain('余额不足');
     expect(source).toContain('仅扣除应用内虚拟余额，不涉及真实支付');
+    expect(source).toContain('新用户已安排默认收货点，点此可换成自己的');
   });
 });

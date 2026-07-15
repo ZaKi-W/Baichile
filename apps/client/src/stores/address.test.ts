@@ -41,6 +41,10 @@ describe('address store ownership', () => {
     await addresses.load();
 
     expect(addresses.addresses).toEqual([]);
+    expect(addresses.selected).toMatchObject({
+      id: 'addr_default_ganfan_station',
+      address: '上海市黄浦区干饭研究院',
+    });
     expect(listAddresses).toHaveBeenCalledOnce();
   });
 

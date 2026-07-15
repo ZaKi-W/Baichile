@@ -3,9 +3,10 @@ import { computed } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import type { Address } from '../../stores/address';
 import { useAddressStore } from '../../stores/address';
+import { isDefaultDeliveryAddress } from '../../config/default-delivery-address';
 
 const addressStore = useAddressStore();
-const addresses = computed(() => addressStore.addresses);
+const addresses = computed(() => addressStore.availableAddresses);
 
 onShow(() => { void addressStore.load(); });
 
@@ -15,6 +16,7 @@ function pick(addr: Address) {
 }
 
 function remove(addr: Address) {
+  if (isDefaultDeliveryAddress(addr)) return;
   uni.showModal({
     title: '删除地址',
     content: `确认删除「${addr.detail || addr.address}」？`,
@@ -48,8 +50,9 @@ function addNew() {
         </view>
         <text class="addr-text">{{ addr.address }}</text>
         <text v-if="addr.detail" class="addr-detail">{{ addr.detail }}</text>
+        <text v-if="isDefaultDeliveryAddress(addr)" class="default-hint">新用户默认收货点，随时可新增并替换</text>
       </view>
-      <view class="addr-actions">
+      <view v-if="!isDefaultDeliveryAddress(addr)" class="addr-actions">
         <view class="action-btn" @tap.stop="remove(addr)">
           <text>删除</text>
         </view>
@@ -110,6 +113,7 @@ function addNew() {
   line-height: 1.4;
 }
 .addr-detail { display: block; margin-top: 4rpx; font-size: 24rpx; color: #999; }
+.default-hint { display: block; margin-top: 10rpx; color: #b8860b; font-size: 22rpx; line-height: 1.4; }
 
 .addr-actions {
   display: flex;

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { Address } from '@baichile/api-contract';
 import { addressService } from '../services/addresses';
 import { useAuthStore } from './auth';
+import { DEFAULT_DELIVERY_ADDRESS } from '../config/default-delivery-address';
 
 export type { Address } from '@baichile/api-contract';
 
@@ -11,22 +12,31 @@ export const useAddressStore = defineStore('address', {
   state: () => ({
     addresses: [] as Address[],
     selectedId: '',
+    loaded: false,
   }),
   getters: {
-    selected: (state) =>
-      state.addresses.find((address) => address.id === state.selectedId)
-      ?? state.addresses.find((address) => address.isDefault)
-      ?? state.addresses[0]
-      ?? null,
+    availableAddresses: (state): Address[] => {
+      if (!state.loaded) return [];
+      return state.addresses.length ? state.addresses : [DEFAULT_DELIVERY_ADDRESS];
+    },
+    selected: (state): Address | null => {
+      if (state.loaded && !state.addresses.length) return DEFAULT_DELIVERY_ADDRESS;
+      return state.addresses.find((address) => address.id === state.selectedId)
+        ?? state.addresses.find((address) => address.isDefault)
+        ?? state.addresses[0]
+        ?? null;
+    },
   },
   actions: {
     async load() {
+      this.loaded = false;
       const auth = useAuthStore();
       await auth.ensureGuest();
       const ownerId = auth.accountId || auth.visitorId;
       if (!ownerId) {
         this.addresses = [];
         this.selectedId = '';
+        this.loaded = true;
         return;
       }
       this.addresses = await addressService.list();
@@ -35,11 +45,12 @@ export const useAddressStore = defineStore('address', {
         ? savedId
         : this.addresses.find((address) => address.isDefault)?.id || this.addresses[0]?.id || '';
       if (this.selectedId) uni.setStorageSync(selectedKey(ownerId), this.selectedId);
+      this.loaded = true;
     },
     select(id: string) {
       const auth = useAuthStore();
       const ownerId = auth.accountId || auth.visitorId;
-      if (!ownerId || !this.addresses.some((address) => address.id === id)) return;
+      if (!ownerId || !this.availableAddresses.some((address) => address.id === id)) return;
       this.selectedId = id;
       uni.setStorageSync(selectedKey(ownerId), id);
     },
