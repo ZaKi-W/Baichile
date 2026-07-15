@@ -11,51 +11,70 @@ const egg = computed(() => page.data.value?.easterEgg);
 const incident = computed(() => egg.value?.id.startsWith('incident-') || false);
 const eggId = computed(() => incident.value ? egg.value?.id.slice('incident-'.length) || '' : egg.value?.id || '');
 const imageUrl = computed(() => egg.value ? orderEggImageUrl(incident.value ? 'incident' : 'collection', eggId.value) : '');
-const title = computed(() => page.data.value?.title || `我抽到了彩蛋：${egg.value?.name || '神秘胶囊'}`);
-const rarityLabel = computed(() => egg.value?.rarity === 'legendary' ? '传说胶囊' : egg.value?.rarity === 'rare' ? '稀有胶囊' : '惊喜胶囊');
+const title = computed(() => page.data.value?.title || `我抽到了彩蛋：${egg.value?.name || '神秘彩蛋'}`);
+const rarityLabel = computed(() => egg.value?.rarity === 'legendary' ? '传说收藏' : egg.value?.rarity === 'rare' ? '稀有收藏' : '普通收藏');
 const ownerName = computed(() => page.data.value?.identity?.nickname || '匿名白吃选手');
-const accent = computed(() => egg.value?.themeColor || '#FF7145');
 const capsuleType = computed(() => incident.value ? '配送奇遇扭蛋' : '订单隐藏扭蛋');
-const capsuleNote = computed(() => incident.value ? '这次配送绕了个弯，才把惊喜摇到了你手里。' : '这枚扭蛋藏在空气外卖里，已经被你成功抽中。');
-const shareCopy = computed(() => `我在「这顿白吃」抽到了${rarityLabel.value}：${egg.value?.name || '神秘胶囊'}\n${egg.value?.verdict || '每一顿没吃上的饭，都可能摇出一点惊喜。'}`);
+const story = computed(() => egg.value?.verdict || '每一顿没吃上的饭，都可能藏着一个故事。');
+const shareCopy = computed(() => `我在「这顿白吃」发现了彩蛋：${egg.value?.name || '神秘彩蛋'}\n${story.value}`);
 
 onLoad((options) => { void page.load(options); });
 onShareTimeline(() => ({ title: title.value, query: page.shareQuery(), imageUrl: shareCoverPath('order_egg') }));
 onShareAppMessage(() => ({ title: title.value, path: `/pages/share-egg/index?${page.shareQuery()}`, imageUrl: shareCoverPath('order_egg') }));
 
-function copyShareText() { uni.setClipboardData({ data: shareCopy.value, success: () => uni.showToast({ title: '已复制分享文案', icon: 'success' }) }); }
+function copyShareText() {
+  uni.setClipboardData({ data: shareCopy.value, success: () => uni.showToast({ title: '已复制分享文案', icon: 'success' }) });
+}
+
 async function savePoster() {
   const data = page.data.value;
   if (!data || saving.value) return;
   saving.value = true;
-  try { await saveGachaPoster({ canvasId: 'eggPoster', data, kind: 'order_egg', subjectImageUrl: imageUrl.value }); uni.showToast({ title: '海报已保存', icon: 'success' }); }
-  catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '海报保存失败', icon: 'none' }); }
-  finally { saving.value = false; }
+  try {
+    await saveGachaPoster({ canvasId: 'eggPoster', data, kind: 'order_egg', subjectImageUrl: imageUrl.value });
+    uni.showToast({ title: '海报已保存', icon: 'success' });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '海报保存失败', icon: 'none' });
+  } finally {
+    saving.value = false;
+  }
 }
 </script>
 
 <template>
-  <view class="share-gacha egg-gacha" :style="{ '--egg-accent': accent }">
-    <view v-if="page.loading.value" class="gacha-state"><text>正在摇出今日隐藏彩蛋</text><view class="gacha-loading-track" /></view>
+  <view class="share-gacha egg-share">
+    <view v-if="page.loading.value" class="gacha-state"><text>正在打开今日彩蛋</text><view class="gacha-loading-track" /></view>
     <template v-else-if="page.data.value && egg">
-      <view v-if="page.data.value.expired" class="gacha-expired">这枚彩蛋已过期，但仍可围观。</view>
-      <view class="gacha-brand-row"><text class="gacha-brand">白吃扭蛋站</text><text class="gacha-ticket">HIDDEN CAPSULE · {{ egg.collectionNumber }}</text></view>
-      <view class="gacha-orbit" />
-      <view class="egg-title-row"><view><view class="gacha-section-kicker">{{ capsuleType }}</view><text>{{ egg.name }}</text></view><view class="egg-rarity"><small>本次抽中</small><strong>{{ rarityLabel }}</strong></view></view>
-      <view class="egg-machine gacha-capsule"><view class="gacha-machine-window egg-art"><image :src="imageUrl" mode="aspectFill" aria-label="彩蛋插画" /><view class="egg-number"><text>NO.</text><strong>{{ egg.collectionNumber }}</strong></view></view><view class="egg-result"><text>扭蛋结果</text><strong>“{{ egg.verdict }}”</strong><small>{{ capsuleNote }}</small></view></view>
-      <view class="egg-facts"><view><text>扭蛋类型</text><strong>{{ capsuleType }}</strong></view><view><text>抽中等级</text><strong>{{ rarityLabel }}</strong></view></view>
-      <view class="egg-copy"><text>分享这一枚彩蛋</text><strong>让朋友也来看看，你的空气外卖里摇出了什么。</strong><button @tap="copyShareText">复制分享文案</button></view>
-      <view class="egg-footer"><view class="gacha-identity"><image v-if="page.data.value.identity?.avatarUrl" :src="page.data.value.identity.avatarUrl" aria-label="发现者头像" /><view v-else class="gacha-avatar-fallback"><text>{{ ownerName.slice(0, 1) }}</text></view><text>{{ ownerName }} 抽中</text></view><view v-if="page.data.value.miniProgramCodeUrl" class="gacha-qr"><text>来抽同款</text><image :src="page.data.value.miniProgramCodeUrl" aria-label="小程序码" /></view></view>
+      <view v-if="page.data.value.expired" class="egg-expired">这枚彩蛋已过期，但仍可围观。</view>
+
+      <view class="egg-poster-shell">
+        <view class="egg-poster-shadow" />
+        <view class="egg-poster"><image :src="imageUrl" mode="aspectFill" aria-label="彩蛋插画" /><text>9:16 COLLECTIBLE</text></view>
+      </view>
+
+      <view class="egg-content">
+        <view class="egg-eyebrow">今日发现</view>
+        <text class="egg-title">{{ egg.name }}</text>
+        <text class="egg-story">{{ story }}</text>
+        <view class="egg-meta">
+          <view><small>彩蛋类型</small><strong>{{ capsuleType }}</strong></view>
+          <view><small>收集编号</small><strong>EGG · {{ egg.collectionNumber }}</strong></view>
+        </view>
+        <view class="egg-divider" />
+        <view class="egg-footer-note"><image v-if="page.data.value.identity?.avatarUrl" :src="page.data.value.identity.avatarUrl" aria-label="发现者头像" /><view v-else class="egg-avatar-fallback"><text>{{ ownerName.slice(0, 1) }}</text></view><text>由「{{ ownerName }}」记录<br />{{ rarityLabel }} · 每一顿没吃上的饭，都可能藏着一个故事。</text></view>
+      </view>
     </template>
     <view v-else class="gacha-empty">这枚彩蛋找不到了。</view>
-    <view v-if="page.sharing.value && page.data.value?.active" class="gacha-action-bar"><button class="gacha-secondary" :loading="saving" @tap="savePoster">保存海报</button><button class="gacha-primary" open-type="share">分享彩蛋</button></view>
-    <view v-else-if="page.data.value" class="gacha-visitor"><text>你的订单里，也可能摇出一枚隐藏彩蛋。</text><button class="gacha-primary" @tap="page.enterApp">进入这顿白吃</button></view>
+
+    <view v-if="page.sharing.value && page.data.value?.active" class="egg-share-actions"><button class="egg-share-button" open-type="share">分享彩蛋</button><button class="egg-save-button" :loading="saving" @tap="savePoster">保存到相册</button><button class="egg-copy-button" @tap="copyShareText">复制</button></view>
+    <view v-else-if="page.data.value" class="egg-visitor-actions"><text>你的订单里，也可能藏着一枚彩蛋。</text><button class="egg-share-button" @tap="page.enterApp">进入这顿白吃</button></view>
     <canvas canvas-id="eggPoster" class="gacha-canvas" />
   </view>
 </template>
 
 <style scoped lang="scss">
 @use '../../styles/share-gacha.scss' as *;
-.egg-gacha{--egg-accent:var(--gacha-orange)}.egg-title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:18rpx;margin-bottom:26rpx}.egg-title-row>view:first-child{min-width:0}.egg-title-row>view:first-child>text{display:block;overflow:hidden;max-width:490rpx;margin-top:16rpx;font-size:54rpx;font-weight:950;line-height:1.12;text-overflow:ellipsis;white-space:nowrap}.egg-rarity{display:flex;flex:0 0 auto;flex-direction:column;gap:8rpx;align-items:flex-end;padding-bottom:6rpx}.egg-rarity small{font-size:18rpx;font-weight:800}.egg-rarity strong{padding:10rpx 14rpx;border:3rpx solid var(--gacha-ink);border-radius:18rpx 6rpx 18rpx 6rpx;background:var(--egg-accent);font-size:20rpx;font-weight:900}.egg-machine{padding:26rpx}.egg-art{height:496rpx}.egg-art image{width:100%;height:100%;filter:saturate(1.06) contrast(1.04)}.egg-number{position:absolute;right:20rpx;bottom:20rpx;z-index:2;display:flex;align-items:flex-end;gap:10rpx;padding:16rpx;border:3rpx solid var(--gacha-ink);border-radius:20rpx 8rpx 20rpx 8rpx;background:var(--gacha-yellow)}.egg-number text{font-family:'DIN Alternate','PingFang SC',sans-serif;font-size:18rpx;font-weight:900}.egg-number strong{font-family:'DIN Alternate','PingFang SC',sans-serif;font-size:36rpx;font-weight:900;line-height:.8}.egg-result{padding:28rpx 4rpx 4rpx}.egg-result text,.egg-result strong,.egg-result small{display:block}.egg-result text{color:var(--egg-accent);font-size:20rpx;font-weight:900}.egg-result strong{margin-top:12rpx;font-size:30rpx;font-weight:900;line-height:1.45}.egg-result small{margin-top:16rpx;color:var(--gacha-muted);font-size:22rpx;line-height:1.55}.egg-facts{display:grid;grid-template-columns:1fr 1fr;gap:14rpx;margin-top:28rpx}.egg-facts view{min-height:132rpx;padding:24rpx;border:3rpx solid var(--gacha-ink);border-radius:28rpx 10rpx 28rpx 10rpx;background:#fff}.egg-facts view:last-child{background:var(--gacha-yellow)}.egg-facts text,.egg-facts strong{display:block}.egg-facts text{font-size:19rpx;font-weight:750}.egg-facts strong{margin-top:14rpx;font-size:25rpx;font-weight:900;line-height:1.35}.egg-copy{margin-top:28rpx;padding:28rpx;border:3rpx solid var(--gacha-ink);border-radius:30rpx 12rpx 30rpx 12rpx;background:var(--gacha-mint)}.egg-copy text,.egg-copy strong{display:block}.egg-copy text{font-size:20rpx;font-weight:900}.egg-copy strong{margin-top:12rpx;font-size:25rpx;line-height:1.52}.egg-copy button{min-height:66rpx;margin-top:18rpx;padding:0;border-bottom:3rpx solid var(--gacha-ink);border-radius:0;background:transparent;color:var(--gacha-ink);font-size:21rpx;font-weight:900;line-height:66rpx}.egg-footer{display:flex;align-items:flex-end;justify-content:space-between;gap:18rpx;margin-top:28rpx;padding-top:22rpx;border-top:3rpx solid var(--gacha-ink)}@media(max-width:350px){.egg-title-row>view:first-child>text{font-size:48rpx}.egg-art{height:452rpx}.gacha-qr text{display:none}}
-.egg-title-row{margin:28rpx 0 20rpx}.egg-title-row>view:first-child>text{font-size:46rpx}.egg-rarity strong{padding:0;border:0;border-radius:0;background:transparent;color:var(--egg-accent);font-size:20rpx}.egg-machine{padding:16rpx}.egg-art{height:370rpx}.egg-number{right:12rpx;bottom:12rpx;padding:10rpx;border:0;border-radius:8rpx}.egg-result{padding:24rpx 8rpx 8rpx}.egg-result strong{font-size:27rpx}.egg-facts{gap:0;margin-top:26rpx;border-top:1rpx solid var(--gacha-line);border-bottom:1rpx solid var(--gacha-line)}.egg-facts view,.egg-facts view:last-child{min-height:112rpx;padding:20rpx 0;border:0;border-radius:0;background:transparent}.egg-facts view+view{padding-left:26rpx;border-left:1rpx solid var(--gacha-line)}.egg-copy{margin-top:24rpx;padding:0;border:0;border-radius:0;background:transparent}.egg-copy strong{font-size:23rpx}.egg-copy button{border-bottom:1rpx solid var(--gacha-ink)}.egg-footer{border-top:1rpx solid var(--gacha-line)}
+
+.egg-share{--gacha-paper:#f4f1ea;min-height:100dvh;padding:24rpx 28rpx calc(194rpx + env(safe-area-inset-bottom));background:radial-gradient(circle at 14% 5%,rgba(255,255,255,.95),transparent 28%),linear-gradient(180deg,#f4f1ea 0%,#ebe6dc 100%)}.egg-expired{margin:-24rpx -28rpx 26rpx;padding:16rpx 28rpx;background:#171714;color:#fff;font-size:21rpx;font-weight:700}.egg-poster-shell{position:relative;width:min(76vw,600rpx);margin:0 auto}.egg-poster-shadow{position:absolute;right:8%;bottom:-24rpx;left:8%;height:72rpx;border-radius:50%;background:rgba(27,23,18,.22);filter:blur(26rpx);transform:scaleY(.55)}.egg-poster{position:relative;z-index:1;overflow:hidden;aspect-ratio:9/16;border:1rpx solid rgba(255,255,255,.78);border-radius:48rpx;background:#1a1a1a;box-shadow:0 24rpx 70rpx rgba(39,34,25,.14)}.egg-poster image{width:100%;height:100%}.egg-poster::after{position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1rpx rgba(255,255,255,.22);content:'';pointer-events:none}.egg-poster text{position:absolute;bottom:20rpx;left:20rpx;z-index:2;padding:9rpx 14rpx;border-radius:999rpx;background:rgba(12,12,12,.58);color:rgba(255,255,255,.92);font-family:'DIN Alternate','PingFang SC',sans-serif;font-size:17rpx;letter-spacing:1rpx}.egg-content{margin-top:46rpx;padding:0 8rpx}.egg-eyebrow{display:flex;align-items:center;gap:12rpx;margin-bottom:12rpx;color:#ff5d3a;font-size:19rpx;font-weight:800;letter-spacing:3rpx}.egg-eyebrow::before{width:30rpx;height:3rpx;border-radius:2rpx;background:currentColor;content:''}.egg-title{display:block;font-size:52rpx;font-weight:900;letter-spacing:-2rpx;line-height:1.08}.egg-story{display:block;margin-top:18rpx;color:#4f4c46;font-size:27rpx;line-height:1.68}.egg-meta{display:grid;grid-template-columns:1fr 1fr;gap:16rpx;margin-top:26rpx}.egg-meta>view{min-height:116rpx;padding:20rpx;border:1rpx solid rgba(23,23,20,.12);border-radius:30rpx;background:rgba(255,255,255,.76)}.egg-meta small,.egg-meta strong{display:block}.egg-meta small{color:#77736b;font-size:17rpx;letter-spacing:2rpx}.egg-meta strong{margin-top:12rpx;font-size:24rpx;font-weight:750;line-height:1.3}.egg-divider{height:1rpx;margin:28rpx 0 22rpx;background:rgba(23,23,20,.12)}.egg-footer-note{display:flex;align-items:center;gap:16rpx;color:#77736b;font-size:21rpx;line-height:1.5}.egg-footer-note image,.egg-avatar-fallback{width:60rpx;height:60rpx;flex:0 0 60rpx;border-radius:50%}.egg-avatar-fallback{display:flex;align-items:center;justify-content:center;background:#ff5d3a;color:#fff;font-family:'DIN Alternate','PingFang SC',sans-serif;font-size:24rpx;font-weight:900}.egg-share-actions,.egg-visitor-actions{position:fixed;right:0;bottom:0;left:0;z-index:30;max-width:720rpx;margin:auto;padding:14rpx 28rpx calc(14rpx + env(safe-area-inset-bottom));border-top:1rpx solid rgba(23,23,20,.1);background:rgba(250,248,243,.96)}.egg-share-actions{display:grid;grid-template-columns:1fr 1fr 92rpx;gap:12rpx}.egg-share-button,.egg-save-button,.egg-copy-button{min-height:94rpx;border:0;border-radius:26rpx;font-size:23rpx;font-weight:800;line-height:94rpx}.egg-share-button{background:#171714;color:#fff}.egg-save-button{background:#ffd400;color:#111}.egg-copy-button{border:1rpx solid rgba(23,23,20,.12);background:#fff;color:#171714;font-size:18rpx}.egg-share-button:active,.egg-save-button:active,.egg-copy-button:active{opacity:.74}.egg-visitor-actions{background:#f4f1ea}.egg-visitor-actions>text{display:block;margin-bottom:12rpx;color:#77736b;font-size:20rpx}.egg-visitor-actions .egg-share-button{width:100%}@media(max-width:350px){.egg-poster-shell{width:72vw}.egg-title{font-size:48rpx}.egg-story{font-size:25rpx}.egg-meta>view{padding:18rpx}.egg-meta strong{font-size:22rpx}}
+.egg-share{padding-bottom:calc(32rpx + env(safe-area-inset-bottom))}.egg-title{line-height:1.16;word-break:break-word}.egg-share-actions,.egg-visitor-actions{position:sticky;right:auto;bottom:max(12rpx,env(safe-area-inset-bottom));left:auto;z-index:30;max-width:none;margin:30rpx 0 0;padding:12rpx;border:1rpx solid rgba(23,23,20,.1);border-radius:30rpx;background:rgba(250,248,243,.97);box-shadow:0 16rpx 40rpx rgba(27,23,18,.12)}.egg-share-actions{grid-template-columns:1fr 1fr 92rpx}.egg-copy-button{padding:0;white-space:nowrap}.egg-visitor-actions{padding:18rpx;background:#f4f1ea}
 </style>
