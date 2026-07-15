@@ -2,6 +2,11 @@ import type { Category, MenuItem, MenuSubCategory, StoreDetail } from '@baichile
 import type { SpecGroup } from '@baichile/domain';
 import { estimateCalories, withCalorieDeltas } from './calorie-estimates';
 import { choutuanCategories, choutuanStores } from './catalog.choutuan';
+import { japaneseBuffetStore } from './catalog.japanese-buffet';
+import { kamiiBuffetStore } from './catalog.kamii-buffet';
+
+export { japaneseBuffetStore } from './catalog.japanese-buffet';
+export { kamiiBuffetStore } from './catalog.kamii-buffet';
 import { transformStoreName } from './name-transform';
 
 /* ═══════════════════════════════════════════════
@@ -1208,4 +1213,6 @@ const rawStores: RawStore[] = [
    ═══════════════════════════════════════════════ */
 export const stores: StoreDetail[] = [
   ...choutuanStores,
+  japaneseBuffetStore,
+  kamiiBuffetStore,
 ];

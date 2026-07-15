@@ -1,4 +1,9 @@
 export const CATALOG_IMAGE_LOCAL_PREFIX = '/static/choutuan-img/';
+export const CATALOG_IMAGE_LOCAL_PREFIXES = [
+  CATALOG_IMAGE_LOCAL_PREFIX,
+  '/static/japanese-buffet-img/',
+  '/static/kamii-buffet-img/',
+] as const;
 export const CATALOG_IMAGE_CLOUD_PATH = 'choutuan-img';
 export const EXPECTED_CATALOG_IMAGE_COUNT = 760;
 export const DEFAULT_CATALOG_IMAGE_UPLOAD_TARGET = 'hosting';
@@ -14,8 +19,8 @@ export function normalizeCatalogImageBaseUrl(value = process.env.CATALOG_IMAGE_B
 
 export function resolveCatalogImageUrl(value: string | null | undefined, baseUrl = normalizeCatalogImageBaseUrl()): string | null {
   if (!value) return null;
-  if (!baseUrl || !value.startsWith(CATALOG_IMAGE_LOCAL_PREFIX)) return value;
-  return `${baseUrl}/${value.slice(CATALOG_IMAGE_LOCAL_PREFIX.length)}`;
+  if (!baseUrl || !CATALOG_IMAGE_LOCAL_PREFIXES.some((prefix) => value.startsWith(prefix))) return value;
+  return `${baseUrl}/${value.slice('/static/'.length)}`;
 }
 
 export function requireCatalogImageBaseUrl(value = process.env.CATALOG_IMAGE_BASE_URL): string {
