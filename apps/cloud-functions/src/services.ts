@@ -995,17 +995,18 @@ export class ShareService {
       const order = await orders.get(input.orderId);
       if (!order || order.accountId !== accountId) notFound('订单不存在', 'ORDER_NOT_FOUND');
       const deliveredAt = new Date(order.startedAt).getTime() + DELIVERY_START_MS + order.durationMs;
-      const shareableIncident = Boolean(
-        order.incidentKey
-        && order.incidentStartedAt
-        && order.failedAt
-        && getDeliveryIncidentPhase({
+      const incidentPhase = order.incidentKey && order.incidentStartedAt && order.failedAt
+        ? getDeliveryIncidentPhase({
           key: order.incidentKey as DeliveryIncidentKey,
           startedAt: order.incidentStartedAt,
           failedAt: order.failedAt,
-        }) !== 'pending',
+        })
+        : 'pending';
+      const shareableIncident = Boolean(
+        order.incidentKey && incidentPhase !== 'pending',
       );
-      if (input.kind === 'order' && (order.status === 'failed' || Date.now() < deliveredAt)) {
+      const canShareFailedIncidentOrder = incidentPhase === 'failed';
+      if (input.kind === 'order' && !canShareFailedIncidentOrder && (order.status === 'failed' || Date.now() < deliveredAt)) {
         badRequest('订单送达后才能分享', 'ORDER_NOT_COMPLETED');
       }
       const incidentEgg = order.incidentKey && order.incidentStartedAt

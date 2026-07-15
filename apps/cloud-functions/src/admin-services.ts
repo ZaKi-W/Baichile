@@ -8,6 +8,7 @@ import type {
   ManagedContentStatus,
 } from '@baichile/api-contract';
 import { collections } from './collections';
+import { CatalogImportService } from './catalog-import';
 import { refreshStoreSearchText } from './catalog-search';
 import type { Database } from './database';
 import { badRequest, conflict, forbidden, notFound, unauthorized } from './errors';
@@ -40,12 +41,14 @@ export class AdminCloudServices {
   readonly audit: AdminAuditService;
   readonly query: AdminQueryService;
   readonly mutation: AdminMutationService;
+  readonly catalogImport: CatalogImportService;
 
   constructor(private readonly db: Database) {
     this.auth = new AdminAuthService(db);
     this.audit = new AdminAuditService(db);
     this.query = new AdminQueryService(db);
     this.mutation = new AdminMutationService(db, this.auth, this.audit);
+    this.catalogImport = new CatalogImportService(db, this.audit);
   }
 }
 

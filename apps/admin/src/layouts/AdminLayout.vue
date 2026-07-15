@@ -5,6 +5,7 @@ import {
   Avatar,
   Coin,
   DataAnalysis,
+  FolderOpened,
   Document,
   Goods,
   List,
@@ -20,6 +21,7 @@ const auth = useAuthStore();
 const menu = computed(() => [
   { path: '/', label: '运营概览', icon: DataAnalysis, permission: 'dashboard:read' as const },
   { path: '/stores', label: '商家管理', icon: Goods, permission: 'catalog:read' as const },
+  { path: '/catalog-imports', label: '数据导入', icon: FolderOpened, permission: 'catalog:write' as const },
   { path: '/accounts', label: '用户与货币', icon: Coin, permission: 'accounts:read' as const },
   { path: '/orders', label: '订单管理', icon: List, permission: 'orders:read' as const },
   { path: '/share-rewards', label: '分享奖励', icon: Setting, permission: 'wallet:read' as const },

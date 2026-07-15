@@ -200,7 +200,8 @@ const eggPresentation = computed(() => order.value
   : undefined);
 const canShareOrder = computed(() => {
   if (!order.value) return false;
-  if (hasIncident.value || hasFailed.value) return false;
+  if (hasFailed.value) return true;
+  if (hasIncident.value) return false;
   const deliveredAt = new Date(order.value.startedAt).getTime() + DELIVERY_START_MS + order.value.durationMs;
   return now.value >= deliveredAt;
 });

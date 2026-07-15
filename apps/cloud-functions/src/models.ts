@@ -3,6 +3,7 @@ import type {
   AdminOrderStatus,
   AdminRole,
   AdminUserStatus,
+  CatalogImportSummary,
   ManagedContentStatus,
   ShareKind,
   OrderEasterEgg,
@@ -237,5 +238,26 @@ export interface AdminAuditLogDoc {
   beforeData?: unknown;
   afterData?: unknown;
   ipAddress?: string | null;
+  createdAt: string;
+}
+
+export interface CatalogImportJobDoc {
+  _id: string;
+  id: string;
+  fileName: string;
+  status: 'published' | 'rolled_back';
+  summary: CatalogImportSummary;
+  adminUserId: string;
+  createdAt: string;
+  rolledBackAt?: string | null;
+}
+
+export interface CatalogImportSnapshotDoc {
+  _id: string;
+  id: string;
+  jobId: string;
+  resourceType: 'category' | 'store' | 'menu_item';
+  resourceId: string;
+  beforeData: CategoryDoc | StoreDoc | MenuItemDoc | null;
   createdAt: string;
 }

@@ -38,7 +38,8 @@ describe('delivery page status initialization', () => {
     expect(source).toContain('class="order-primary-button reorder-button"');
     expect(source).toContain('class="order-primary-button share-button"');
     expect(source).toContain('v-if="canShareOrder"');
-    expect(source).toContain('hasIncident.value || hasFailed.value');
+    expect(source).toContain('if (hasFailed.value) return true;');
+    expect(source).toContain('if (hasIncident.value) return false;');
     expect(source).toContain('.order-primary-actions {');
     expect(source).toContain('display: flex;');
     expect(source).not.toContain('.share-button { margin-top:');

@@ -347,7 +347,7 @@ describe('share snapshots', () => {
     expect(eggLanding.easterEgg?.id).toBe('clean-plate');
   });
 
-  it('allows a triggered delivery-incident egg to be shared independently', async () => {
+  it('allows a failed delivery-incident order and egg to be shared independently', async () => {
     const db = new MemoryDatabase();
     const services = new BaichileCloudServices(db);
     await services.auth.ensureAccount('account_incident_share');
@@ -387,14 +387,24 @@ describe('share snapshots', () => {
       updatedAt: now.toISOString(),
     });
 
-    const card = await services.shares.create('account_incident_share', {
+    const orderCard = await services.shares.create('account_incident_share', {
+      kind: 'order', orderId: 'order_incident_share', showIdentity: true,
+    });
+    const eggCard = await services.shares.create('account_incident_share', {
       kind: 'order_egg', orderId: 'order_incident_share', showIdentity: true,
     });
-    const landing = await services.shares.landing(card.token);
+    const [orderLanding, eggLanding] = await Promise.all([
+      services.shares.landing(orderCard.token),
+      services.shares.landing(eggCard.token),
+    ]);
 
-    expect(landing.kind).toBe('order_egg');
-    expect(landing.storeName).toBe('彩蛋小馆');
-    expect(landing.easterEgg).toMatchObject({
+    expect(orderCard.path).toContain('/pages/share-order/index');
+    expect(orderLanding.kind).toBe('order');
+    expect(orderLanding.easterEgg).toBeUndefined();
+    expect(eggCard.path).toContain('/pages/share-egg/index');
+    expect(eggLanding.kind).toBe('order_egg');
+    expect(eggLanding.storeName).toBe('彩蛋小馆');
+    expect(eggLanding.easterEgg).toMatchObject({
       id: 'incident-alien_abduction',
       name: '您的外卖已抵达火星，配送失败',
       verdict: '骑手遭遇了外星人袭击',

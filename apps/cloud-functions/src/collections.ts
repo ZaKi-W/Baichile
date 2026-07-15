@@ -14,6 +14,8 @@ export const collections = {
   adminUsers: 'admin_users',
   adminSessions: 'admin_sessions',
   adminAuditLogs: 'admin_audit_logs',
+  catalogImportJobs: 'catalog_import_jobs',
+  catalogImportSnapshots: 'catalog_import_snapshots',
   rateLimits: 'rate_limits',
 } as const;
 
@@ -89,6 +91,13 @@ export const collectionSpecs: CollectionSpec[] = [
     { name: 'admin_created', fields: { adminUserId: 1, createdAt: -1 } },
     { name: 'action_created', fields: { action: 1, createdAt: -1 } },
     { name: 'resource_created', fields: { resourceType: 1, createdAt: -1 } },
+  ] },
+  { name: collections.catalogImportJobs, indexes: [
+    { name: 'created_at_desc', fields: { createdAt: -1 } },
+    { name: 'admin_created', fields: { adminUserId: 1, createdAt: -1 } },
+  ] },
+  { name: collections.catalogImportSnapshots, indexes: [
+    { name: 'job_resource', fields: { jobId: 1, resourceType: 1 } },
   ] },
   { name: collections.rateLimits, indexes: [
     { name: 'expires_at', fields: { expiresAt: 1 } },

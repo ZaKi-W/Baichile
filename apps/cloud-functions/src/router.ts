@@ -1,4 +1,5 @@
 import { AdminCloudServices, requireAdmin } from './admin-services';
+import { uploadCatalogImportImage } from './catalog-import';
 import type { WechatMiniLoginRequest } from '@baichile/api-contract';
 import { createCloudBaseDatabase, type Database } from './database';
 import { badRequest, forbidden, notFound, toErrorBody, unauthorized } from './errors';
@@ -173,6 +174,29 @@ export class BaichileRouter {
     if (request.method === 'GET' && segments[0] === 'dashboard') {
       await requireAdmin(this.admin, request.authorization, 'dashboard:read');
       return this.admin.query.dashboard();
+    }
+    if (segments[0] === 'catalog-imports') {
+      if (request.method === 'GET' && !segments[1]) {
+        await requireAdmin(this.admin, request.authorization, 'catalog:read');
+        return this.admin.catalogImport.listJobs();
+      }
+      if (request.method === 'POST' && segments[1] === 'assets') {
+        await requireAdmin(this.admin, request.authorization, 'catalog:write');
+        const body = request.data as { contentBase64?: unknown };
+        return uploadCatalogImportImage(typeof body?.contentBase64 === 'string' ? body.contentBase64 : '');
+      }
+      if (request.method === 'POST' && segments[1] === 'preview') {
+        await requireAdmin(this.admin, request.authorization, 'catalog:write');
+        return this.admin.catalogImport.preview(request.data);
+      }
+      if (request.method === 'POST' && segments[1] === 'publish') {
+        const actor = await requireAdmin(this.admin, request.authorization, 'catalog:write');
+        return this.admin.catalogImport.publish(request.data, actor, request.ipAddress);
+      }
+      if (request.method === 'POST' && segments[1] && segments[2] === 'rollback') {
+        const actor = await requireAdmin(this.admin, request.authorization, 'catalog:write');
+        return this.admin.catalogImport.rollback(decodeURIComponent(segments[1]), actor, request.ipAddress);
+      }
     }
     if (segments[0] === 'stores') {
       if (request.method === 'GET' && !segments[1]) {

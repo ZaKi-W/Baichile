@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#FFD400" />
+  <title>订单分享</title>
+  <style>
+    :root{
+      --yellow:#FFD400;
+      --bg:#f4f2ec;
+      --card:#fff;
+      --ink:#171713;
+      --muted:#77736b;
+      --line:#ece9e1;
+      --green:#168a55;
+      --orange:#ff5d38;
+      --shadow:0 18px 48px rgba(42,37,27,.10);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif}
+    button{font:inherit}
+    .page{width:min(100%,480px);min-height:100svh;margin:auto;padding:0 12px calc(92px + env(safe-area-inset-bottom))}
+    .top-wrap{margin:0 -12px 12px;background:var(--yellow);padding-top:max(10px,env(safe-area-inset-top));box-shadow:0 1px rgba(0,0,0,.05)}
+    .topbar{height:48px;padding:0 10px 0 4px;display:flex;align-items:center;justify-content:space-between;position:relative}
+    .back{width:44px;height:44px;border:0;background:none;display:grid;place-items:center;padding:0}
+    .title{position:absolute;left:50%;transform:translateX(-50%);font-size:17px;font-weight:700;white-space:nowrap}
+    .capsule{width:132px;height:38px;border:1px solid rgba(0,0,0,.18);border-radius:999px;background:rgba(255,255,255,.9);display:grid;grid-template-columns:1fr 1px 1fr;align-items:center;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+    .divider{height:22px;background:rgba(0,0,0,.13)}
+    .cap{height:100%;border:0;background:none;display:grid;place-items:center}.dots{display:flex;gap:5px}.dots i{width:7px;height:7px;border-radius:50%;background:#111}.ring{width:22px;height:22px;border:3px solid #111;border-radius:50%;position:relative}.ring:after{content:"";position:absolute;inset:5px;background:#111;border-radius:50%}
+
+    .hero{border-radius:24px;overflow:hidden;background:#151515;color:#fff;box-shadow:var(--shadow);position:relative;min-height:214px}
+    .hero-bg{position:absolute;inset:0;background:
+      radial-gradient(circle at 82% 18%,rgba(255,212,0,.5),transparent 22%),
+      radial-gradient(circle at 18% 88%,rgba(255,93,56,.35),transparent 30%),
+      linear-gradient(135deg,#24231d,#10100e 72%)}
+    .hero:after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:24px 24px;mask-image:linear-gradient(to bottom,#000,transparent)}
+    .hero-inner{position:relative;z-index:1;padding:20px}
+    .status{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;background:rgba(255,255,255,.11);font-size:11px;font-weight:700}.status:before{content:"";width:7px;height:7px;border-radius:50%;background:#55dc93;box-shadow:0 0 0 4px rgba(85,220,147,.13)}
+    .shop-line{margin-top:18px;display:flex;align-items:center;gap:12px}.shop-logo{width:52px;height:52px;border-radius:16px;background:var(--yellow);display:grid;place-items:center;color:#111;font-weight:950;font-size:23px;transform:rotate(-3deg)}
+    .shop-name{font-size:21px;font-weight:850;letter-spacing:-.03em}.order-time{margin-top:4px;color:rgba(255,255,255,.58);font-size:12px}
+    .amount-row{margin-top:20px;display:flex;align-items:flex-end;justify-content:space-between}.paid-label{font-size:12px;color:rgba(255,255,255,.6)}.amount{font-size:42px;line-height:1;font-weight:950;letter-spacing:-.05em}.amount small{font-size:18px;margin-right:3px}.saved-tag{padding:8px 10px;border-radius:12px;background:var(--yellow);color:#111;font-size:12px;font-weight:800;transform:rotate(1.5deg)}
+
+    .section{margin-top:12px;background:var(--card);border-radius:20px;padding:16px;box-shadow:0 8px 28px rgba(42,37,27,.06)}
+    .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-title{font-size:15px;font-weight:850}.section-sub{font-size:11px;color:var(--muted)}
+    .dish-list{display:grid;gap:12px}.dish{display:grid;grid-template-columns:54px 1fr auto;gap:11px;align-items:center}.dish-img{width:54px;height:54px;border-radius:14px;display:grid;place-items:center;font-size:27px;background:#f5f2ea}.dish-name{font-size:14px;font-weight:750}.dish-note{font-size:11px;color:var(--muted);margin-top:4px}.dish-price{text-align:right;font-size:14px;font-weight:800}.dish-count{font-size:11px;color:var(--muted);margin-top:4px}
+    .line{height:1px;background:var(--line);margin:13px 0}.total-row{display:flex;justify-content:space-between;align-items:center;font-size:13px}.total-row strong{font-size:18px}
+
+    .metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.metric{min-height:122px;border-radius:20px;padding:15px;position:relative;overflow:hidden}.metric:nth-child(1){background:#eaf8ef}.metric:nth-child(2){background:#fff0e9}.metric:nth-child(3){background:#fff8ce}.metric:nth-child(4){background:#ecebf8}.metric-icon{font-size:23px}.metric-value{margin-top:16px;font-size:27px;font-weight:950;letter-spacing:-.04em}.metric-label{font-size:11px;color:#5f5b54;margin-top:4px}.metric-note{position:absolute;right:10px;top:10px;font-size:10px;padding:5px 7px;border-radius:999px;background:rgba(255,255,255,.65)}
+
+    .quote{margin-top:12px;border-radius:20px;background:#191915;color:#fff;padding:18px;position:relative;overflow:hidden}.quote:before{content:"“";position:absolute;right:15px;top:-22px;font-size:110px;color:rgba(255,212,0,.13);font-family:serif}.quote-label{font-size:10px;color:var(--yellow);letter-spacing:.18em;font-weight:800}.quote-text{margin-top:9px;font-size:18px;line-height:1.42;font-weight:760;max-width:88%}.quote-from{margin-top:12px;font-size:11px;color:rgba(255,255,255,.5)}
+
+    .actions{position:fixed;z-index:20;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,480px);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:grid;grid-template-columns:1fr 1.35fr;gap:9px;background:linear-gradient(180deg,rgba(244,242,236,0),rgba(244,242,236,.96) 30%)}
+    .btn{height:48px;border-radius:15px;border:0;font-weight:850;cursor:pointer}.btn-secondary{background:#fff;color:#111;box-shadow:0 8px 22px rgba(30,28,23,.1)}.btn-primary{background:var(--yellow);color:#111;box-shadow:0 8px 22px rgba(255,212,0,.28)}.btn:active{transform:scale(.98)}
+    .toast{position:fixed;left:50%;bottom:92px;transform:translate(-50%,12px);padding:10px 14px;border-radius:999px;background:rgba(18,18,16,.9);color:#fff;font-size:12px;opacity:0;pointer-events:none;transition:.22s;z-index:40}.toast.show{opacity:1;transform:translate(-50%,0)}
+    @media(max-width:360px){.capsule{width:118px}.title{font-size:16px}.amount{font-size:38px}.hero-inner{padding:17px}.section{padding:14px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top-wrap">
+      <div class="topbar">
+        <button class="back" aria-label="返回" onclick="history.back()">
+          <svg width="27" height="27" viewBox="0 0 24 24" fill="none"><path d="M15 5 8 12l7 7" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="title">这顿我白吃</div>
+        <div class="capsule" aria-label="微信小程序胶囊按钮">
+          <button class="cap"><span class="dots"><i></i><i></i><i></i></span></button><span class="divider"></span><button class="cap"><span class="ring"></span></button>
+        </div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-bg"></div>
+      <div class="hero-inner">
+        <span class="status">订单已完成</span>
+        <div class="shop-line">
+          <div class="shop-logo" id="shopLogo">辣</div>
+          <div><div class="shop-name" id="shopName">火星炒饭研究所</div><div class="order-time" id="orderTime">2026年7月15日 · 午餐</div></div>
+        </div>
+        <div class="amount-row">
+          <div><div class="paid-label">本单实付</div><div class="amount"><small>¥</small><span id="paidAmount">0.00</span></div></div>
+          <div class="saved-tag">白吃了 ¥<span id="savedAmount">36.00</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><div class="section-title">这顿吃了什么</div><div class="section-sub" id="dishCount">3 件商品</div></div>
+      <div class="dish-list" id="dishList"></div>
+      <div class="line"></div>
+      <div class="total-row"><span>餐品原价</span><strong>¥<span id="originalAmount">36.00</span></strong></div>
+    </section>
+
+    <section class="metrics">
+      <article class="metric"><span class="metric-note">约等于</span><div class="metric-icon">🔥</div><div class="metric-value"><span id="calories">620</span> kcal</div><div class="metric-label">本次少摄入热量</div></article>
+      <article class="metric"><span class="metric-note">今日战绩</span><div class="metric-icon">💰</div><div class="metric-value">¥<span id="moneySaved">36</span></div><div class="metric-label">累计节省金额</div></article>
+      <article class="metric"><span class="metric-note">轻松一下</span><div class="metric-icon">🚶</div><div class="metric-value"><span id="walkSteps">8,300</span> 步</div><div class="metric-label">对应步行消耗</div></article>
+      <article class="metric"><span class="metric-note">超过好友</span><div class="metric-icon">🏆</div><div class="metric-value"><span id="rankPercent">91</span>%</div><div class="metric-label">今日白吃指数</div></article>
+    </section>
+
+    <section class="quote">
+      <div class="quote-label">今日白吃宣言</div>
+      <div class="quote-text" id="shareCopy">饭可以少吃，便宜不能不占。今天这顿，算我赢。</div>
+      <div class="quote-from">— 来自「这顿白吃」订单战报</div>
+    </section>
+  </main>
+
+  <div class="actions">
+    <button class="btn btn-secondary" id="saveBtn">保存分享图</button>
+    <button class="btn btn-primary" id="shareBtn">分享订单战报</button>
+  </div>
+  <div class="toast" id="toast">已完成</div>
+
+  <script>
+    const orderData = {
+      shopName: '火星炒饭研究所',
+      shopLogo: '辣',
+      orderTime: '2026年7月15日 · 午餐',
+      paidAmount: 0,
+      originalAmount: 36,
+      savedAmount: 36,
+      calories: 620,
+      walkSteps: '8,300',
+      rankPercent: 91,
+      copy: '饭可以少吃，便宜不能不占。今天这顿，算我赢。',
+      dishes: [
+        { emoji:'🍳', name:'招牌火山蛋炒饭', note:'微辣 · 加双蛋', price:18, count:1 },
+        { emoji:'🍗', name:'脆皮鸡腿排', note:'椒盐风味', price:12, count:1 },
+        { emoji:'🥤', name:'冰镇酸梅汤', note:'少冰', price:6, count:1 }
+      ]
+    };
+
+    const $ = id => document.getElementById(id);
+    function render(){
+      $('shopName').textContent=orderData.shopName;$('shopLogo').textContent=orderData.shopLogo;$('orderTime').textContent=orderData.orderTime;
+      $('paidAmount').textContent=orderData.paidAmount.toFixed(2);$('savedAmount').textContent=orderData.savedAmount.toFixed(2);
+      $('originalAmount').textContent=orderData.originalAmount.toFixed(2);$('calories').textContent=orderData.calories;
+      $('moneySaved').textContent=orderData.savedAmount;$('walkSteps').textContent=orderData.walkSteps;$('rankPercent').textContent=orderData.rankPercent;
+      $('shareCopy').textContent=orderData.copy;$('dishCount').textContent=`${orderData.dishes.length} 件商品`;
+      $('dishList').innerHTML=orderData.dishes.map(d=>`<article class="dish"><div class="dish-img">${d.emoji}</div><div><div class="dish-name">${d.name}</div><div class="dish-note">${d.note}</div></div><div><div class="dish-price">¥${d.price.toFixed(2)}</div><div class="dish-count">×${d.count}</div></div></article>`).join('');
+    }
+    function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove('show'),1800)}
+
+    $('shareBtn').addEventListener('click',async()=>{
+      const text=`我在「${orderData.shopName}」白吃了一顿，省下 ¥${orderData.savedAmount}，还少摄入约 ${orderData.calories} kcal。${orderData.copy}`;
+      try{if(navigator.share){await navigator.share({title:'我的订单战报',text})}else{await navigator.clipboard.writeText(text);toast('分享文案已复制')}}catch(e){}
+    });
+
+    $('saveBtn').addEventListener('click',()=>{
+      const c=document.createElement('canvas'),ctx=c.getContext('2d');c.width=1080;c.height=1920;
+      ctx.fillStyle='#F4F2EC';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#FFD400';ctx.fillRect(0,0,c.width,170);
+      ctx.fillStyle='#111';ctx.textAlign='center';ctx.font='700 48px sans-serif';ctx.fillText('这顿我白吃',540,105);
+      ctx.fillStyle='#171713';roundRect(ctx,60,220,960,500,54);ctx.fill();
+      ctx.fillStyle='#FFD400';roundRect(ctx,100,270,120,120,28);ctx.fill();ctx.fillStyle='#111';ctx.font='900 58px sans-serif';ctx.fillText(orderData.shopLogo,160,352);
+      ctx.textAlign='left';ctx.fillStyle='#fff';ctx.font='800 52px sans-serif';ctx.fillText(orderData.shopName,250,320);ctx.fillStyle='rgba(255,255,255,.62)';ctx.font='30px sans-serif';ctx.fillText(orderData.orderTime,250,370);
+      ctx.fillStyle='#fff';ctx.font='32px sans-serif';ctx.fillText('本单实付',100,485);ctx.font='900 110px sans-serif';ctx.fillText(`¥${orderData.paidAmount.toFixed(2)}`,100,615);
+      ctx.fillStyle='#FFD400';roundRect(ctx,690,530,260,80,22);ctx.fill();ctx.fillStyle='#111';ctx.textAlign='center';ctx.font='800 30px sans-serif';ctx.fillText(`白吃了 ¥${orderData.savedAmount}`,820,582);
+      ctx.textAlign='left';ctx.fillStyle='#fff';roundRect(ctx,60,770,960,520,44);ctx.fill();ctx.fillStyle='#171713';ctx.font='850 42px sans-serif';ctx.fillText('这顿吃了什么',100,845);
+      let y=930;ctx.font='34px sans-serif';orderData.dishes.forEach(d=>{ctx.fillText(`${d.emoji}  ${d.name}`,105,y);ctx.textAlign='right';ctx.font='700 34px sans-serif';ctx.fillText(`¥${d.price.toFixed(2)}`,940,y);ctx.textAlign='left';ctx.font='34px sans-serif';y+=105});
+      ctx.strokeStyle='#ece9e1';ctx.beginPath();ctx.moveTo(100,1210);ctx.lineTo(940,1210);ctx.stroke();ctx.font='800 40px sans-serif';ctx.fillText('餐品原价',100,1265);ctx.textAlign='right';ctx.fillText(`¥${orderData.originalAmount.toFixed(2)}`,940,1265);
+      ctx.textAlign='left';ctx.fillStyle='#EAF8EF';roundRect(ctx,60,1340,460,250,36);ctx.fill();ctx.fillStyle='#FFF0E9';roundRect(ctx,560,1340,460,250,36);ctx.fill();ctx.fillStyle='#171713';ctx.font='34px sans-serif';ctx.fillText('🔥 少摄入热量',100,1415);ctx.font='900 58px sans-serif';ctx.fillText(`${orderData.calories} kcal`,100,1510);ctx.font='34px sans-serif';ctx.fillText('🏆 今日白吃指数',600,1415);ctx.font='900 58px sans-serif';ctx.fillText(`${orderData.rankPercent}%`,600,1510);
+      ctx.fillStyle='#191915';roundRect(ctx,60,1640,960,190,40);ctx.fill();ctx.fillStyle='#FFD400';ctx.font='700 24px sans-serif';ctx.fillText('今日白吃宣言',100,1700);ctx.fillStyle='#fff';ctx.font='700 37px sans-serif';wrapText(ctx,orderData.copy,100,1760,850,52);
+      const a=document.createElement('a');a.download='订单分享图.png';a.href=c.toDataURL('image/png');a.click();toast('分享图已保存');
+    });
+    function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
+    function wrapText(ctx,text,x,y,maxWidth,lineHeight){let line='';for(const ch of text){const t=line+ch;if(ctx.measureText(t).width>maxWidth&&line){ctx.fillText(line,x,y);line=ch;y+=lineHeight}else line=t}ctx.fillText(line,x,y)}
+    render();
+  </script>
+</body>
+</html>

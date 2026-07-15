@@ -3,6 +3,9 @@ import type {
   AdminPermission,
   AdminRole,
   AdminUserStatus,
+  CatalogImportJob,
+  CatalogImportPayload,
+  CatalogImportPreview,
   ShareRewardConfig,
 } from '@baichile/api-contract';
 import { api, toQuery } from './http';
@@ -99,6 +102,12 @@ export interface WalletTransactionRecord {
   createdAt: string;
 }
 
+export interface CatalogAssetUploadResult {
+  url: string;
+  path: string;
+  bytes: number;
+}
+
 export function menuItemCollectionPath(storeId: string): string {
   return `/v1/admin/stores/${encodeURIComponent(storeId)}/menu-items`;
 }
@@ -144,6 +153,26 @@ export const adminApi = {
     api<MenuItemRecord>(menuItemTransferPath(storeId, itemId), {
       method: 'POST',
       body: JSON.stringify({ targetStoreId }),
+    }),
+  catalogImportJobs: () => api<CatalogImportJob[]>('/v1/admin/catalog-imports'),
+  uploadCatalogAsset: (contentBase64: string) =>
+    api<CatalogAssetUploadResult>('/v1/admin/catalog-imports/assets', {
+      method: 'POST',
+      body: JSON.stringify({ contentBase64 }),
+    }),
+  previewCatalogImport: (payload: CatalogImportPayload) =>
+    api<CatalogImportPreview>('/v1/admin/catalog-imports/preview', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  publishCatalogImport: (payload: CatalogImportPayload) =>
+    api<CatalogImportJob>('/v1/admin/catalog-imports/publish', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  rollbackCatalogImport: (id: string) =>
+    api<CatalogImportJob>(`/v1/admin/catalog-imports/${encodeURIComponent(id)}/rollback`, {
+      method: 'POST',
     }),
   listAccounts: (query: Record<string, any>) =>
     api<AdminPage<AccountRecord>>(`/v1/admin/accounts${toQuery(query)}`),

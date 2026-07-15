@@ -19,6 +19,7 @@ export const router = createRouter({
       children: [
         { path: '', name: 'dashboard', component: () => import('./pages/DashboardPage.vue'), meta: { title: '运营概览', permission: 'dashboard:read' } },
         { path: 'stores', name: 'stores', component: () => import('./pages/StoresPage.vue'), meta: { title: '商家管理', permission: 'catalog:read' } },
+        { path: 'catalog-imports', name: 'catalog-imports', component: () => import('./pages/CatalogImportPage.vue'), meta: { title: '数据导入', permission: 'catalog:write' } },
         { path: 'stores/:storeId', name: 'store-detail', component: () => import('./pages/StoreDetailPage.vue'), meta: { title: '商家详情', permission: 'catalog:read' } },
         { path: 'accounts', name: 'accounts', component: () => import('./pages/AccountsPage.vue'), meta: { title: '用户管理', permission: 'accounts:read' } },
         { path: 'accounts/:id', name: 'account-detail', component: () => import('./pages/AccountDetailPage.vue'), meta: { title: '用户详情', permission: 'accounts:read' } },
