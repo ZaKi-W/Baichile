@@ -85,6 +85,11 @@ const STORE_NAME_MAP = {
   '杨铭羽黄焖鸡': '杨铭羽黄焖吉',
 };
 
+const INTENTIONAL_REDUPLICATED_MENU_NAMES = new Set([
+  '芝芝莓莓',
+  '芝芝莓莓（大杯）',
+]);
+
 async function main() {
   const data = await fetchCatalogData();
   const categories = buildCategories(data.CATEGORIES);
@@ -133,7 +138,7 @@ function buildStores(shops) {
         storeId: `choutuan-${shop.id}`,
         categoryId: CATEGORY_ID_MAP[shop.category],
         subCategoryId: subCategoryMap.get(product.cat),
-        name: product.name,
+        name: normalizeProductName(product.name),
         subtitle: product.desc || undefined,
         imageUrl: `/static/choutuan-img/${product.photo}.webp`,
         __imageKey: `${product.photo}.webp`,
@@ -173,6 +178,11 @@ function buildStores(shops) {
 function transformStoreName(name) {
   if (STORE_NAME_MAP[name]) return STORE_NAME_MAP[name];
   return name.replace(/(.)\1+/g, '$1');
+}
+
+function normalizeProductName(name) {
+  if (INTENTIONAL_REDUPLICATED_MENU_NAMES.has(name)) return name;
+  return name.replace(/([\p{Script=Han}])\1(?=(?:[·+&]|（|套餐|$))/gu, '$1');
 }
 
 function yuan(value) {
