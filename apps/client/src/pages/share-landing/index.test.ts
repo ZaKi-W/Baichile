@@ -22,10 +22,32 @@ describe('share landing poster', () => {
   });
 
   it('shows the matching easter egg image for shared orders', () => {
-    expect(source).toContain("import { orderEggImageUrl } from '../../utils/order-easter-egg'");
+    expect(source).toContain("import { orderEggImageUrl, orderEggPosterImageUrl } from '../../utils/order-easter-egg'");
     expect(source).toContain('const easterEggImageUrl = computed');
-    expect(source).toContain('class="egg-illustration"');
+    expect(source).toContain('class="card-artwork"');
     expect(source).toContain(':src="easterEggImageUrl"');
+    expect(source).toContain('const imageUrl = egg');
+    expect(source).toContain('? easterEggPosterImageUrl.value');
+    expect(source).toContain('我发现了${poster.value?.eyebrow || \'彩蛋\'}');
+  });
+
+  it('uses one collectible card template on screen and in the saved poster', () => {
+    expect(source).toContain('class="egg-card"');
+    expect(source).toContain('class="attribute-panel"');
+    expect(source).toContain('class="story-archive"');
+    expect(source).toContain('egg-card--legendary');
+    expect(source).toContain('egg-card--epic');
+    expect(source).toContain('drawEggPoster');
+    expect(source).toContain('const easterEggPosterImageUrl = computed');
+    expect(source).toContain('const eggImage = data.value.easterEgg ? easterEggPosterImageUrl.value');
+    expect(source).not.toContain('class="egg-lines"');
+    expect(source).not.toContain('<view class="card-header"');
+    expect(source).not.toContain('<view class="card-footer"');
+    expect(source).not.toContain('搞笑指数');
+    expect(source).not.toContain('收藏价值');
+    expect(source).not.toContain('card.subtitle');
+    expect(source).not.toContain('card.result');
+    expect(source).not.toContain('《{{ poster.title }}》');
   });
 
   it('shows the claim action only to invited visitors', () => {

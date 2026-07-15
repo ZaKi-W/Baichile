@@ -35,6 +35,7 @@ const mapReady = ref(false);
 const now = ref(Date.now());
 const eggRevealVisible = ref(false);
 const eggRevealImageFailed = ref(false);
+const eggRevealImageReady = ref(false);
 const forceEggRevealRequested = ref(false);
 let cameraFramed = false;
 
@@ -251,6 +252,7 @@ watch(
   (revealId) => {
     if (!revealId || !order.value || !eggPresentation.value) return;
     eggRevealImageFailed.value = false;
+    eggRevealImageReady.value = false;
     if (forceEggRevealRequested.value) {
       forceEggRevealRequested.value = false;
       eggRevealVisible.value = true;
@@ -444,6 +446,7 @@ async function prepareTimelineShare() {
 function openEggReveal() {
   if (!eggPresentation.value) return;
   eggRevealImageFailed.value = false;
+  eggRevealImageReady.value = false;
   eggRevealVisible.value = true;
 }
 
@@ -459,6 +462,10 @@ async function shareEgg() {
 
 function handleEggRevealImageError() {
   eggRevealImageFailed.value = true;
+}
+
+function handleEggRevealImageLoad() {
+  eggRevealImageReady.value = true;
 }
 </script>
 
@@ -679,6 +686,7 @@ function handleEggRevealImageError() {
     >
       <view
         class="egg-reveal-dialog"
+        :key="`${eggPresentation.id}-${eggRevealVisible}`"
         :style="{ borderColor: eggPresentation.themeColor }"
         role="dialog"
         aria-label="订单彩蛋揭晓"
@@ -690,8 +698,10 @@ function handleEggRevealImageError() {
             <image
               v-if="!eggRevealImageFailed"
               class="egg-reveal-image"
+              :class="{ 'is-ready': eggRevealImageReady }"
               :src="eggPresentation.imageUrl"
               mode="aspectFill"
+              @load="handleEggRevealImageLoad"
               @error="handleEggRevealImageError"
             />
             <view v-else class="egg-reveal-image-fallback">
@@ -1007,6 +1017,7 @@ function handleEggRevealImageError() {
   padding-left: 34rpx;
   background: rgba(25, 23, 19, 0.72);
   box-sizing: border-box;
+  animation: egg-reveal-backdrop-in 200ms ease-out both;
 }
 .egg-reveal-dialog {
   position: relative;
@@ -1018,7 +1029,7 @@ function handleEggRevealImageError() {
   background: #fff8de;
   box-shadow: 14rpx 16rpx 0 rgba(0, 0, 0, 0.22);
   box-sizing: border-box;
-  animation: egg-reveal-in 240ms ease-out both;
+  animation: egg-reveal-dialog-in 460ms cubic-bezier(0.22, 0.9, 0.28, 1.12) both;
 }
 .egg-reveal-rail {
   position: absolute;
@@ -1062,6 +1073,11 @@ function handleEggRevealImageError() {
 .egg-reveal-image {
   width: 100%;
   height: 100%;
+  opacity: 0;
+  transform: scale(0.84) rotate(-3deg);
+}
+.egg-reveal-image.is-ready {
+  animation: egg-reveal-artwork-in 520ms 70ms cubic-bezier(0.2, 0.95, 0.3, 1.18) both;
 }
 .egg-reveal-image-fallback {
   display: flex;
@@ -1076,6 +1092,7 @@ function handleEggRevealImageError() {
   font-size: 24rpx;
   font-weight: 900;
   letter-spacing: 3rpx;
+  animation: egg-reveal-artwork-in 400ms 70ms ease-out both;
 }
 .egg-reveal-copy {
   margin-left: 18rpx;
@@ -1087,6 +1104,7 @@ function handleEggRevealImageError() {
   align-items: center;
   justify-content: space-between;
   gap: 18rpx;
+  animation: egg-reveal-copy-in 320ms 160ms ease-out both;
 }
 .egg-reveal-eyebrow,
 .egg-reveal-meta,
@@ -1117,6 +1135,7 @@ function handleEggRevealImageError() {
   font-size: 40rpx;
   font-weight: 950;
   line-height: 1.2;
+  animation: egg-reveal-copy-in 320ms 210ms ease-out both;
 }
 .egg-reveal-description {
   max-width: 520rpx;
@@ -1124,10 +1143,12 @@ function handleEggRevealImageError() {
   color: #62594e;
   font-size: 25rpx;
   line-height: 1.5;
+  animation: egg-reveal-copy-in 320ms 250ms ease-out both;
 }
 .egg-reveal-footer {
   display: flex;
   flex-direction: column;
+  animation: egg-reveal-copy-in 320ms 290ms ease-out both;
 }
 .egg-reveal-stamp {
   width: fit-content;
@@ -1162,12 +1183,33 @@ function handleEggRevealImageError() {
   color: #fff;
   background: #191713;
 }
-@keyframes egg-reveal-in {
-  from { opacity: 0; transform: translateY(22rpx) scale(0.96); }
+@keyframes egg-reveal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes egg-reveal-dialog-in {
+  from { opacity: 0; transform: translateY(64rpx) scale(0.88); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+@keyframes egg-reveal-artwork-in {
+  from { opacity: 0; transform: scale(0.84) rotate(-3deg); }
+  65% { opacity: 1; transform: scale(1.045) rotate(1deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes egg-reveal-copy-in {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .egg-reveal-dialog { animation: none; }
+  .egg-reveal-backdrop,
+  .egg-reveal-dialog,
+  .egg-reveal-image.is-ready,
+  .egg-reveal-image-fallback,
+  .egg-reveal-heading,
+  .egg-reveal-title,
+  .egg-reveal-description,
+  .egg-reveal-footer { animation: none; }
+  .egg-reveal-image { opacity: 1; transform: none; }
 }
 
 /* ── 分隔线 ── */

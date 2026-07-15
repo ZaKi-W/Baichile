@@ -7,6 +7,7 @@ import {
   ORDER_EGG_IMAGE_BASE_URL,
   ORDER_EGG_IMAGE_PATHS,
   orderEggImageUrl,
+  orderEggPosterImageUrl,
   orderEggRevealKey,
 } from './order-easter-egg';
 
@@ -100,6 +101,9 @@ describe('order easter egg presentation', () => {
     expect(paths.every((path) => path.endsWith('.webp'))).toBe(true);
     expect(orderEggImageUrl('incident', 'unknown')).toBe('/static/share/order-cover.jpg');
     expect(orderEggImageUrl('collection', 'unknown')).toBe('/static/share/order-cover.jpg');
+    expect(orderEggPosterImageUrl('collection', 'zero-bite')).toContain('collection-zero-bite');
+    expect(orderEggPosterImageUrl('collection', 'zero-bite')).toMatch(/\.jpg$/);
+    expect(orderEggPosterImageUrl('incident', 'unknown')).toBe('/static/share/order-cover.jpg');
   });
 
   it('stores reveal state per order and egg', () => {

@@ -1,4 +1,5 @@
 import { AdminCloudServices, requireAdmin } from './admin-services';
+import type { WechatMiniLoginRequest } from '@baichile/api-contract';
 import { createCloudBaseDatabase, type Database } from './database';
 import { badRequest, forbidden, notFound, toErrorBody, unauthorized } from './errors';
 import { BaichileCloudServices } from './services';
@@ -51,8 +52,16 @@ export class BaichileRouter {
       if (!request.openId) unauthorized('仅允许微信小程序登录', 'WECHAT_CONTEXT_REQUIRED');
       const guestIdentity = await this.services.auth.resolvePersistedIdentity(request.authorization);
       const requestedVisitorId = typeof (request.data as any)?.visitorId === 'string' ? (request.data as any).visitorId : '';
-      if (requestedVisitorId && guestIdentity.visitorId !== requestedVisitorId) unauthorized('游客身份无效', 'INVALID_VISITOR_SESSION');
-      const session = await this.services.auth.loginWechatMini(request.data as any, request.openId);
+      if (guestIdentity.visitorId && requestedVisitorId && guestIdentity.visitorId !== requestedVisitorId) {
+        unauthorized('游客身份无效', 'INVALID_VISITOR_SESSION');
+      }
+      const loginInput: WechatMiniLoginRequest = {
+        ...(request.data as WechatMiniLoginRequest),
+        // Only a visitor session resolved from its bearer token may be linked to the account.
+        // A stale local visitor id must not prevent WeChat login or be linkable by itself.
+        visitorId: guestIdentity.visitorId,
+      };
+      const session = await this.services.auth.loginWechatMini(loginInput, request.openId);
       if (guestIdentity.visitorId) await this.mergeIdentity(guestIdentity.visitorId, session.accountId);
       return session;
     }

@@ -54,6 +54,10 @@ describe('delivery page status initialization', () => {
     expect(source).toContain('class="egg-reveal-backdrop"');
     expect(source).toContain('class="egg-reveal-image"');
     expect(source).toContain(':src="eggPresentation.imageUrl"');
+    expect(source).toContain('eggRevealImageReady');
+    expect(source).toContain('@load="handleEggRevealImageLoad"');
+    expect(source).toContain('egg-reveal-artwork-in');
+    expect(source).toContain('egg-reveal-dialog-in');
     expect(source).toContain('handleEggRevealImageError');
     expect(source).toContain('menuButtonRect.bottom + 16');
     expect(source).toContain(':style="eggRevealBackdropStyle"');

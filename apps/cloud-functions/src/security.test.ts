@@ -67,6 +67,25 @@ describe('identity security', () => {
     expect(result).toMatchObject({ ok: false, status: 401, code: 'WECHAT_CONTEXT_REQUIRED' });
   });
 
+  it('allows WeChat login when a stale visitor id has no valid guest token', async () => {
+    const db = new MemoryDatabase();
+    const router = new BaichileRouter(db);
+    const staleVisitorId = 'visitor_00000000-0000-4000-8000-000000000000';
+
+    const result = await router.handle({
+      method: 'POST',
+      path: '/v1/auth/wechat-mini',
+      data: {
+        code: 'wx-login-code',
+        visitorId: staleVisitorId,
+        profile: { avatarUrl: 'https://example.com/avatar.png', nickname: '小白' },
+      },
+    }, { OPENID: 'wechat-openid' });
+
+    expect(result).toMatchObject({ ok: true, status: 200, data: { provider: 'wechat' } });
+    await expect(db.collection(collections.visitorSessions).get(staleVisitorId)).resolves.toBeNull();
+  });
+
   it('disables the unauthenticated visitor merge endpoint', async () => {
     const router = new BaichileRouter(new MemoryDatabase());
     const result = await router.handle({

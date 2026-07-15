@@ -1,6 +1,22 @@
 import type { VirtualOrder } from '@baichile/api-contract';
 import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
 import { DELIVERY_START_MS } from './order-status';
+import incidentFoodFightsBack from '../../static/order-eggs/incident-food-fights-back.jpg';
+import incidentAlienAbduction from '../../static/order-eggs/incident-alien-abduction.jpg';
+import incidentTimeRift from '../../static/order-eggs/incident-time-rift.jpg';
+import incidentCatRequisition from '../../static/order-eggs/incident-cat-requisition.jpg';
+import incidentCircusRecruitment from '../../static/order-eggs/incident-circus-recruitment.jpg';
+import incidentMoonNavigation from '../../static/order-eggs/incident-moon-navigation.jpg';
+import incidentCloudCapture from '../../static/order-eggs/incident-cloud-capture.jpg';
+import incidentSecretFoodSociety from '../../static/order-eggs/incident-secret-food-society.jpg';
+import collectionCleanPlate from '../../static/order-eggs/collection-clean-plate.jpg';
+import collectionCalorieNinja from '../../static/order-eggs/collection-calorie-ninja.jpg';
+import collectionReceiptPoet from '../../static/order-eggs/collection-receipt-poet.jpg';
+import collectionMidnightGuard from '../../static/order-eggs/collection-midnight-guard.jpg';
+import collectionEmptyFeast from '../../static/order-eggs/collection-empty-feast.jpg';
+import collectionCouponScholar from '../../static/order-eggs/collection-coupon-scholar.jpg';
+import collectionZeroBite from '../../static/order-eggs/collection-zero-bite.jpg';
+import collectionLegend from '../../static/order-eggs/collection-legend.jpg';
 
 export type OrderEggKind = 'collection' | 'incident';
 export type OrderEggState = 'active' | 'revealed';
@@ -38,10 +54,35 @@ export const ORDER_EGG_IMAGE_PATHS = {
   'collection-legend': 'collection-legend.webp',
 } as const;
 
+const ORDER_EGG_POSTER_IMAGE_URLS: Record<keyof typeof ORDER_EGG_IMAGE_PATHS, string> = {
+  'incident-food_fights_back': incidentFoodFightsBack,
+  'incident-alien_abduction': incidentAlienAbduction,
+  'incident-time_rift': incidentTimeRift,
+  'incident-cat_requisition': incidentCatRequisition,
+  'incident-circus_recruitment': incidentCircusRecruitment,
+  'incident-moon_navigation': incidentMoonNavigation,
+  'incident-cloud_capture': incidentCloudCapture,
+  'incident-secret_food_society': incidentSecretFoodSociety,
+  'collection-clean-plate': collectionCleanPlate,
+  'collection-calorie-ninja': collectionCalorieNinja,
+  'collection-receipt-poet': collectionReceiptPoet,
+  'collection-midnight-guard': collectionMidnightGuard,
+  'collection-empty-feast': collectionEmptyFeast,
+  'collection-coupon-scholar': collectionCouponScholar,
+  'collection-zero-bite': collectionZeroBite,
+  'collection-legend': collectionLegend,
+};
+
 export function orderEggImageUrl(kind: OrderEggKind, id: string): string {
   const key = `${kind}-${id}` as keyof typeof ORDER_EGG_IMAGE_PATHS;
   const path = ORDER_EGG_IMAGE_PATHS[key];
   return path ? `${ORDER_EGG_IMAGE_BASE_URL}/${path}` : '/static/share/order-cover.jpg';
+}
+
+/** Canvas in older Mini Program runtimes does not reliably render downloaded WebP files. */
+export function orderEggPosterImageUrl(kind: OrderEggKind, id: string): string {
+  const key = `${kind}-${id}` as keyof typeof ORDER_EGG_IMAGE_PATHS;
+  return ORDER_EGG_POSTER_IMAGE_URLS[key] || '/static/share/order-cover.jpg';
 }
 
 const RARITY_LABELS = {
