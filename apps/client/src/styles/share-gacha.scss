@@ -1,0 +1,55 @@
+.share-gacha {
+  --gacha-ink: #191713;
+  --gacha-paper: #fff8e8;
+  --gacha-yellow: #ffd400;
+  --gacha-orange: #ff7145;
+  --gacha-mint: #36bfa1;
+  --gacha-muted: #70695f;
+  --gacha-line: rgba(25, 23, 19, .14);
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: 32rpx 32rpx calc(184rpx + env(safe-area-inset-bottom));
+  color: var(--gacha-ink);
+  background: var(--gacha-paper);
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.share-gacha view, .share-gacha text, .share-gacha image, .share-gacha button { box-sizing: border-box; }
+.share-gacha button { margin: 0; font-family: inherit; }
+.share-gacha button::after { border: 0; }
+
+.gacha-state, .gacha-empty { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 72vh; gap: 16rpx; color: var(--gacha-muted); font-size: 27rpx; line-height: 1.6; }
+.gacha-state::before, .gacha-empty::before { width: 44rpx; height: 8rpx; background: var(--gacha-yellow); content: ''; }
+.gacha-loading-track { width: 240rpx; height: 8rpx; overflow: hidden; border-radius: 999rpx; background: rgba(25, 23, 19, .12); }
+.gacha-loading-track::before { display: block; width: 42%; height: 100%; border-radius: inherit; background: var(--gacha-ink); animation: gacha-loading 1.05s ease-in-out infinite; content: ''; }
+
+.gacha-expired { display: flex; align-items: center; min-height: 64rpx; margin: -32rpx -32rpx 30rpx; padding: 0 32rpx; color: var(--gacha-paper); background: var(--gacha-ink); font-size: 21rpx; font-weight: 700; }
+.gacha-brand-row { display: flex; align-items: baseline; justify-content: space-between; gap: 18rpx; padding-bottom: 18rpx; border-bottom: 2rpx solid var(--gacha-ink); }
+.gacha-brand { font-size: 23rpx; font-weight: 900; }
+.gacha-ticket { max-width: 260rpx; color: var(--gacha-muted); font-family: 'DIN Alternate', 'PingFang SC', sans-serif; font-size: 17rpx; font-weight: 800; letter-spacing: 1rpx; text-align: right; }
+.gacha-orbit { display: none; }
+.gacha-section-kicker { color: var(--gacha-muted); font-size: 20rpx; font-weight: 800; }
+
+.gacha-capsule { overflow: hidden; border: 2rpx solid var(--gacha-ink); border-radius: 20rpx; background: #fff; }
+.gacha-machine-window { position: relative; overflow: hidden; border-radius: 14rpx; background: #f1eee5; }
+.gacha-identity { display: flex; align-items: center; gap: 12rpx; min-width: 0; }
+.gacha-identity image, .gacha-avatar-fallback { width: 48rpx; height: 48rpx; flex: 0 0 48rpx; border-radius: 50%; background: var(--gacha-ink); }
+.gacha-avatar-fallback { display: flex; align-items: center; justify-content: center; color: #fff; font-family: 'DIN Alternate', 'PingFang SC', sans-serif; font-size: 22rpx; font-weight: 900; }
+.gacha-identity text { overflow: hidden; font-size: 21rpx; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.gacha-qr { display: flex; align-items: center; gap: 10rpx; color: var(--gacha-muted); font-size: 17rpx; font-weight: 700; text-align: right; }
+.gacha-qr image { width: 74rpx; height: 74rpx; border-radius: 8rpx; background: #fff; }
+
+.gacha-action-bar, .gacha-visitor { position: fixed; right: 0; bottom: 0; left: 0; z-index: 30; padding: 18rpx 32rpx calc(18rpx + env(safe-area-inset-bottom)); border-top: 1rpx solid var(--gacha-line); background: rgba(255, 248, 232, .98); }
+.gacha-action-bar { display: flex; gap: 16rpx; }
+.gacha-primary, .gacha-secondary { min-height: 92rpx; padding: 0 22rpx; border-radius: 12rpx; font-size: 26rpx; font-weight: 850; line-height: 92rpx; }
+.gacha-primary { flex: 1; color: var(--gacha-ink); background: var(--gacha-yellow); }
+.gacha-secondary { flex: 1; border: 1rpx solid var(--gacha-ink); color: var(--gacha-ink); background: transparent; }
+.gacha-primary:active, .gacha-secondary:active { opacity: .72; }
+.gacha-visitor text { display: block; margin-bottom: 14rpx; color: var(--gacha-muted); font-size: 21rpx; line-height: 1.5; }
+.gacha-visitor button { width: 100%; }
+.gacha-canvas { position: fixed; top: 0; left: -9999px; width: 750px; height: 1334px; }
+
+@keyframes gacha-loading { 0%, 100% { transform: translateX(-100%); } 50% { transform: translateX(230%); } }
+@media (min-width: 760px) { .share-gacha { max-width: 720px; margin: 0 auto; padding-right: 40rpx; padding-left: 40rpx; } .gacha-action-bar, .gacha-visitor { left: 50%; width: min(720px, 100%); transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .gacha-loading-track::before { animation: none !important; } }

@@ -15,11 +15,12 @@ const landing = (kind: ShareLanding['kind']): ShareLanding => ({
 });
 
 describe('share poster model', () => {
-  it('uses a receipt cover for an order share', () => {
+  it('uses the order capsule model for an order share', () => {
     expect(buildSharePosterModel(landing('order'))).toMatchObject({
-      background: '#FFF8DE',
-      eyebrow: '本单荒诞结算单',
-      primary: '点了 ¥46.80，实际摄入 0',
+      kind: 'order',
+      eyebrow: '本单空气外卖',
+      primary: '¥46.80',
+      ticket: 'ORDER CAPSULE',
     });
   });
 
@@ -36,27 +37,36 @@ describe('share poster model', () => {
         collectionNumber: '0042',
         triggeredAt: '2026-07-12T02:00:00.000Z',
       },
-    })).toMatchObject({
+    }, 'order_egg')).toMatchObject({
+      kind: 'order_egg',
       eyebrow: '稀有彩蛋 · #0042',
       title: '您的外卖已抵达火星，配送失败',
       detail: '骑手遭遇了外星人袭击',
-      stamp: '稀有收藏',
+      stamp: '彩蛋已解锁',
     });
   });
 
-  it('uses achievement totals for a report cover', () => {
+  it('uses achievement totals for an upgrade capsule', () => {
     expect(buildSharePosterModel(landing('achievement'))).toMatchObject({
-      background: '#FFF8DE',
-      eyebrow: '白吃阶段战报',
-      primary: '累计白吃 18 顿',
+      eyebrow: '本次升级成果',
+      primary: '累计 18 顿',
+      ticket: 'ACHIEVEMENT DROP',
     });
   });
 
   it('uses a dynamic persona result', () => {
     expect(buildSharePosterModel({ ...landing('persona'), persona: { id: 'teaa', acronym: 'TEAA', name: '茶饮炼金师', verdict: '杯子可以加大，摄入必须归零。', callToAction: '测测你', description: '饮料调和情绪。', imageUrl: '/static/personas/teaa.png' } })).toMatchObject({
-      background: '#FFD400',
-      eyebrow: '这顿白吃人格 · TEAA',
+      eyebrow: '你的白吃人格 · TEAA',
       title: '茶饮炼金师',
+      ticket: 'PERSONA CAPSULE',
+    });
+  });
+
+  it('provides a reward capsule model for invitation posters', () => {
+    expect(buildSharePosterModel(landing('reward'))).toMatchObject({
+      kind: 'reward',
+      primary: '¥30.00',
+      ticket: 'REWARD CAPSULE',
     });
   });
 });

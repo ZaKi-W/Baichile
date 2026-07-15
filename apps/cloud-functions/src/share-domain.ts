@@ -1,4 +1,4 @@
-import type { ShareRewardConfig } from '@baichile/api-contract';
+import type { ShareKind, ShareRewardConfig } from '@baichile/api-contract';
 
 export const DEFAULT_SHARE_REWARD_CONFIG: ShareRewardConfig = {
   enabled: true,
@@ -11,8 +11,16 @@ export const DEFAULT_SHARE_REWARD_CONFIG: ShareRewardConfig = {
   invitationTitles: ['来这顿白吃一起假装点外卖', '请你领一笔虚拟饭钱'],
 };
 
-export function buildSharePath(token: string): string {
-  return `/pages/share-landing/index?token=${encodeURIComponent(token)}`;
+export function sharePagePath(kind: ShareKind): string {
+  if (kind === 'order') return '/pages/share-order/index';
+  if (kind === 'order_egg') return '/pages/share-egg/index';
+  if (kind === 'achievement') return '/pages/share-achievement/index';
+  if (kind === 'reward' || kind === 'invitation') return '/pages/share-reward/index';
+  return '/pages/share-landing/index';
+}
+
+export function buildSharePath(token: string, kind: ShareKind): string {
+  return `${sharePagePath(kind)}?token=${encodeURIComponent(token)}`;
 }
 
 export function chooseShareTitle(titles: string[], seed: string): string {

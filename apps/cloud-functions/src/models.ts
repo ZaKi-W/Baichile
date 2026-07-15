@@ -9,6 +9,7 @@ import type {
   QuoteLine,
   ShareIdentity,
   SharePersona,
+  SharePosterTheme,
   ShareMilestone,
   ShareRewardConfig,
   WalletTransactionType,
@@ -194,7 +195,7 @@ export interface ShareInviteDoc {
     milestone?: ShareMilestone;
     easterEgg?: OrderEasterEgg;
     miniProgramCodeUrl?: string;
-    posterTheme?: 'order' | 'persona' | 'achievement';
+    posterTheme?: SharePosterTheme;
   };
   initiatedRewardGranted: boolean;
   inviteeAccountId?: string | null;

@@ -200,10 +200,11 @@ const eggPresentation = computed(() => order.value
   : undefined);
 const canShareOrder = computed(() => {
   if (!order.value) return false;
-  if (hasIncident.value || hasFailed.value) return true;
+  if (hasIncident.value || hasFailed.value) return false;
   const deliveredAt = new Date(order.value.startedAt).getTime() + DELIVERY_START_MS + order.value.durationMs;
   return now.value >= deliveredAt;
 });
+const canShareEgg = computed(() => Boolean(eggPresentation.value));
 const timelineSteps = computed(() => {
   if (!hasIncident.value && !hasFailed.value) return STEPS;
   return STEPS.map((step, index) => index === FINAL_STEP
@@ -435,10 +436,18 @@ async function reorderCurrent() {
   catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '再来一单失败', icon: 'none' }); }
 }
 
-async function prepareTimelineShare() {
+async function prepareOrderShare() {
   if (!order.value || preparingShare.value) return;
   preparingShare.value = true;
   try { const card = await shareService.create({ kind: 'order', orderId: order.value.id, showIdentity: true }); uni.navigateTo({ url: shareLandingUrl(card) }); }
+  catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' }); }
+  finally { preparingShare.value = false; }
+}
+
+async function prepareEggShare() {
+  if (!order.value || !canShareEgg.value || preparingShare.value) return;
+  preparingShare.value = true;
+  try { const card = await shareService.create({ kind: 'order_egg', orderId: order.value.id, showIdentity: true }); uni.navigateTo({ url: shareLandingUrl(card) }); }
   catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' }); }
   finally { preparingShare.value = false; }
 }
@@ -457,7 +466,7 @@ function closeEggReveal() {
 
 async function shareEgg() {
   closeEggReveal();
-  await prepareTimelineShare();
+  await prepareEggShare();
 }
 
 function handleEggRevealImageError() {
@@ -563,7 +572,7 @@ function handleEggRevealImageLoad() {
           v-if="canShareOrder"
           class="order-primary-button share-button"
           :loading="preparingShare"
-          @tap="prepareTimelineShare"
+          @tap="prepareOrderShare"
         >分享订单</button>
       </view>
 

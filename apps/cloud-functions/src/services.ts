@@ -55,7 +55,7 @@ import type {
   VisitorSessionDoc,
   WalletTransactionDoc,
 } from './models';
-import { buildSharePath, chooseShareTitle, DEFAULT_SHARE_REWARD_CONFIG, parseShareRewardConfig } from './share-domain';
+import { buildSharePath, chooseShareTitle, DEFAULT_SHARE_REWARD_CONFIG, parseShareRewardConfig, sharePagePath } from './share-domain';
 import { classifyPersona, selectMilestone, selectOrderEasterEgg } from './share-insights';
 import { createShareMiniProgramCode, removeCloudFiles, resolveCloudFileUrls, uploadValidatedAvatar } from './storage';
 
@@ -877,15 +877,22 @@ export class ShareService {
   }
 
   async create(accountId: string, input: ShareCreateRequest): Promise<ShareCard> {
-    if (!['order', 'persona', 'achievement', 'invitation'].includes(input?.kind)) badRequest('分享类型不正确', 'INVALID_SHARE_KIND');
+    if (!['order', 'order_egg', 'persona', 'achievement', 'invitation', 'reward'].includes(input?.kind)) badRequest('分享类型不正确', 'INVALID_SHARE_KIND');
     return this.db.transaction(async (tx) => {
       const config = await this.config(tx);
-      if (!config.enabled) badRequest('分享活动暂未开放', 'SHARE_DISABLED');
+      if (isRewardShare(input.kind) && !config.enabled) badRequest('分享活动暂未开放', 'SHARE_DISABLED');
       const snapshot = await this.snapshot(tx, accountId, input);
       const token = randomUUID().replace(/-/g, '');
-      const titles = input.kind === 'order' ? config.orderTitles : input.kind === 'achievement' ? config.achievementTitles : config.invitationTitles;
+      const titles = input.kind === 'order'
+        ? config.orderTitles
+        : input.kind === 'achievement'
+          ? config.achievementTitles
+          : config.invitationTitles;
       const persona = (snapshot as ShareInviteDoc['snapshot']).persona;
-      const title = input.kind === 'persona' && persona
+      const egg = (snapshot as ShareInviteDoc['snapshot']).easterEgg;
+      const title = input.kind === 'order_egg' && egg
+        ? `我发现了${egg.rarity === 'legendary' ? '传说' : egg.rarity === 'rare' ? '稀有' : '普通'}彩蛋：${egg.name}`
+        : input.kind === 'persona' && persona
         ? `我的这顿白吃人格是 ${persona.acronym} · ${persona.name}`
         : chooseShareTitle(titles, input.orderId ?? `${accountId}:${shanghaiBusinessDate()}`).replace('{count}', String(snapshot.completedOrderCount));
       await tx.collection<ShareInviteDoc>(collections.shareInvites).insert({
@@ -901,7 +908,14 @@ export class ShareService {
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         createdAt: tx.now().toISOString(),
       });
-      return { token, kind: input.kind, title, path: buildSharePath(token), initiatedRewardCents: config.initiatedRewardCents, initiatedRewardGranted: false };
+      return {
+        token,
+        kind: input.kind,
+        title,
+        path: buildSharePath(token, input.kind),
+        initiatedRewardCents: isRewardShare(input.kind) ? config.initiatedRewardCents : 0,
+        initiatedRewardGranted: false,
+      };
     });
   }
 
@@ -911,7 +925,7 @@ export class ShareService {
       const invite = await tx.collection<ShareInviteDoc>(collections.shareInvites).get(token);
       const account = await tx.collection<AccountDoc>(collections.accounts).get(accountId);
       if (!account) notFound('用户不存在', 'ACCOUNT_NOT_FOUND');
-      if (!config.enabled || !invite || invite.inviterAccountId !== accountId || invite.initiatedRewardGranted || new Date(invite.expiresAt).getTime() <= Date.now()) {
+      if (!config.enabled || !invite || !isRewardShare(invite.kind) || invite.inviterAccountId !== accountId || invite.initiatedRewardGranted || new Date(invite.expiresAt).getTime() <= Date.now()) {
         return { granted: false, amountCents: 0, balanceCents: account.balanceCents };
       }
       const todayStart = `${shanghaiBusinessDate()}T00:00:00+08:00`;
@@ -932,16 +946,26 @@ export class ShareService {
     if (!invite) {
       return { active: false, dishNames: [], savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0, inviteeRewardCents: 0, benefitText: BENEFIT_TEXT };
     }
-    const active = config.enabled && new Date(invite.expiresAt).getTime() > Date.now();
-    const kind = invite.kind === 'invitation' ? 'persona' : invite.kind;
-    const miniProgramCodeUrl = active ? await createShareMiniProgramCode(token) : undefined;
+    const kind = invite.kind === 'invitation' ? 'reward' : invite.kind;
+    const active = new Date(invite.expiresAt).getTime() > Date.now() && (!isRewardShare(invite.kind) || config.enabled);
+    const miniProgramCodeUrl = active ? await createShareMiniProgramCode(token, sharePagePath(kind).slice(1)) : undefined;
     const identity = invite.snapshot.identity;
     const avatarUrls = await resolveCloudFileUrls([identity?.avatarUrl]);
     const resolvedIdentity = identity ? {
       ...identity,
       avatarUrl: identity.avatarUrl ? avatarUrls.get(identity.avatarUrl) ?? identity.avatarUrl : '',
     } : undefined;
-    return { active, expired: !active, kind, title: invite.title, ...invite.snapshot, identity: resolvedIdentity, miniProgramCodeUrl, inviteeRewardCents: active ? config.inviteeRewardCents : 0, benefitText: BENEFIT_TEXT };
+    return {
+      active,
+      expired: !active,
+      kind,
+      title: invite.title,
+      ...invite.snapshot,
+      identity: resolvedIdentity,
+      miniProgramCodeUrl,
+      inviteeRewardCents: active && isRewardShare(invite.kind) ? config.inviteeRewardCents : 0,
+      benefitText: isRewardShare(invite.kind) ? BENEFIT_TEXT : '',
+    };
   }
 
   async completeReferral(inviteeAccountId: string, token?: string): Promise<void> {
@@ -950,7 +974,7 @@ export class ShareService {
       const config = await this.config(tx);
       if (!config.enabled) return;
       const invite = await tx.collection<ShareInviteDoc>(collections.shareInvites).get(token);
-      if (!invite || invite.completedAt || new Date(invite.expiresAt).getTime() <= Date.now()) return;
+      if (!invite || !isRewardShare(invite.kind) || invite.completedAt || new Date(invite.expiresAt).getTime() <= Date.now()) return;
       if (invite.inviterAccountId === inviteeAccountId) return;
       if (await tx.collection<ShareInviteDoc>(collections.shareInvites).findOne({ inviteeAccountId })) return;
       if (config.inviterRewardCents) await this.wallet.credit(invite.inviterAccountId, config.inviterRewardCents, 'referral_inviter', '好友首次登录奖励（虚拟饭钱，不可提现）', tx);
@@ -966,7 +990,7 @@ export class ShareService {
       nickname: account?.nickname || '一位白吃选手',
       avatarUrl: account?.avatarUrl || '',
     };
-    if (input.kind === 'order') {
+    if (input.kind === 'order' || input.kind === 'order_egg') {
       if (!input.orderId) badRequest('请选择要分享的订单', 'ORDER_REQUIRED');
       const order = await orders.get(input.orderId);
       if (!order || order.accountId !== accountId) notFound('订单不存在', 'ORDER_NOT_FOUND');
@@ -981,10 +1005,14 @@ export class ShareService {
           failedAt: order.failedAt,
         }) !== 'pending',
       );
-      if (!shareableIncident && Date.now() < deliveredAt) badRequest('订单送达或触发彩蛋后才能分享', 'ORDER_NOT_COMPLETED');
+      if (input.kind === 'order' && (order.status === 'failed' || Date.now() < deliveredAt)) {
+        badRequest('订单送达后才能分享', 'ORDER_NOT_COMPLETED');
+      }
       const incidentEgg = order.incidentKey && order.incidentStartedAt
         ? deliveryIncidentShareEgg(order.incidentKey as DeliveryIncidentKey, order.seed, order.incidentStartedAt)
         : undefined;
+      const easterEgg = order.easterEgg ?? (shareableIncident ? incidentEgg : undefined);
+      if (input.kind === 'order_egg' && !easterEgg) badRequest('当前订单没有可分享的彩蛋', 'EASTER_EGG_REQUIRED');
       return {
         identity,
         storeName: order.storeName || '神秘小馆',
@@ -993,8 +1021,8 @@ export class ShareService {
         savedMoneyCents: order.totalCents,
         savedCaloriesKcal: order.itemsTotalCaloriesKcal,
         completedOrderCount: 1,
-        easterEgg: order.easterEgg ?? incidentEgg,
-        posterTheme: 'order' as const,
+        ...(input.kind === 'order_egg' ? { easterEgg } : {}),
+        posterTheme: input.kind === 'order_egg' ? 'order_egg' as const : 'order' as const,
       };
     }
     const rows = (await orders.list({ where: { accountId } })).filter((order) => (
@@ -1004,6 +1032,16 @@ export class ShareService {
     const savedCaloriesKcal = rows.reduce((sum, order) => sum + order.itemsTotalCaloriesKcal, 0);
     const completedOrderCount = rows.length;
     const allLines = rows.flatMap((order) => order.lines as VirtualOrder['lines']);
+    if (isRewardShare(input.kind)) {
+      return {
+        identity,
+        dishNames: [],
+        savedMoneyCents: 0,
+        savedCaloriesKcal: 0,
+        completedOrderCount: 0,
+        posterTheme: 'reward' as const,
+      };
+    }
     return {
       identity,
       dishNames: [],
@@ -1015,6 +1053,10 @@ export class ShareService {
         : { persona: classifyPersona(allLines, completedOrderCount, savedMoneyCents, savedCaloriesKcal), posterTheme: 'persona' as const }),
     };
   }
+}
+
+function isRewardShare(kind: ShareCreateRequest['kind']): boolean {
+  return kind === 'reward' || kind === 'invitation';
 }
 
 function deliveryIncidentShareEgg(key: DeliveryIncidentKey, seed: string, triggeredAt: string): OrderEasterEgg {

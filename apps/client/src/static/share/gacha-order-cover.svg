@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="560" viewBox="0 0 700 560">
+  <rect width="700" height="560" fill="#FFF8E8"/><rect x="38" y="38" width="624" height="484" rx="34" fill="#FFD400" stroke="#191713" stroke-width="12"/>
+  <rect x="72" y="72" width="350" height="92" rx="18" fill="#191713"/><text x="104" y="130" fill="#FFD400" font-size="34" font-weight="900" font-family="PingFang SC, sans-serif">本单白吃扭蛋</text>
+  <circle cx="525" cy="177" r="93" fill="#36BFA1" stroke="#191713" stroke-width="12"/><path d="M432 177h186" stroke="#191713" stroke-width="12"/><circle cx="500" cy="155" r="26" fill="#FFF8E8"/><circle cx="553" cy="199" r="26" fill="#FF7145"/>
+  <rect x="72" y="232" width="556" height="214" rx="30" fill="#FFF8E8" stroke="#191713" stroke-width="12"/><text x="104" y="302" fill="#191713" font-size="52" font-weight="900" font-family="PingFang SC, sans-serif">下单了，没吃。</text><text x="104" y="360" fill="#FF7145" font-size="28" font-weight="800" font-family="PingFang SC, sans-serif">空气外卖已成功撤回</text>
+  <path d="M104 414h346" stroke="#191713" stroke-width="8"/><circle cx="492" cy="414" r="26" fill="#36BFA1" stroke="#191713" stroke-width="8"/><circle cx="554" cy="414" r="26" fill="#FF7145" stroke="#191713" stroke-width="8"/>
+  <text x="74" y="490" fill="#191713" font-size="24" font-weight="900" font-family="DIN Alternate, PingFang SC, sans-serif">ORDER CAPSULE · BAICHILE</text>
+</svg>

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const home = readFileSync(new URL('./home/index.vue', import.meta.url), 'utf8');
 const profile = readFileSync(new URL('./profile/index.vue', import.meta.url), 'utf8');
-const landing = readFileSync(new URL('./share-landing/index.vue', import.meta.url), 'utf8');
+const reward = readFileSync(new URL('./share-reward/index.vue', import.meta.url), 'utf8');
 
 describe('share reward entry points', () => {
   it('promotes the share reward from home and profile', () => {
@@ -12,9 +12,12 @@ describe('share reward entry points', () => {
     expect(profile).toContain('wallet-action share-reward');
   });
 
-  it('requests the reward from native share actions', () => {
-    expect(landing).toContain('shareService.reward(token.value)');
-    expect(landing).toContain('onShareTimeline');
-    expect(landing).toContain('onShareAppMessage');
+  it('uses a dedicated reward invitation page and native share actions', () => {
+    expect(profile).toContain("'/pages/share-reward/index'");
+    expect(reward).toContain("shareService.create({ kind: 'reward', showIdentity: true })");
+    expect(reward).toContain('page.rewardShare()');
+    expect(reward).toContain('onShareTimeline');
+    expect(reward).toContain('onShareAppMessage');
+    expect(reward).toContain('保存海报');
   });
 });

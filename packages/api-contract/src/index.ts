@@ -142,7 +142,13 @@ export type WalletTransactionType =
   | 'referral_inviter'
   | 'referral_invitee';
 
-export type ShareKind = 'order' | 'persona' | 'achievement' | 'invitation';
+/**
+ * `invitation` is kept for shares generated before the dedicated reward page.
+ * New reward links must use `reward`.
+ */
+export type ShareKind = 'order' | 'order_egg' | 'persona' | 'achievement' | 'invitation' | 'reward';
+
+export type SharePosterTheme = 'order' | 'order_egg' | 'persona' | 'achievement' | 'reward';
 
 export type EasterEggRarity = 'common' | 'rare' | 'legendary';
 
@@ -229,7 +235,7 @@ export interface ShareLanding {
   milestone?: ShareMilestone;
   easterEgg?: OrderEasterEgg;
   miniProgramCodeUrl?: string;
-  posterTheme?: 'order' | 'persona' | 'achievement';
+  posterTheme?: SharePosterTheme;
 }
 
 export interface WalletSummary {

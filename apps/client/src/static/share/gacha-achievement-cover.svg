@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="560" viewBox="0 0 700 560">
+  <rect width="700" height="560" fill="#FFF8E8"/><rect x="38" y="38" width="624" height="484" rx="34" fill="#191713" stroke="#191713" stroke-width="12"/>
+  <rect x="72" y="72" width="344" height="92" rx="18" fill="#FFD400"/><text x="104" y="130" fill="#191713" font-size="34" font-weight="900" font-family="PingFang SC, sans-serif">白吃等级升级</text>
+  <circle cx="514" cy="244" r="130" fill="#FFD400" stroke="#FFF8E8" stroke-width="12"/><circle cx="514" cy="244" r="88" fill="#36BFA1" stroke="#191713" stroke-width="12"/><text x="470" y="265" fill="#191713" font-size="58" font-weight="900" font-family="DIN Alternate, PingFang SC, sans-serif">UP</text>
+  <rect x="72" y="370" width="556" height="76" rx="22" fill="#FFF8E8"/><text x="104" y="418" fill="#191713" font-size="30" font-weight="900" font-family="PingFang SC, sans-serif">每一单没吃，都是一次升级。</text>
+  <text x="74" y="490" fill="#FFF8E8" font-size="24" font-weight="900" font-family="DIN Alternate, PingFang SC, sans-serif">ACHIEVEMENT DROP · BAICHILE</text>
+</svg>

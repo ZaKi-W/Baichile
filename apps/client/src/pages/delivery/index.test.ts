@@ -71,6 +71,10 @@ describe('delivery page status initialization', () => {
     expect(source).toContain('{ force: forceEggRevealRequested.value }');
     expect(source).toContain('收下彩蛋');
     expect(source).toContain('分享这枚彩蛋');
+    expect(source).toContain('prepareOrderShare');
+    expect(source).toContain('prepareEggShare');
+    expect(source).toContain("kind: 'order_egg'");
+    expect(source).toContain('const canShareEgg');
     expect(source).toContain('分享准备失败');
     expect(source).toContain("orders.fetchDetail(currentOrder.id, { force: true })");
     expect(source).toContain('@media (prefers-reduced-motion: reduce)');

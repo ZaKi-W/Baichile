@@ -323,7 +323,31 @@ describe('share snapshots', () => {
     expect(card.title).toContain(landing.persona!.name);
   });
 
-  it('allows a triggered delivery-incident order to be shared', async () => {
+  it('separates a completed order report from its optional collection egg', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_order_share');
+    const now = new Date();
+    await db.collection<VirtualOrderDoc>(collections.virtualOrders).insert(shareableOrder({
+      _id: 'order_collection_share',
+      id: 'order_collection_share',
+      accountId: 'account_order_share',
+      startedAt: new Date(now.getTime() - 120_000).toISOString(),
+      easterEgg: { id: 'clean-plate', name: '赛博光盘行动', rarity: 'common', verdict: '一口没吃，盘子却干净得很有态度。', themeColor: '#2E8B72', decoration: 'plate', collectionNumber: '0001', triggeredAt: now.toISOString() },
+    }));
+
+    const orderCard = await services.shares.create('account_order_share', { kind: 'order', orderId: 'order_collection_share', showIdentity: true });
+    const eggCard = await services.shares.create('account_order_share', { kind: 'order_egg', orderId: 'order_collection_share', showIdentity: true });
+    const [orderLanding, eggLanding] = await Promise.all([services.shares.landing(orderCard.token), services.shares.landing(eggCard.token)]);
+
+    expect(orderCard.path).toContain('/pages/share-order/index');
+    expect(orderLanding.easterEgg).toBeUndefined();
+    expect(eggCard.path).toContain('/pages/share-egg/index');
+    expect(eggLanding.kind).toBe('order_egg');
+    expect(eggLanding.easterEgg?.id).toBe('clean-plate');
+  });
+
+  it('allows a triggered delivery-incident egg to be shared independently', async () => {
     const db = new MemoryDatabase();
     const services = new BaichileCloudServices(db);
     await services.auth.ensureAccount('account_incident_share');
@@ -364,11 +388,11 @@ describe('share snapshots', () => {
     });
 
     const card = await services.shares.create('account_incident_share', {
-      kind: 'order', orderId: 'order_incident_share', showIdentity: true,
+      kind: 'order_egg', orderId: 'order_incident_share', showIdentity: true,
     });
     const landing = await services.shares.landing(card.token);
 
-    expect(landing.kind).toBe('order');
+    expect(landing.kind).toBe('order_egg');
     expect(landing.storeName).toBe('彩蛋小馆');
     expect(landing.easterEgg).toMatchObject({
       id: 'incident-alien_abduction',
@@ -377,4 +401,94 @@ describe('share snapshots', () => {
       rarity: 'rare',
     });
   });
+
+  it('rejects an egg share without an available egg', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_no_egg');
+    await db.collection<VirtualOrderDoc>(collections.virtualOrders).insert(shareableOrder({
+      _id: 'order_no_egg', id: 'order_no_egg', accountId: 'account_no_egg', easterEgg: null,
+    }));
+
+    await expect(services.shares.create('account_no_egg', { kind: 'order_egg', orderId: 'order_no_egg' }))
+      .rejects.toMatchObject({ code: 'EASTER_EGG_REQUIRED' });
+  });
+
+  it('keeps rewards and referrals exclusive to reward shares', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await Promise.all(['account_inviter', 'account_reward_invitee', 'account_regular_invitee'].map((id) => services.auth.ensureAccount(id)));
+
+    const regular = await services.shares.create('account_inviter', { kind: 'achievement' });
+    const reward = await services.shares.create('account_inviter', { kind: 'reward' });
+    const legacyInvitation = await services.shares.create('account_inviter', { kind: 'invitation' });
+    const regularResult = await services.shares.rewardInitiatedShare('account_inviter', regular.token);
+    const rewardResult = await services.shares.rewardInitiatedShare('account_inviter', reward.token);
+    await services.shares.completeReferral('account_regular_invitee', regular.token);
+    await services.shares.completeReferral('account_reward_invitee', reward.token);
+
+    expect(regularResult.granted).toBe(false);
+    expect(rewardResult.granted).toBe(true);
+    expect((await services.shares.landing(reward.token)).kind).toBe('reward');
+    expect(legacyInvitation.path).toContain('/pages/share-reward/index');
+    expect((await services.shares.landing(legacyInvitation.token)).kind).toBe('reward');
+    expect((await services.wallet.summary('account_regular_invitee')).balanceCents).toBe(300_000);
+    expect((await services.wallet.summary('account_reward_invitee')).balanceCents).toBe(400_000);
+  });
+
+  it('builds a cumulative report from completed order totals only', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_report');
+    await db.collection<VirtualOrderDoc>(collections.virtualOrders).insert(shareableOrder({ _id: 'report_one', id: 'report_one', accountId: 'account_report', totalCents: 1800, itemsTotalCaloriesKcal: 700 }));
+    await db.collection<VirtualOrderDoc>(collections.virtualOrders).insert(shareableOrder({ _id: 'report_two', id: 'report_two', accountId: 'account_report', totalCents: 2400, itemsTotalCaloriesKcal: 900 }));
+    await db.collection<VirtualOrderDoc>(collections.virtualOrders).insert(shareableOrder({ _id: 'report_failed', id: 'report_failed', accountId: 'account_report', status: 'failed', totalCents: 9999, itemsTotalCaloriesKcal: 9999 }));
+
+    const card = await services.shares.create('account_report', { kind: 'achievement' });
+    const landing = await services.shares.landing(card.token);
+
+    expect(card.path).toContain('/pages/share-achievement/index');
+    expect(landing.completedOrderCount).toBe(2);
+    expect(landing.savedMoneyCents).toBe(4200);
+    expect(landing.savedCaloriesKcal).toBe(1600);
+  });
 });
+
+function shareableOrder(overrides: Partial<VirtualOrderDoc> = {}): VirtualOrderDoc {
+  const now = new Date();
+  return {
+    _id: 'shareable_order',
+    id: 'shareable_order',
+    visitorId: null,
+    accountId: 'account_share',
+    status: 'created',
+    storeId: 'store_1',
+    storeName: '白吃小馆',
+    destinationId: 'addr_1',
+    startedAt: new Date(now.getTime() - 120_000).toISOString(),
+    durationMs: 45_000,
+    seed: 'shareable-seed',
+    itemsTotalCents: 1200,
+    deliveryFeeCents: 200,
+    packingFeeCents: 100,
+    totalCents: 1500,
+    itemsTotalCaloriesKcal: 600,
+    lines: [{ menuItemId: 'dish_1', name: '招牌饭', imageUrl: null, optionNames: [], quantity: 1, unitPriceCents: 1200, totalCents: 1200, unitCaloriesKcal: 600, totalCaloriesKcal: 600 }],
+    route: {
+      id: 'shareable_route', cityCode: '310000',
+      origin: { lat: 31.24, lng: 121.48, coordSystem: 'gcj02' },
+      destination: { lat: 31.23, lng: 121.47, coordSystem: 'gcj02' },
+      polyline: [], routeSource: 'prebuilt', label: '虚拟配送路线',
+    },
+    incidentKey: null,
+    incidentStartedAt: null,
+    failedAt: null,
+    refundedAt: null,
+    easterEgg: null,
+    adminStatus: 'normal',
+    adminNote: '',
+    createdAt: new Date(now.getTime() - 120_000).toISOString(),
+    updatedAt: now.toISOString(),
+    ...overrides,
+  };
+}

@@ -45,7 +45,7 @@ export async function resolveCloudFileUrls(fileIds: Array<string | null | undefi
   return result;
 }
 
-export async function createShareMiniProgramCode(token: string): Promise<string | undefined> {
+export async function createShareMiniProgramCode(token: string, page = 'pages/share-landing/index'): Promise<string | undefined> {
   const cached = miniCodeCache.get(token);
   if (cached) return cached;
   if (process.env.NODE_ENV === 'test') return undefined;
@@ -54,7 +54,7 @@ export async function createShareMiniProgramCode(token: string): Promise<string 
     cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
     const result = await cloud.openapi.wxacode.getUnlimited({
       scene: token,
-      page: 'pages/share-landing/index',
+      page,
       checkPath: false,
       envVersion: process.env.MINIPROGRAM_ENV_VERSION || 'release',
       width: 430,

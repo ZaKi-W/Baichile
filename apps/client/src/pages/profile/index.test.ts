@@ -28,7 +28,7 @@ describe('profile page WeChat login', () => {
     expect(source).toContain('orders.savings.savedMoneyCents');
     expect(source).toContain('orders.savings.savedCaloriesKcal');
     expect(source).toContain('orders.savings.completedOrderCount');
-    expect(source).toContain('累计省下');
+    expect(source).toContain('累计实付');
     expect(source).toContain('约省卡路里');
     expect(source).toContain('min-height: 52rpx');
     expect(source).not.toContain('money-value');
@@ -53,12 +53,12 @@ describe('profile page WeChat login', () => {
     expect(source).toContain('代码版本 {{ CODE_VERSION }}');
   });
 
-  it('opens orders, hides the address count, and shares directly', () => {
+  it('opens orders, keeps reward sharing dedicated, and shares the achievement report directly', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
     expect(source).toContain("uni.switchTab({ url: '/pages/orders/index' })");
     expect(source).not.toContain('addresses.addresses.length');
-    expect(source).toContain("shareService.create({ kind, showIdentity: true })");
-    expect(source).not.toContain('/pages/share-center/index');
+    expect(source).toContain("shareService.create({ kind: 'achievement', showIdentity: true })");
+    expect(source).toContain("uni.navigateTo({ url: '/pages/share-reward/index' })");
   });
 
   it('opens the personality quiz directly from the existing menu entry', () => {

@@ -61,16 +61,24 @@ function openPersonalityTest() {
   uni.navigateTo({ url: '/pages/personality-test/index' });
 }
 
-async function shareNow(kind: 'achievement' | 'persona' = 'persona') {
+async function shareAchievement() {
   if (!auth.accountId) {
     openLogin();
     return;
   }
   if (preparingShare.value) return;
   preparingShare.value = true;
-  try { const card = await shareService.create({ kind, showIdentity: true }); uni.navigateTo({ url: shareLandingUrl(card) }); }
+  try { const card = await shareService.create({ kind: 'achievement', showIdentity: true }); uni.navigateTo({ url: shareLandingUrl(card) }); }
   catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' }); }
   finally { preparingShare.value = false; }
+}
+
+function openShareReward() {
+  if (!auth.accountId) {
+    openLogin();
+    return;
+  }
+  uni.navigateTo({ url: '/pages/share-reward/index' });
 }
 function openOrders() { uni.switchTab({ url: '/pages/orders/index' }); }
 
@@ -176,7 +184,7 @@ async function submitPendingOrderAfterLogin() {
         </view>
         <view class="stat-item">
           <text class="stat-value">¥{{ (orders.savings.savedMoneyCents / 100).toFixed(2) }}</text>
-          <text class="stat-label">累计省下</text>
+          <text class="stat-label">累计实付</text>
         </view>
         <view class="stat-item">
           <text class="stat-value">{{ orders.savings.savedCaloriesKcal }}</text>
@@ -218,7 +226,7 @@ async function submitPendingOrderAfterLogin() {
         <button
           class="wallet-action share-reward"
           :loading="preparingShare"
-          @tap="shareNow('persona')"
+          @tap="openShareReward"
         >
           分享领饭钱
         </button>
@@ -229,7 +237,7 @@ async function submitPendingOrderAfterLogin() {
     <view class="menu-card">
       <view
         class="menu-item"
-        @tap="shareNow('achievement')"
+        @tap="shareAchievement"
       >
         <text class="menu-icon">战</text>
         <text class="menu-text">晒晒我的白吃战绩</text>
