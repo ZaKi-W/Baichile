@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { shareCoverPath } from '../utils/share-poster-canvas';
 
 const order = readFileSync(new URL('./share-order/index.vue', import.meta.url), 'utf8');
 const egg = readFileSync(new URL('./share-egg/index.vue', import.meta.url), 'utf8');
@@ -33,7 +34,8 @@ describe('gacha share pages', () => {
     expect(egg).toContain('class="egg-poster"');
     expect(egg).toContain('今日发现');
     expect(egg).toContain("kind: 'order_egg'");
-    expect(achievement).toContain('白吃等级已刷新');
+    expect(achievement).toContain('晒晒白吃战绩');
+    expect(achievement).toContain('achievement-social-proof.jpg');
     expect(achievement).toContain("kind: 'achievement'");
     expect(reward).toContain('好友饭钱胶囊');
     expect(reward).toContain("kind: 'reward'");
@@ -45,8 +47,8 @@ describe('gacha share pages', () => {
   it('keeps legacy routing and provides a dedicated cover for all five share types', () => {
     expect(landing).toContain('legacyShareTarget');
     expect(landing).toContain("...(rewardCents.value ? [`reward=${rewardCents.value}`] : [])");
-    for (const kind of ['order', 'order_egg', 'persona', 'achievement', 'reward']) {
-      expect(existsSync(new URL(`../static/share/gacha-${kind}-cover.png`, import.meta.url))).toBe(true);
+    for (const kind of ['order', 'order_egg', 'persona', 'achievement', 'reward'] as const) {
+      expect(shareCoverPath(kind)).toBe(`https://cloud1-d8g7o18ula3c12f10-1318253748.tcloudbaseapp.com/baichile-home/share/gacha-${kind}-cover.png`);
     }
   });
 

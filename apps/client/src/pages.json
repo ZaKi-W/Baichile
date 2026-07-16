@@ -17,7 +17,7 @@
     { "path": "pages/share-order/index", "style": { "navigationBarTitleText": "这顿我白吃", "navigationBarBackgroundColor": "#ffd400", "navigationBarTextStyle": "black", "backgroundColor": "#f4f2ec" } },
     { "path": "pages/share-egg/index", "style": { "navigationBarTitleText": "朋友请你白吃", "navigationBarBackgroundColor": "#ffd400", "navigationBarTextStyle": "black", "backgroundColor": "#f4f1ea" } },
     { "path": "pages/share-reward/index", "style": { "navigationBarTitleText": "分享领饭钱" } },
-    { "path": "pages/share-achievement/index", "style": { "navigationBarTitleText": "白吃升级" } },
+    { "path": "pages/share-achievement/index", "style": { "navigationStyle": "custom", "backgroundColor": "#f9f9f9" } },
     { "path": "pages/location-picker/index", "style": { "navigationStyle": "custom" } },
     { "path": "pages/address-list/index", "style": { "navigationBarTitleText": "选择收货地址" } },
     { "path": "pages/address-form/index", "style": { "navigationBarTitleText": "新增收货地址" } }

@@ -1,4 +1,5 @@
 import type { ShareLanding } from '@baichile/api-contract';
+import { staticAssetUrl } from '../config/static-cdn';
 import { buildSharePosterModel, type SharePosterKind } from './share-poster';
 
 export interface SaveGachaPosterOptions {
@@ -9,7 +10,7 @@ export interface SaveGachaPosterOptions {
 }
 
 export function shareCoverPath(kind: SharePosterKind): string {
-  return `/static/share/gacha-${kind}-cover.png`;
+  return staticAssetUrl(`share/gacha-${kind}-cover.png`);
 }
 
 export async function saveGachaPoster(options: SaveGachaPosterOptions): Promise<void> {
