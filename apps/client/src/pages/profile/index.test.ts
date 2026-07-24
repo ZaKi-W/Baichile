@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-describe('profile page WeChat login', () => {
+describe('profile page cross-platform login', () => {
   it('collects an avatar and nickname before logging in', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
@@ -11,6 +11,17 @@ describe('profile page WeChat login', () => {
     expect(source).toContain('avatarUrl.value = event.detail.avatarUrl');
     expect(source).toContain('if (loading.value) return');
     expect(source).toContain('await auth.wechatLogin');
+  });
+
+  it('keeps WeChat profile login and adds the H5 phone-only OTP flow', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('open-type="getPhoneNumber"');
+    expect(source).toContain('绑定手机号并同步网页版');
+    expect(source).toContain("sendWebPhoneOtp(phoneNumber.value)");
+    expect(source).toContain('await auth.createWebPhoneSession(verifiedPhone)');
+    expect(source).toContain('smsCooldown.value = 60');
+    expect(source).toContain("auth.provider === 'phone'");
   });
 
   it('shows the logged-in avatar and nickname', () => {

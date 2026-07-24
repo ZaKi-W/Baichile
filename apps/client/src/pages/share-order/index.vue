@@ -4,6 +4,7 @@ import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app';
 import { useSharePage } from '../../features/share-page';
 import { catalogService } from '../../services/catalog';
 import { saveGachaPoster, shareCoverPath } from '../../utils/share-poster-canvas';
+import { shareWebPage } from '../../platform/web-share';
 
 const page = useSharePage();
 const saving = ref(false);
@@ -20,6 +21,7 @@ const storeMark = computed(() => (page.data.value?.storeName || '白').slice(0, 
 onLoad((options) => { void loadPage(options); });
 onShareTimeline(() => ({ title: title.value, query: page.shareQuery(), imageUrl: shareCoverPath('order') }));
 onShareAppMessage(() => ({ title: title.value, path: `/pages/share-order/index?${page.shareQuery()}`, imageUrl: shareCoverPath('order') }));
+const shareOnWeb = () => shareWebPage(title.value, `/pages/share-order/index?${page.shareQuery()}`);
 
 async function loadPage(options?: Record<string, string | undefined>) {
   await page.load(options);
@@ -97,7 +99,7 @@ async function savePoster() {
     </template>
     <view v-else class="gacha-empty">这张订单战报找不到了。</view>
 
-    <view v-if="page.sharing.value && page.data.value?.active" class="order-share-actions"><button class="order-save-button" :loading="saving" @tap="savePoster">保存分享图</button><button class="order-share-button" open-type="share">分享订单战报</button></view>
+    <view v-if="page.sharing.value && page.data.value?.active" class="order-share-actions"><button class="order-save-button" :loading="saving" @tap="savePoster">保存分享图</button><button class="order-share-button" open-type="share" @tap="shareOnWeb">分享订单战报</button></view>
     <view v-else-if="page.data.value" class="order-visitor-actions"><text>这顿没吃，也是一份值得分享的战绩。</text><button class="order-share-button" @tap="page.enterApp">进入这顿白吃</button></view>
     <canvas canvas-id="orderPoster" class="gacha-canvas" />
   </view>

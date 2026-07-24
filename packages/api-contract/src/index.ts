@@ -258,6 +258,7 @@ export interface VirtualOrder extends OrderQuote {
   isVirtual: true;
   visitorId?: string;
   accountId?: string;
+  settlementMode: 'guest_simulation' | 'virtual_balance';
   virtualDestinationId: string;
   storeName?: string;
   deliveryAddress?: OrderDeliveryAddressSnapshot;
@@ -295,7 +296,7 @@ export interface WechatMiniLoginRequest {
 export interface AccountSession {
   accountId: string;
   accessToken: string;
-  provider: 'wechat' | 'dev-mock';
+  provider: 'wechat' | 'phone' | 'dev-mock';
   profile: UserProfile;
 }
 
@@ -307,6 +308,22 @@ export interface WechatPhoneResult {
   phoneNumber: string;
   purePhoneNumber: string;
   countryCode: string;
+}
+
+export interface AccountMergeSummary {
+  orders: number;
+  visitorSessions: number;
+  addresses: number;
+  walletTransactions: number;
+  shareInvites: number;
+  analyticsEvents: number;
+}
+
+export interface WechatPhoneBindResult {
+  session: AccountSession;
+  phoneNumber: string;
+  merged: boolean;
+  migrated: AccountMergeSummary;
 }
 
 export interface AdministrativeArea {
@@ -350,6 +367,9 @@ export interface ApiError {
     | 'UNAUTHORIZED'
     | 'CONFIG_MISSING'
     | 'INSUFFICIENT_BALANCE'
-    | 'ALREADY_CHECKED_IN';
+    | 'ALREADY_CHECKED_IN'
+    | 'RATE_LIMITED'
+    | 'WEB_PHONE_UNVERIFIED'
+    | 'PHONE_ALREADY_BOUND';
   message: string;
 }

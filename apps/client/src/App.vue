@@ -58,4 +58,60 @@ button {
   color: #665300;
   font-size: 24rpx;
 }
+
+/* #ifdef H5 */
+html,
+body {
+  background: #dededb;
+}
+
+uni-app {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  min-height: 100vh;
+  margin: 0 auto;
+  overflow-x: hidden;
+  background: var(--page-bg);
+  box-shadow: 0 0 36px rgba(23, 23, 23, 0.16);
+}
+
+.uni-tabbar-bottom .uni-tabbar,
+.uni-tabbar-top .uni-tabbar {
+  right: auto !important;
+  left: 50% !important;
+  width: min(100%, 480px) !important;
+  transform: translateX(-50%);
+}
+
+.mask,
+.overlay {
+  right: auto !important;
+  left: 50% !important;
+  width: min(100vw, 480px) !important;
+  transform: translateX(-50%);
+}
+
+.bottom-bar,
+.achievement-header,
+.achievement-actions,
+.achievement-visitor {
+  right: auto !important;
+  left: 50% !important;
+  width: min(100vw, 480px) !important;
+  box-sizing: border-box;
+  transform: translateX(-50%);
+}
+
+.checkout-bar,
+.submit-btn,
+.order-share-actions,
+.order-visitor-actions {
+  right: auto !important;
+  left: 50% !important;
+  width: min(calc(100vw - 48rpx), calc(480px - 48rpx)) !important;
+  box-sizing: border-box;
+  transform: translateX(-50%);
+}
+/* #endif */
 </style>

@@ -1,6 +1,7 @@
 import type { ShareLanding } from '@baichile/api-contract';
 import { staticAssetUrl } from '../config/static-cdn';
 import { buildSharePosterModel, type SharePosterKind } from './share-poster';
+import { downloadWebFile } from '../platform/web-share';
 
 export interface SaveGachaPosterOptions {
   canvasId: string;
@@ -89,4 +90,14 @@ function drawText(ctx: UniApp.CanvasContext, text: string, x: number, y: number,
 
 function download(url: string): Promise<string> { return new Promise((resolve, reject) => uni.downloadFile({ url, success: (result) => result.statusCode === 200 ? resolve(result.tempFilePath) : reject(new Error('素材下载失败')), fail: reject })); }
 function exportCanvas(canvasId: string): Promise<string> { return new Promise((resolve, reject) => uni.canvasToTempFilePath({ canvasId, width: 750, height: 1334, destWidth: 1125, destHeight: 2001, fileType: 'jpg', quality: .92, success: (result) => resolve(result.tempFilePath), fail: reject })); }
-function saveImage(filePath: string): Promise<void> { return new Promise((resolve, reject) => uni.saveImageToPhotosAlbum({ filePath, success: () => resolve(), fail: (error) => { if (String(error.errMsg).includes('auth deny')) uni.openSetting({}); reject(new Error('请允许保存到相册后重试')); } })); }
+async function saveImage(filePath: string): Promise<void> {
+  if (await downloadWebFile(filePath, `baichile-poster-${Date.now()}.jpg`)) return;
+  await new Promise<void>((resolve, reject) => uni.saveImageToPhotosAlbum({
+    filePath,
+    success: () => resolve(),
+    fail: (error) => {
+      if (String(error.errMsg).includes('auth deny')) uni.openSetting({});
+      reject(new Error('请允许保存到相册后重试'));
+    },
+  }));
+}

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useCartStore } from '../../stores/cart';
+import { getSafeMenuButtonRect } from '../../platform/system-ui';
 
 const cart = useCartStore();
 const systemInfo = uni.getSystemInfoSync();
-const menuButtonRect = uni.getMenuButtonBoundingClientRect();
+const menuButtonRect = getSafeMenuButtonRect(systemInfo);
 const safeTopStyle = computed(() => ({ height: `${Math.max((systemInfo.statusBarHeight ?? 20) + 12, menuButtonRect.bottom + 8)}px` }));
 const groups = computed(() => cart.groups);
 const hasCart = computed(() => groups.value.length > 0);
@@ -165,4 +166,13 @@ button::after { border: 0; }
 .checkout-label { display: block; color: rgba(255,255,255,.62); font-size: 22rpx; font-weight: 700; }
 .checkout-price { display: block; margin-top: 4rpx; color: #fff; font-size: 34rpx; font-weight: 900; }
 .checkout-button { min-width: 230rpx; height: 76rpx; border-radius: 999rpx; color: #171717; background: #ffd400; font-size: 28rpx; font-weight: 900; line-height: 76rpx; }
+
+/* #ifdef H5 */
+.cart-main {
+  padding-bottom: calc(184rpx + var(--tab-bar-height, 50px) + env(safe-area-inset-bottom));
+}
+.checkout-bar {
+  bottom: calc(var(--tab-bar-height, 50px) + 24rpx + env(safe-area-inset-bottom));
+}
+/* #endif */
 </style>

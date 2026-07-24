@@ -5,7 +5,7 @@ import { useCartStore, type CartStoreGroup } from '../../stores/cart';
 import { useOrderStore } from '../../stores/orders';
 import { useAddressStore } from '../../stores/address';
 import { orderService } from '../../services/orders';
-import { useAuthStore } from '../../stores/auth';
+import { isWebPlatform, useAuthStore } from '../../stores/auth';
 import { useWalletStore } from '../../stores/wallet';
 import { ApiRequestError } from '../../services/http';
 import { savePendingOrder } from '../../utils/pending-order';
@@ -62,7 +62,7 @@ const canSubmit = computed(() => checkoutGroups.value.length > 0 && !!selectedAd
 
 async function submit() {
   if (!canSubmit.value || submitting.value) return;
-  if (!auth.accountId) {
+  if (!auth.accountId && !isWebPlatform()) {
     savePendingOrder(requests.value);
     auth.requestLogin();
     uni.showToast({ title: '登录后将自动提交订单', icon: 'none' });
@@ -84,19 +84,19 @@ async function submit() {
       completedStoreIds.push(group.store.id);
       orders.save(order);
     }
-    wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
+    if (auth.accountId) wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
     completedStoreIds.forEach((storeId) => cart.clear(storeId));
     if (created.length === 1) uni.redirectTo({ url: `/pages/delivery/index?id=${created[0].id}` });
     else {
       uni.showToast({ title: `已生成${created.length}个订单`, icon: 'none' });
       setTimeout(() => uni.switchTab({ url: '/pages/orders/index' }), 500);
     }
-    void wallet.load().catch(() => undefined);
+    if (auth.accountId) void wallet.load().catch(() => undefined);
   } catch (error) {
     if (created.length) {
-      wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
+      if (auth.accountId) wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
       completedStoreIds.forEach((storeId) => cart.clear(storeId));
-      void wallet.load().catch(() => undefined);
+      if (auth.accountId) void wallet.load().catch(() => undefined);
       uni.showToast({ title: `已生成${created.length}个订单，剩余订单未完成`, icon: 'none' });
       setTimeout(() => uni.switchTab({ url: '/pages/orders/index' }), 700);
       return;
@@ -109,7 +109,9 @@ async function submit() {
 
 <template>
   <view class="page">
-    <view class="virtual-notice">仅扣除应用内虚拟余额，不涉及真实支付。</view>
+    <view class="virtual-notice">
+      {{ auth.accountId ? '仅扣除应用内虚拟余额，不涉及真实支付。' : '游客试玩不会扣除虚拟余额，也不涉及真实支付。' }}
+    </view>
 
     <!-- 收货地址卡片 -->
     <view class="address-card" @tap="openAddressPicker">

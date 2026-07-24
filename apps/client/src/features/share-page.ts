@@ -55,8 +55,8 @@ export function useSharePage() {
   }
 
   function enterApp() {
-    uni.switchTab({ url: '/pages/profile/index' });
     auth.requestLogin();
+    uni.switchTab({ url: '/pages/profile/index' });
   }
 
   return { data, loading, token, sharing, rewardCents, load, shareQuery, rewardShare, enterApp };

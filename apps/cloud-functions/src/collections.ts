@@ -34,6 +34,8 @@ export interface CollectionSpec {
 export const collectionSpecs: CollectionSpec[] = [
   { name: collections.accounts, indexes: [
     { name: 'wechat_openid_hash_unique', fields: { wechatOpenIdHash: 1 }, unique: true, sparse: true },
+    { name: 'web_auth_uid_hash_unique', fields: { webAuthUidHash: 1 }, unique: true, sparse: true },
+    { name: 'phone_hash_unique', fields: { phoneHash: 1 }, unique: true, sparse: true },
     { name: 'created_at_desc', fields: { createdAt: -1 } },
   ] },
   { name: collections.visitorSessions, indexes: [

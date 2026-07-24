@@ -95,6 +95,65 @@ describe('identity security', () => {
 
     expect(result).toMatchObject({ ok: false, status: 401, code: 'ENDPOINT_DISABLED' });
   });
+
+  it('only creates a Web business session from a trusted verified phone context', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    const guest = await services.auth.createGuest();
+    const router = new BaichileRouter(db);
+
+    const unverified = await router.handle({
+      method: 'POST',
+      path: '/v1/auth/web-phone/session',
+      authorization: guest.accessToken,
+    }, { WEB_UID: 'web-user-without-phone' });
+    expect(unverified).toMatchObject({ ok: false, status: 401, code: 'WEB_PHONE_UNVERIFIED' });
+
+    const verified = await router.handle({
+      method: 'POST',
+      path: '/v1/auth/web-phone/session',
+      authorization: guest.accessToken,
+    }, { WEB_UID: 'web-phone-user', WEB_PHONE_NUMBER: '+86 13800138000' });
+    expect(verified).toMatchObject({
+      ok: true,
+      data: {
+        provider: 'phone',
+        profile: { nickname: '13800138000' },
+      },
+    });
+    const accountId = verified.ok && 'data' in verified
+      ? (verified.data as { accountId: string }).accountId
+      : '';
+    expect(await db.collection(collections.visitorSessions).get(guest.visitorId))
+      .toMatchObject({ accountId });
+
+    const restored = await router.handle({
+      method: 'POST',
+      path: '/v1/auth/web-phone/session',
+    }, { WEB_UID: 'web-phone-user' });
+    expect(restored).toMatchObject({
+      ok: true,
+      data: {
+        accountId,
+        provider: 'phone',
+        profile: { nickname: '13800138000' },
+      },
+    });
+  });
+
+  it('prioritizes the WeChat OPENID over a mapped Web UID', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    const wechat = await services.auth.loginWechatMini({
+      code: 'wechat-code',
+      profile: { avatarUrl: 'https://example.com/wechat.png', nickname: '微信用户' },
+    }, 'wechat-openid');
+    const phone = await services.auth.loginWebPhone('web-phone-uid', '13900139000');
+
+    await expect(services.auth.resolvePersistedIdentity('', 'wechat-openid', 'web-phone-uid'))
+      .resolves.toEqual({ accountId: wechat.accountId });
+    expect(phone.accountId).not.toBe(wechat.accountId);
+  });
 });
 
 describe('admin security', () => {

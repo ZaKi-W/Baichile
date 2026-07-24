@@ -4,6 +4,8 @@ import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app';
 import { staticAssetUrl } from '../../config/static-cdn';
 import { useSharePage } from '../../features/share-page';
 import { saveGachaPoster, shareCoverPath } from '../../utils/share-poster-canvas';
+import { shareWebPage } from '../../platform/web-share';
+import { getSafeMenuButtonRect } from '../../platform/system-ui';
 
 const page = useSharePage();
 const saving = ref(false);
@@ -19,7 +21,7 @@ const equivalentStepsText = computed(() => equivalentSteps.value.toLocaleString(
 const levelProgress = computed(() => orders.value ? ((orders.value % 5) || 5) * 20 : 0);
 const ownerInitial = computed(() => ownerName.value.slice(0, 1));
 const systemInfo = uni.getSystemInfoSync();
-const menuButtonRect = uni.getMenuButtonBoundingClientRect();
+const menuButtonRect = getSafeMenuButtonRect(systemInfo);
 const headerHeight = Math.max((systemInfo.statusBarHeight || 20) + 8, menuButtonRect.bottom + 8);
 const achievementPageStyle = { paddingTop: `${headerHeight}px` };
 const achievementHeaderStyle = { height: `${headerHeight}px` };
@@ -28,6 +30,7 @@ const shareAsset = (path: string) => staticAssetUrl(`share/${path}`);
 onLoad((options) => { void page.load(options); });
 onShareTimeline(() => ({ title: title.value, query: page.shareQuery(), imageUrl: shareCoverPath('achievement') }));
 onShareAppMessage(() => ({ title: title.value, path: `/pages/share-achievement/index?${page.shareQuery()}`, imageUrl: shareCoverPath('achievement') }));
+const shareOnWeb = () => shareWebPage(title.value, `/pages/share-achievement/index?${page.shareQuery()}`);
 
 function goBack() {
   uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/profile/index' }) });
@@ -63,7 +66,7 @@ async function savePoster() {
     <view class="achievement-header" :style="achievementHeaderStyle">
       <button class="achievement-header-button achievement-back-button" aria-label="返回" @tap="goBack"><image class="achievement-header-icon achievement-back-icon" :src="shareAsset('achievement-icons/back.svg')" mode="aspectFit" /></button>
       <text class="achievement-header-title">晒晒白吃战绩</text>
-      <button class="achievement-header-button achievement-notice-button" aria-label="分享战绩" open-type="share"><image class="achievement-header-icon achievement-bell-icon" :src="shareAsset('achievement-icons/bell.svg')" mode="aspectFit" /></button>
+      <button class="achievement-header-button achievement-notice-button" aria-label="分享战绩" open-type="share" @tap="shareOnWeb"><image class="achievement-header-icon achievement-bell-icon" :src="shareAsset('achievement-icons/bell.svg')" mode="aspectFit" /></button>
     </view>
 
     <view v-if="page.loading.value" class="gacha-state achievement-state"><text>正在整理你的白吃战绩</text><view class="gacha-loading-track" /></view>
@@ -119,7 +122,7 @@ async function savePoster() {
 
     <view v-if="page.sharing.value && page.data.value?.active" class="achievement-actions">
       <button class="achievement-save-button" :loading="saving" @tap="savePoster"><image class="achievement-action-icon" :src="shareAsset('achievement-icons/download.svg')" mode="aspectFit" /><text>保存战绩</text></button>
-      <button class="achievement-share-button" open-type="share"><image class="achievement-action-icon achievement-share-action-icon" :src="shareAsset('achievement-icons/share.svg')" mode="aspectFit" /><text>分享朋友圈</text></button>
+      <button class="achievement-share-button" open-type="share" @tap="shareOnWeb"><image class="achievement-action-icon achievement-share-action-icon" :src="shareAsset('achievement-icons/share.svg')" mode="aspectFit" /><text>分享朋友圈</text></button>
     </view>
     <view v-else-if="page.data.value" class="achievement-visitor"><text>你的第一份白吃战绩，正在等你。</text><button class="achievement-share-button" @tap="page.enterApp">进入这顿白吃</button></view>
     <canvas canvas-id="achievementPoster" class="gacha-canvas" />

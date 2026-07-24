@@ -10,6 +10,7 @@ const wallet = useWalletStore();
 onShow(async () => {
   await auth.ensureGuest();
   if (!auth.accountId) {
+    auth.requestLogin('wallet');
     uni.showToast({ title: '请先登录', icon: 'none' });
     setTimeout(() => uni.switchTab({ url: '/pages/profile/index' }), 350);
     return;

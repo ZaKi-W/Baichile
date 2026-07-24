@@ -25,7 +25,10 @@ async function reorderOrder(order: VirtualOrder) {
   catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '再来一单失败', icon: 'none' }); }
   finally { reorderLoading.value = ''; }
 }
-const openLogin = () => uni.switchTab({ url: '/pages/profile/index' });
+const openLogin = () => {
+  auth.requestLogin();
+  uni.switchTab({ url: '/pages/profile/index' });
+};
 const statusLabel = (order: VirtualOrder) => {
   if (order.incident) {
     const phase = getDeliveryIncidentPhase(order.incident, now.value);
@@ -77,11 +80,14 @@ onHide(() => clearInterval(statusTimer));
 
 <template>
   <view class="page">
-    <view v-if="!auth.accountId" class="card muted">
-      <text>登录后查看你的订单</text>
-      <button class="primary-button login-button" @tap="openLogin">去登录</button>
+    <view v-if="!auth.accountId" class="guest-notice">
+      <view>
+        <text class="guest-notice-title">本机试玩记录</text>
+        <text class="guest-notice-desc">手机号登录后可跨设备保存，并解锁钱包与完整历史。</text>
+      </view>
+      <button class="guest-login-button" @tap="openLogin">登录</button>
     </view>
-    <view v-for="order in auth.accountId ? orders.orders : []" :key="order.id" class="order-card">
+    <view v-for="order in orders.orders" :key="order.id" class="order-card">
       <view class="order-main" @tap="openOrder(order.id)">
         <view class="order-top">
           <view class="store-block">
@@ -99,7 +105,7 @@ onHide(() => clearInterval(statusTimer));
         <view class="order-meta">
           <text>{{ formatOrderTime(order.createdAt || order.startedAt) }}</text>
           <text>· 共{{ itemCount(order) }}件</text>
-          <text>· 实付 </text>
+          <text>· {{ order.settlementMode === 'guest_simulation' ? '模拟金额' : '虚拟实付' }} </text>
           <text class="paid-money">{{ formatMoney(order.totalCents) }}</text>
         </view>
         <view
@@ -124,7 +130,7 @@ onHide(() => clearInterval(statusTimer));
         <button class="action-button ghost-action" @tap.stop="openOrder(order.id)">订单详情</button>
       </view>
     </view>
-    <view v-if="auth.accountId && !orders.orders.length" class="card muted">还没有虚拟订单，先去首页逛逛吧。</view>
+    <view v-if="!orders.orders.length" class="card muted">还没有虚拟订单，先去首页逛逛吧。</view>
     <view class="tab-spacer" />
   </view>
 </template>
@@ -135,6 +141,48 @@ onHide(() => clearInterval(statusTimer));
   padding: 24rpx 24rpx 0;
   box-sizing: border-box;
   background: #f6f6f6;
+}
+.guest-notice {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 22rpx;
+  padding: 22rpx 24rpx;
+  border: 2rpx solid #efd97a;
+  border-radius: 22rpx;
+  background: #fff8d6;
+}
+.guest-notice > view {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6rpx;
+}
+.guest-notice-title {
+  color: #171717;
+  font-size: 27rpx;
+  font-weight: 900;
+}
+.guest-notice-desc {
+  color: #746a44;
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+.guest-login-button {
+  width: 120rpx;
+  height: 58rpx;
+  margin: 0;
+  padding: 0;
+  border-radius: 29rpx;
+  color: #fff;
+  background: #171717;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 58rpx;
+}
+.guest-login-button::after {
+  border: 0;
 }
 .order-card {
   margin-bottom: 22rpx;

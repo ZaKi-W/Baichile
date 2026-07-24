@@ -1,9 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { requestApi } from './http';
+import { requestApi, resolveCloudTransport } from './http';
+
+const webCloudCall = vi.hoisted(() => vi.fn());
+vi.mock('../platform/cloudbase-web', () => ({
+  callWebCloudFunction: webCloudCall,
+}));
 
 describe('requestApi', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    webCloudCall.mockReset();
   });
 
   it('calls the configured CloudBase function', async () => {
@@ -24,5 +30,26 @@ describe('requestApi', () => {
         authorization: 'Bearer account-token',
       },
     });
+  });
+
+  it('uses the Web SDK transport in a browser without wx.cloud', async () => {
+    vi.stubGlobal('window', { location: {} });
+    vi.stubGlobal('wx', undefined);
+    webCloudCall.mockResolvedValue({ ok: true, data: { platform: 'h5' } });
+
+    expect(resolveCloudTransport()).toBe('web');
+    await expect(requestApi('GET', '/v1/health', '')).resolves.toEqual({ platform: 'h5' });
+    expect(webCloudCall).toHaveBeenCalledWith({
+      method: 'GET',
+      path: '/v1/health',
+      data: undefined,
+      authorization: '',
+    });
+  });
+
+  it('prefers wx.cloud when both runtime globals exist', () => {
+    vi.stubGlobal('window', {});
+    vi.stubGlobal('wx', { cloud: {} });
+    expect(resolveCloudTransport()).toBe('wechat');
   });
 });

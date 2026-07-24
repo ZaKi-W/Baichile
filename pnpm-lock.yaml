@@ -87,6 +87,18 @@ importers:
       '@baichile/ui-tokens':
         specifier: workspace:*
         version: link:../../packages/ui-tokens
+      '@cloudbase/adapter-interface':
+        specifier: ^0.7.1
+        version: 0.7.1
+      '@cloudbase/adapter-wx_mp':
+        specifier: ^1.3.1
+        version: 1.3.1
+      '@cloudbase/js-sdk':
+        specifier: ^3.6.3
+        version: 3.6.3
+      '@cloudbase/wx-cloud-client-sdk':
+        specifier: ^1.8.10
+        version: 1.8.10
       '@dcloudio/uni-app':
         specifier: 3.0.0-alpha-5000720260416001
         version: 3.0.0-alpha-5000720260416001(@dcloudio/types@3.4.31)(@vueuse/core@14.3.0(vue@3.5.39(typescript@5.8.3)))(postcss@8.5.10)(rollup@4.62.2)(ts-node@10.9.2(@types/node@22.20.0)(typescript@5.8.3))(vue@3.5.39(typescript@5.8.3))
@@ -102,18 +114,39 @@ importers:
       '@dcloudio/uni-mp-weixin':
         specifier: 3.0.0-alpha-5000720260416001
         version: 3.0.0-alpha-5000720260416001(@vueuse/core@14.3.0(vue@3.5.39(typescript@5.8.3)))(postcss@8.5.10)(rollup@4.62.2)(ts-node@10.9.2(@types/node@22.20.0)(typescript@5.8.3))(vue@3.5.39(typescript@5.8.3))
+      '@mattiasbuelens/web-streams-adapter':
+        specifier: ^0.1.0
+        version: 0.1.0
       '@vue/devtools-api':
         specifier: 6.6.4
         version: 6.6.4
       '@vue/runtime-dom':
         specifier: ^3.5.17
         version: 3.5.39
+      bson:
+        specifier: ^6.10.3
+        version: 6.10.3
+      jwt-decode:
+        specifier: ^3.1.2
+        version: 3.1.2
+      lodash:
+        specifier: ^4.18.1
+        version: 4.18.1
       pinia:
         specifier: 2.1.7
         version: 2.1.7(typescript@5.8.3)(vue@3.5.39(typescript@5.8.3))
+      regenerator-runtime:
+        specifier: ^0.14.1
+        version: 0.14.1
+      text-encoding-shim:
+        specifier: ^1.0.5
+        version: 1.0.5
       vue:
         specifier: ^3.5.17
         version: 3.5.39(typescript@5.8.3)
+      web-streams-polyfill:
+        specifier: ^4.3.0
+        version: 4.3.0
     devDependencies:
       '@dcloudio/types':
         specifier: ^3.4.15
@@ -787,6 +820,9 @@ packages:
   '@cloudbase/database@1.4.3':
     resolution: {integrity: sha512-JzmdsGjy9LwzSQQ0Fv4OlNHNK61BRXdJSembTpy4408AQA3q2Ip3N5eB3v9OpAlFMvP/6MGmOQ/ZuUPKfJddJA==}
 
+  '@cloudbase/js-sdk@3.6.3':
+    resolution: {integrity: sha512-f9rz+nXPtF6tfF9BqpRWe65Re4mBjp4Uod/RtmIg0KOOEIrOEbhTGsHn8IkUCE77g41oJHp4/IneEyhFK729LA==}
+
   '@cloudbase/node-sdk@3.17.2':
     resolution: {integrity: sha512-74ekvRsdmeGch9hFHkQnjHPTEfk8k09iQFvI1aAo48ZsbLqK3czqj/3GoVpSkw5+eYe05tZV13Ct/kWiV5tuGg==}
     engines: {node: '>=12'}
@@ -812,6 +848,9 @@ packages:
 
   '@cloudbase/wx-cloud-client-sdk@1.7.1':
     resolution: {integrity: sha512-NzLOoYDAeoRh2lRjCtvr6yXu4KPVHqZtPxyv70e+3b2+dZIDE5S5gtU8daE7xS5u4TwPqKB/E2vmgRTYOsCS9w==}
+
+  '@cloudbase/wx-cloud-client-sdk@1.8.10':
+    resolution: {integrity: sha512-XtWR1zNwKUqnAK1psvhK93EUnZBWhVorUdA1lHNWyI661YsdpLcxPRiX+/yoIrTo24MJyd/KguSuHluq3hsHqA==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2201,6 +2240,10 @@ packages:
   bson@4.0.3:
     resolution: {integrity: sha512-7uBjjxwOSuGLmoqGI1UXWpDGc0K2WjR7dC6iaOg4iriNZo6M2EEBb8co4dEPJ5ArYCebPMie0ecgX0TWF+ZUrQ==}
     engines: {node: '>=6.9.0'}
+
+  bson@6.10.3:
+    resolution: {integrity: sha512-MTxGsqgYTwfshYWTRdmZRC+M7FnG1b4y7RO7p2k3X24Wq0yv1m77Wsj0BzlPzd/IowgESfsruQCUToa7vbOpPQ==}
+    engines: {node: '>=16.20.1'}
 
   buffer-equal-constant-time@1.0.1:
     resolution: {integrity: sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==}
@@ -4695,6 +4738,19 @@ snapshots:
       lodash.set: 4.3.2
       lodash.unset: 4.18.0
 
+  '@cloudbase/js-sdk@3.6.3':
+    dependencies:
+      '@cloudbase/adapter-interface': 0.7.1
+      '@cloudbase/adapter-wx_mp': 1.3.1
+      '@cloudbase/wx-cloud-client-sdk': 1.8.10
+      '@mattiasbuelens/web-streams-adapter': 0.1.0
+      bson: 6.10.3
+      jwt-decode: 3.1.2
+      lodash: 4.18.1
+      regenerator-runtime: 0.14.1
+      text-encoding-shim: 1.0.5
+      web-streams-polyfill: 4.3.0
+
   '@cloudbase/node-sdk@3.17.2(ws@8.21.0)':
     dependencies:
       '@cloudbase/ai': 2.30.0
@@ -4768,6 +4824,11 @@ snapshots:
 
   '@cloudbase/wx-cloud-client-sdk@1.7.1':
     dependencies:
+      core-js-pure: 3.49.0
+
+  '@cloudbase/wx-cloud-client-sdk@1.8.10':
+    dependencies:
+      '@cloudbase/adapter-wx_mp': 1.3.1
       core-js-pure: 3.49.0
 
   '@cspotcode/source-map-support@0.8.1':
@@ -6391,6 +6452,8 @@ snapshots:
     dependencies:
       buffer: 5.7.1
       long: 4.0.0
+
+  bson@6.10.3: {}
 
   buffer-equal-constant-time@1.0.1: {}
 

@@ -28,4 +28,12 @@ describe('native tab bar configuration', () => {
     expect(app).not.toContain('CODE_VERSION');
     expect(app).toContain('uni.removeTabBarBadge');
   });
+
+  it('centers only the fixed H5 tab bar without transforming its outer host', () => {
+    const app = readFileSync(new URL('./App.vue', import.meta.url), 'utf8');
+
+    expect(app).toContain('.uni-tabbar-bottom .uni-tabbar');
+    expect(app).toContain('.uni-tabbar-top .uni-tabbar');
+    expect(app).not.toContain('.uni-tabbar,\nuni-tabbar');
+  });
 });

@@ -19,16 +19,8 @@ export const useOrderStore = defineStore('orders', {
     async load() {
       const auth = useAuthStore();
       await auth.ensureGuest();
-      if (!auth.accountId) {
-        this.orders = [];
-        this.current = null;
-        this.savings = emptySavings();
-        return;
-      }
-      [this.orders, this.savings] = await Promise.all([
-        orderService.list(),
-        orderService.savings(),
-      ]);
+      this.orders = await orderService.list();
+      this.savings = auth.accountId ? await orderService.savings() : emptySavings();
     },
     save(order: VirtualOrder) {
       this.current = order;

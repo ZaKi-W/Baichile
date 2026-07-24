@@ -66,6 +66,21 @@ export class BaichileRouter {
       if (guestIdentity.visitorId) await this.mergeIdentity(guestIdentity.visitorId, session.accountId);
       return session;
     }
+    if (request.method === 'POST' && path === '/v1/auth/web-phone/session') {
+      if (!request.webUid) {
+        unauthorized('手机号登录态未通过 CloudBase 验证', 'WEB_PHONE_UNVERIFIED');
+      }
+      await this.enforceRateLimit(`web-phone-session:${request.webUid}`, 20, 60 * 60_000);
+      const guestIdentity = await this.services.auth.resolvePersistedIdentity(request.authorization);
+      const session = await this.services.auth.loginWebPhone(request.webUid, request.webPhoneNumber);
+      if (guestIdentity.visitorId) await this.mergeIdentity(guestIdentity.visitorId, session.accountId);
+      return session;
+    }
+    if (request.method === 'POST' && path === '/v1/auth/wechat-phone-bind') {
+      if (!request.openId) unauthorized('仅允许微信小程序绑定手机号', 'WECHAT_CONTEXT_REQUIRED');
+      await this.enforceRateLimit(`wechat-phone-bind:${request.openId}`, 10, 60 * 60_000);
+      return this.services.auth.bindWechatPhone(request.openId, readStringField(request.data, 'code'));
+    }
     if (request.method === 'POST' && path === '/v1/auth/wechat-phone') {
       if (!request.openId) unauthorized('仅允许微信小程序获取手机号', 'WECHAT_CONTEXT_REQUIRED');
       await this.enforceRateLimit(`wechat-phone:${request.openId}`, 10, 60 * 60_000);
@@ -89,67 +104,72 @@ export class BaichileRouter {
     }
 
     if (request.method === 'GET' && path === '/v1/map/reverse-geocode') {
-      await this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
+      await this.enforceRateLimit(`map:${request.openId ?? request.webUid ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.map.reverseGeocode(Number(request.query.get('lat')), Number(request.query.get('lng')));
     }
     if (request.method === 'GET' && path === '/v1/map/nearby') {
-      await this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
+      await this.enforceRateLimit(`map:${request.openId ?? request.webUid ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.map.nearbyPlaces(Number(request.query.get('lat')), Number(request.query.get('lng')));
     }
     if (request.method === 'GET' && path === '/v1/map/suggest') {
-      await this.enforceRateLimit(`map:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
+      await this.enforceRateLimit(`map:${request.openId ?? request.webUid ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
       return this.services.map.suggestPlaces(request.query.get('keyword') ?? '', request.query.get('region') ?? undefined);
     }
 
     if (request.method === 'GET' && path === '/v1/addresses/me') {
-      return this.services.addresses.list(await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId));
+      return this.services.addresses.list(await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid));
     }
     if (request.method === 'POST' && path === '/v1/addresses') {
-      return this.services.addresses.save(request.data as any, await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId));
+      return this.services.addresses.save(request.data as any, await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid));
     }
     if (request.method === 'POST' && segments[1] === 'addresses' && segments[3] === 'delete') {
-      return this.services.addresses.remove(decodeURIComponent(segments[2]), await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId));
+      return this.services.addresses.remove(decodeURIComponent(segments[2]), await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid));
     }
 
     if (request.method === 'POST' && path === '/v1/orders/quote') return this.services.orders.quote(request.data as any);
     if (request.method === 'POST' && path === '/v1/orders/virtual') {
-      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId);
-      if (!identity.accountId) unauthorized();
-      return this.services.orders.create(request.data as any, identity.accountId);
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid);
+      if (identity.accountId) return this.services.orders.create(request.data as any, identity);
+      if (request.openId || !identity.visitorId) unauthorized();
+      await this.enforceRateLimit(`guest-order:${identity.visitorId}`, 20, 60 * 60_000);
+      if (request.ipAddress) {
+        await this.enforceRateLimit(`guest-order-ip:${request.ipAddress}`, 60, 60 * 60_000);
+      }
+      return this.services.orders.create(request.data as any, identity);
     }
     if (request.method === 'GET' && path === '/v1/orders/me') {
-      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId);
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid);
       return this.services.orders.list(identity.visitorId, identity.accountId);
     }
     if (request.method === 'GET' && segments[1] === 'orders' && segments[2]) {
-      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId);
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid);
       return this.services.orders.find(decodeURIComponent(segments[2]), identity);
     }
 
     if (request.method === 'GET' && path === '/v1/accounts/me/savings') {
-      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId);
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid);
       return this.services.orders.savings(identity.accountId);
     }
     if (request.method === 'GET' && path === '/v1/accounts/me/wallet') {
-      const accountId = await this.requireAccount(request.authorization, request.openId);
+      const accountId = await this.requireAccount(request.authorization, request.openId, request.webUid);
       await this.services.orders.settleFailedOrders(accountId);
       return this.services.wallet.summary(accountId);
     }
     if (request.method === 'GET' && path === '/v1/accounts/me/wallet/transactions') {
-      const accountId = await this.requireAccount(request.authorization, request.openId);
+      const accountId = await this.requireAccount(request.authorization, request.openId, request.webUid);
       await this.services.orders.settleFailedOrders(accountId);
       return this.services.wallet.listTransactions(accountId);
     }
-    if (request.method === 'POST' && path === '/v1/accounts/me/check-in') return this.services.wallet.checkIn(await this.requireAccount(request.authorization, request.openId));
-    if (request.method === 'POST' && path === '/v1/shares') return this.services.shares.create(await this.requireAccount(request.authorization, request.openId), request.data as any);
+    if (request.method === 'POST' && path === '/v1/accounts/me/check-in') return this.services.wallet.checkIn(await this.requireAccount(request.authorization, request.openId, request.webUid));
+    if (request.method === 'POST' && path === '/v1/shares') return this.services.shares.create(await this.requireAccount(request.authorization, request.openId, request.webUid), request.data as any);
     if (request.method === 'GET' && segments[1] === 'shares' && segments[2]) return this.services.shares.landing(decodeURIComponent(segments[2]));
     if (request.method === 'POST' && segments[1] === 'shares' && segments[2] && segments[3] === 'initiated-reward') {
-      return this.services.shares.rewardInitiatedShare(await this.requireAccount(request.authorization, request.openId), decodeURIComponent(segments[2]));
+      return this.services.shares.rewardInitiatedShare(await this.requireAccount(request.authorization, request.openId, request.webUid), decodeURIComponent(segments[2]));
     }
 
     if (request.method === 'POST' && path === '/v1/analytics/events') {
-      await this.enforceRateLimit(`analytics:${request.openId ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
-      return this.services.analytics.record(request.data, request.authorization, request.openId);
+      await this.enforceRateLimit(`analytics:${request.openId ?? request.webUid ?? request.ipAddress ?? 'unknown'}`, 120, 60 * 60_000);
+      return this.services.analytics.record(request.data, request.authorization, request.openId, request.webUid);
     }
 
     badRequest('接口不存在', 'NOT_FOUND');
@@ -314,8 +334,8 @@ export class BaichileRouter {
     badRequest('后台接口不存在', 'NOT_FOUND');
   }
 
-  private async requireAccount(authorization?: string, openId?: string): Promise<string> {
-    const identity = await this.services.auth.resolvePersistedIdentity(authorization, openId);
+  private async requireAccount(authorization?: string, openId?: string, webUid?: string): Promise<string> {
+    const identity = await this.services.auth.resolvePersistedIdentity(authorization, openId, webUid);
     if (!identity.accountId) unauthorized();
     return identity.accountId;
   }
@@ -370,9 +390,21 @@ function normalizeRequest(event: CloudFunctionEvent, rawContext?: any): RequestC
     data: body.data ?? event.data,
     authorization: body.authorization ?? event.authorization ?? event.headers?.authorization ?? event.headers?.Authorization,
     openId: typeof rawContext?.OPENID === 'string' && rawContext.OPENID ? rawContext.OPENID : undefined,
-    ipAddress: event.headers?.['x-forwarded-for'] ?? event.headers?.['x-real-ip'],
+    webUid: typeof rawContext?.WEB_UID === 'string' && rawContext.WEB_UID ? rawContext.WEB_UID : undefined,
+    webPhoneNumber: typeof rawContext?.WEB_PHONE_NUMBER === 'string' && rawContext.WEB_PHONE_NUMBER
+      ? rawContext.WEB_PHONE_NUMBER
+      : undefined,
+    ipAddress: typeof rawContext?.CLIENT_IP === 'string' && rawContext.CLIENT_IP
+      ? rawContext.CLIENT_IP
+      : event.headers?.['x-forwarded-for'] ?? event.headers?.['x-real-ip'],
     origin: event.headers?.origin ?? event.headers?.Origin,
   };
+}
+
+function readStringField(value: unknown, field: string): string {
+  if (!value || typeof value !== 'object' || !(field in value)) return '';
+  const candidate = (value as Record<string, unknown>)[field];
+  return typeof candidate === 'string' ? candidate : '';
 }
 
 function normalizePath(path: string): string {

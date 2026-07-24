@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AdminAuditService, AdminAuthService, AdminMutationService } from './admin-services';
 import { collections } from './collections';
 import { MemoryDatabase } from './database';
-import type { MenuItemDoc, StoreDoc, VirtualOrderDoc, WalletTransactionDoc } from './models';
+import type { AccountDoc, AddressDoc, MenuItemDoc, StoreDoc, VirtualOrderDoc, WalletTransactionDoc } from './models';
 import { BaichileRouter } from './router';
 import { BaichileCloudServices } from './services';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function activeStore(overrides: Partial<StoreDoc> = {}): StoreDoc {
   const now = new Date().toISOString();
@@ -290,6 +294,37 @@ describe('order detail snapshots', () => {
   });
 });
 
+describe('guest and account order settlement', () => {
+  it('creates guest simulations without a wallet and keeps account orders on virtual balance', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem());
+    const services = new BaichileCloudServices(db);
+    const guest = await services.auth.createGuest();
+    const request = {
+      storeId: 'store_1',
+      virtualDestinationId: 'addr_1',
+      lines: [{ menuItemId: 'dish_1', optionIds: [], quantity: 1 }],
+    };
+
+    const guestOrder = await services.orders.create(request, { visitorId: guest.visitorId });
+
+    expect(guestOrder.settlementMode).toBe('guest_simulation');
+    expect(guestOrder.paymentMethod).toBeUndefined();
+    expect(await db.collection<AccountDoc>(collections.accounts).count()).toBe(0);
+    expect(await db.collection<WalletTransactionDoc>(collections.walletTransactions).count()).toBe(0);
+
+    await services.auth.ensureAccount('account_order');
+    const before = await services.wallet.summary('account_order');
+    const accountOrder = await services.orders.create(request, { accountId: 'account_order' });
+    const after = await services.wallet.summary('account_order');
+
+    expect(accountOrder.settlementMode).toBe('virtual_balance');
+    expect(accountOrder.paymentMethod).toBe('virtual_balance');
+    expect(after.balanceCents).toBe(before.balanceCents - accountOrder.totalCents);
+  });
+});
+
 describe('wallet idempotency', () => {
   it('uses a deterministic daily check-in transaction id', async () => {
     const db = new MemoryDatabase();
@@ -308,6 +343,21 @@ describe('wallet idempotency', () => {
 });
 
 describe('share snapshots', () => {
+  it('masks a phone-only account in public share identity', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_phone_share', {
+      phoneHash: 'phone-hash',
+      phoneNumber: '13800138000',
+      nickname: '13800138000',
+    });
+
+    const card = await services.shares.create('account_phone_share', { kind: 'persona', showIdentity: true });
+    const landing = await services.shares.landing(card.token);
+
+    expect(landing.identity?.nickname).toBe('138****8000');
+  });
+
   it('creates a stable persona share with optional anonymous identity', async () => {
     const db = new MemoryDatabase();
     const services = new BaichileCloudServices(db);
@@ -461,6 +511,103 @@ describe('share snapshots', () => {
     expect(landing.completedOrderCount).toBe(2);
     expect(landing.savedMoneyCents).toBe(4200);
     expect(landing.savedCaloriesKcal).toBe(1600);
+  });
+});
+
+describe('phone account merge', () => {
+  it('keeps the WeChat account canonical and is idempotent', async () => {
+    const previousAppId = process.env.WECHAT_MINI_APP_ID;
+    const previousSecret = process.env.WECHAT_MINI_APP_SECRET;
+    process.env.WECHAT_MINI_APP_ID = 'wx-test';
+    process.env.WECHAT_MINI_APP_SECRET = 'secret-test';
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/stable_token')) {
+        return new Response(JSON.stringify({ access_token: 'wechat-access-token', expires_in: 7200 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        errcode: 0,
+        phone_info: { phoneNumber: '13800138000', purePhoneNumber: '13800138000', countryCode: '86' },
+      }), { status: 200 });
+    }));
+    try {
+      const db = new MemoryDatabase();
+      const services = new BaichileCloudServices(db);
+      const wechat = await services.auth.loginWechatMini({
+        code: 'wechat-code',
+        profile: { nickname: '小程序昵称', avatarUrl: 'https://example.com/wechat.png' },
+      }, 'wechat-openid');
+      const phone = await services.auth.loginWebPhone('web-phone-uid', '13800138000');
+      await db.collection<VirtualOrderDoc>(collections.virtualOrders).insert(shareableOrder({
+        _id: 'web_order',
+        id: 'web_order',
+        accountId: phone.accountId,
+        settlementMode: 'virtual_balance',
+      }));
+      await db.collection<AddressDoc>(collections.addresses).insert({
+        _id: 'addr_wechat',
+        id: 'addr_wechat',
+        visitorId: null,
+        accountId: wechat.accountId,
+        name: '小白',
+        phone: '13800138000',
+        address: '上海市测试路 1 号',
+        detail: '101',
+        tag: '家',
+        lat: 31.2,
+        lng: 121.4,
+        isDefault: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      });
+      await db.collection<AddressDoc>(collections.addresses).insert({
+        _id: 'addr_web_duplicate',
+        id: 'addr_web_duplicate',
+        visitorId: null,
+        accountId: phone.accountId,
+        name: 'Web 用户',
+        phone: '13800138000',
+        address: '上海市测试路 1 号',
+        detail: '101',
+        tag: '家',
+        lat: 31.2,
+        lng: 121.4,
+        isDefault: true,
+        createdAt: '2026-01-02T00:00:00.000Z',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      });
+
+      const first = await services.auth.bindWechatPhone('wechat-openid', 'phone-code');
+      const balanceAfterFirst = (await services.wallet.summary(wechat.accountId)).balanceCents;
+      const second = await services.auth.bindWechatPhone('wechat-openid', 'phone-code-2');
+
+      expect(first.merged).toBe(true);
+      expect(first.migrated.orders).toBe(1);
+      expect(first.migrated.addresses).toBe(1);
+      expect(first.migrated.walletTransactions).toBe(1);
+      expect(first.session.profile).toEqual({
+        nickname: '小程序昵称',
+        avatarUrl: 'https://example.com/wechat.png',
+      });
+      expect(balanceAfterFirst).toBe(600_000);
+      expect(second.merged).toBe(false);
+      expect((await services.wallet.summary(wechat.accountId)).balanceCents).toBe(balanceAfterFirst);
+      expect(await db.collection<AddressDoc>(collections.addresses).count({ accountId: wechat.accountId })).toBe(1);
+      expect(await db.collection<VirtualOrderDoc>(collections.virtualOrders).get('web_order'))
+        .toMatchObject({ accountId: wechat.accountId });
+      expect(await db.collection<AccountDoc>(collections.accounts).get(phone.accountId))
+        .toMatchObject({ status: 'disabled', mergedIntoAccountId: wechat.accountId, balanceCents: 0 });
+      const transactions = await db.collection<WalletTransactionDoc>(collections.walletTransactions)
+        .list({ where: { accountId: wechat.accountId }, orderBy: [['createdAt', 'asc']] });
+      const chronological = transactions
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+      expect(chronological.map((row) => row.balanceAfterCents)).toEqual([300_000, 600_000]);
+    } finally {
+      if (previousAppId === undefined) delete process.env.WECHAT_MINI_APP_ID;
+      else process.env.WECHAT_MINI_APP_ID = previousAppId;
+      if (previousSecret === undefined) delete process.env.WECHAT_MINI_APP_SECRET;
+      else process.env.WECHAT_MINI_APP_SECRET = previousSecret;
+    }
   });
 });
 

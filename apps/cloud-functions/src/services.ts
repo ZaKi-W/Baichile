@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type {
+  AccountMergeSummary,
   AccountSavings,
   AccountSession,
   Address,
@@ -24,6 +25,7 @@ import type {
   WalletSummary,
   WalletTransaction,
   WechatMiniLoginRequest,
+  WechatPhoneBindResult,
   WechatPhoneResult,
 } from '@baichile/api-contract';
 import type { DeliveryIncidentKey } from '@baichile/domain';
@@ -78,6 +80,7 @@ const DELIVERY_START_MS = ORDER_STEP_TIMES.at(-1)!;
 const MIN_DELIVERY_DURATION_MS = 45_000;
 const MAX_DELIVERY_DURATION_MS = 90_000;
 const PAYMENT_METHOD: VirtualOrder['paymentMethod'] = 'virtual_balance';
+const DEFAULT_PHONE_AVATAR = '/static/tabbar/profile.svg';
 
 async function listAll<T extends Record<string, any>>(
   collection: CollectionStore<T>,
@@ -139,13 +142,25 @@ export class AuthService {
     return {};
   }
 
-  async resolvePersistedIdentity(authorization?: string, openId?: string) {
+  async resolvePersistedIdentity(
+    authorization?: string,
+    openId?: string,
+    webUid?: string,
+  ): Promise<{ visitorId?: string; accountId?: string }> {
     if (openId) {
-      const digest = createHash('sha256').update(openId).digest('hex');
+      const digest = sha256(openId);
       const account = await this.db.collection<AccountDoc>(collections.accounts).findOne({ wechatOpenIdHash: digest });
       if (!account) return {};
       if (account.status === 'disabled') unauthorized('账号已被禁用', 'ACCOUNT_DISABLED');
       return { accountId: account.id };
+    }
+    if (webUid) {
+      const account = await this.db.collection<AccountDoc>(collections.accounts)
+        .findOne({ webAuthUidHash: sha256(webUid) });
+      if (account) {
+        if (account.status === 'disabled') unauthorized('账号已被禁用', 'ACCOUNT_DISABLED');
+        return { accountId: account.id };
+      }
     }
     const identity = this.resolveGuestIdentity(authorization);
     if (!identity.visitorId) return {};
@@ -162,6 +177,10 @@ export class AuthService {
       _id: accountId,
       id: accountId,
       wechatOpenIdHash: null,
+      webAuthUidHash: null,
+      phoneHash: null,
+      phoneNumber: null,
+      mergedIntoAccountId: null,
       nickname: null,
       avatarUrl: null,
       balanceCents: 0,
@@ -198,7 +217,7 @@ export class AuthService {
     const appId = process.env.WECHAT_MINI_APP_ID;
     const appSecret = process.env.WECHAT_MINI_APP_SECRET;
     const resolvedOpenId = openId || await this.resolveWechatOpenId(input.code, appId, appSecret);
-    const digest = createHash('sha256').update(resolvedOpenId).digest('hex');
+    const digest = sha256(resolvedOpenId);
     const accounts = this.db.collection<AccountDoc>(collections.accounts);
     const existing = await accounts.findOne({ wechatOpenIdHash: digest });
     const accountId = existing?.id ?? `account_${digest.slice(0, 24)}`;
@@ -218,6 +237,10 @@ export class AuthService {
           _id: accountId,
           id: accountId,
           wechatOpenIdHash: digest,
+          webAuthUidHash: null,
+          phoneHash: null,
+          phoneNumber: null,
+          mergedIntoAccountId: null,
           nickname: profile.nickname,
           avatarUrl: profile.avatarUrl,
           balanceCents: 0,
@@ -234,6 +257,136 @@ export class AuthService {
     });
     if (!existing) await this.services.shares.completeReferral(accountId, input.referralToken);
     return { accountId, accessToken: '', provider: 'wechat', profile };
+  }
+
+  async loginWebPhone(webUid: string, verifiedPhone?: string): Promise<AccountSession> {
+    const uid = webUid.trim();
+    if (!uid) unauthorized('未检测到可信的 Web 登录身份', 'WEB_PHONE_UNVERIFIED');
+    const accounts = this.db.collection<AccountDoc>(collections.accounts);
+    const webAuthUidHash = sha256(uid);
+    const byUid = await accounts.findOne({ webAuthUidHash });
+    const phoneNumber = verifiedPhone
+      ? normalizeChinaPhone(verifiedPhone)
+      : byUid?.phoneNumber
+        ? normalizeChinaPhone(byUid.phoneNumber)
+        : unauthorized('手机号登录态未通过 CloudBase 验证', 'WEB_PHONE_UNVERIFIED');
+    const phoneHash = sha256(`+86${phoneNumber}`);
+    const byPhone = await accounts.findOne({ phoneHash });
+    if (byUid && byPhone && byUid.id !== byPhone.id) {
+      conflict('手机号身份存在冲突，请稍后重试', 'PHONE_IDENTITY_CONFLICT');
+    }
+    let account = byUid ?? byPhone;
+    if (account?.status === 'disabled' && account.mergedIntoAccountId) {
+      account = await accounts.get(account.mergedIntoAccountId);
+    }
+    if (account?.status === 'disabled') unauthorized('账号已被禁用', 'ACCOUNT_DISABLED');
+
+    const accountId = account?.id ?? `account_phone_${phoneHash.slice(0, 24)}`;
+    await this.db.transaction(async (tx) => {
+      const txAccounts = tx.collection<AccountDoc>(collections.accounts);
+      const now = tx.now().toISOString();
+      const current = await txAccounts.get(accountId);
+      if (current) {
+        if (current.phoneHash && current.phoneHash !== phoneHash) {
+          conflict('该 Web 身份已绑定其他手机号', 'PHONE_IDENTITY_CONFLICT');
+        }
+        await txAccounts.update(accountId, {
+          webAuthUidHash,
+          phoneHash,
+          phoneNumber,
+          nickname: current.wechatOpenIdHash ? current.nickname : phoneNumber,
+          avatarUrl: current.wechatOpenIdHash ? current.avatarUrl : null,
+          mergedIntoAccountId: null,
+          updatedAt: now,
+        });
+      } else {
+        await txAccounts.insert({
+          _id: accountId,
+          id: accountId,
+          wechatOpenIdHash: null,
+          webAuthUidHash,
+          phoneHash,
+          phoneNumber,
+          mergedIntoAccountId: null,
+          nickname: phoneNumber,
+          avatarUrl: null,
+          balanceCents: 0,
+          status: 'active',
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      await this.services.wallet.initializeAccount(accountId, tx);
+    });
+    return {
+      accountId,
+      accessToken: '',
+      provider: 'phone',
+      profile: { nickname: phoneNumber, avatarUrl: DEFAULT_PHONE_AVATAR },
+    };
+  }
+
+  async bindWechatPhone(openId: string, code: string): Promise<WechatPhoneBindResult> {
+    const openIdHash = sha256(openId);
+    const phone = await this.getWechatPhoneNumber(code);
+    const phoneNumber = normalizeChinaPhone(phone.phoneNumber || phone.purePhoneNumber);
+    const phoneHash = sha256(`+86${phoneNumber}`);
+    const accounts = this.db.collection<AccountDoc>(collections.accounts);
+    const wechatAccount = await accounts.findOne({ wechatOpenIdHash: openIdHash });
+    if (!wechatAccount) unauthorized('请先完成微信登录', 'WECHAT_ACCOUNT_REQUIRED');
+    if (wechatAccount.status === 'disabled') unauthorized('账号已被禁用', 'ACCOUNT_DISABLED');
+    if (wechatAccount.phoneHash && wechatAccount.phoneHash !== phoneHash) {
+      conflict('当前微信账号已绑定其他手机号', 'PHONE_ALREADY_BOUND');
+    }
+    const phoneAccount = await accounts.findOne({ phoneHash });
+    if (phoneAccount?.wechatOpenIdHash && phoneAccount.wechatOpenIdHash !== openIdHash) {
+      conflict('该手机号已绑定其他微信账号', 'PHONE_ALREADY_BOUND');
+    }
+
+    const emptySummary = emptyAccountMergeSummary();
+    const result = await this.db.transaction(async (tx) => {
+      const target = await tx.collection<AccountDoc>(collections.accounts).get(wechatAccount.id);
+      if (!target) notFound('微信账号不存在', 'ACCOUNT_NOT_FOUND');
+      const source = phoneAccount && phoneAccount.id !== target.id
+        ? await tx.collection<AccountDoc>(collections.accounts).get(phoneAccount.id)
+        : null;
+      if (source?.wechatOpenIdHash && source.wechatOpenIdHash !== openIdHash) {
+        conflict('该手机号已绑定其他微信账号', 'PHONE_ALREADY_BOUND');
+      }
+      if (source?.webAuthUidHash && target.webAuthUidHash && source.webAuthUidHash !== target.webAuthUidHash) {
+        conflict('当前微信账号已关联其他 Web 身份', 'PHONE_IDENTITY_CONFLICT');
+      }
+      const migrated = source
+        ? await this.mergeAccountInto(tx, source, target)
+        : emptySummary;
+      const latestTarget = await tx.collection<AccountDoc>(collections.accounts).get(target.id);
+      if (!latestTarget) notFound('微信账号不存在', 'ACCOUNT_NOT_FOUND');
+      await tx.collection<AccountDoc>(collections.accounts).update(target.id, {
+        phoneHash,
+        phoneNumber,
+        webAuthUidHash: source?.webAuthUidHash ?? latestTarget.webAuthUidHash ?? null,
+        mergedIntoAccountId: null,
+        updatedAt: tx.now().toISOString(),
+      });
+      return { migrated, merged: Boolean(source) };
+    });
+
+    const updated = await accounts.get(wechatAccount.id);
+    if (!updated) notFound('微信账号不存在', 'ACCOUNT_NOT_FOUND');
+    return {
+      session: {
+        accountId: updated.id,
+        accessToken: '',
+        provider: 'wechat',
+        profile: {
+          nickname: updated.nickname || '微信用户',
+          avatarUrl: updated.avatarUrl || DEFAULT_PHONE_AVATAR,
+        },
+      },
+      phoneNumber,
+      merged: result.merged,
+      migrated: result.migrated,
+    };
   }
 
   async getWechatPhoneNumber(code: string): Promise<WechatPhoneResult> {
@@ -255,7 +408,7 @@ export class AuthService {
   }
 
   async uploadAvatar(openId: string, contentBase64: string): Promise<{ fileID: string }> {
-    const digest = createHash('sha256').update(openId).digest('hex');
+    const digest = sha256(openId);
     const account = await this.db.collection<AccountDoc>(collections.accounts).findOne({ wechatOpenIdHash: digest });
     const fileID = await uploadValidatedAvatar(openId, contentBase64);
     if (account?.avatarUrl && account.avatarUrl !== fileID) await removeCloudFiles([account.avatarUrl]);
@@ -269,6 +422,91 @@ export class AuthService {
       accountId,
       createdAt: db.now().toISOString(),
     });
+  }
+
+  private async mergeAccountInto(
+    db: Database,
+    source: AccountDoc,
+    target: AccountDoc,
+  ): Promise<AccountMergeSummary> {
+    if (source.id === target.id || source.mergedIntoAccountId === target.id) return emptyAccountMergeSummary();
+    const migrated = emptyAccountMergeSummary();
+    const now = db.now().toISOString();
+
+    const visitorSessions = db.collection<VisitorSessionDoc>(collections.visitorSessions);
+    const sourceVisitors = await listAll(visitorSessions, { where: { accountId: source.id } });
+    for (const row of sourceVisitors) {
+      await visitorSessions.update(row.id, { accountId: target.id });
+    }
+    migrated.visitorSessions = sourceVisitors.length;
+
+    const orders = db.collection<VirtualOrderDoc>(collections.virtualOrders);
+    const sourceOrders = await listAll(orders, { where: { accountId: source.id } });
+    for (const row of sourceOrders) {
+      await orders.update(row.id, { accountId: target.id, updatedAt: now });
+    }
+    migrated.orders = sourceOrders.length;
+
+    migrated.addresses = await mergeAccountAddresses(db, source.id, target.id);
+
+    const walletTransactions = db.collection<WalletTransactionDoc>(collections.walletTransactions);
+    const [targetTransactions, sourceTransactions] = await Promise.all([
+      listAll(walletTransactions, { where: { accountId: target.id } }),
+      listAll(walletTransactions, { where: { accountId: source.id } }),
+    ]);
+    for (const row of sourceTransactions) {
+      await walletTransactions.update(row.id, { accountId: target.id });
+    }
+    const allTransactions = [...targetTransactions, ...sourceTransactions]
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+    const mergedBalanceCents = target.balanceCents + source.balanceCents;
+    let runningBalance = mergedBalanceCents - allTransactions.reduce((sum, row) => sum + row.amountCents, 0);
+    for (const row of allTransactions) {
+      runningBalance += row.amountCents;
+      await walletTransactions.update(row.id, { balanceAfterCents: runningBalance });
+    }
+    migrated.walletTransactions = sourceTransactions.length;
+
+    const shareInvites = db.collection<ShareInviteDoc>(collections.shareInvites);
+    const startedShares = await listAll(shareInvites, { where: { inviterAccountId: source.id } });
+    for (const row of startedShares) {
+      await shareInvites.update(row.token, { inviterAccountId: target.id });
+    }
+    const sourceInvitee = await shareInvites.findOne({ inviteeAccountId: source.id });
+    if (sourceInvitee) {
+      const targetInvitee = await shareInvites.findOne({ inviteeAccountId: target.id });
+      await shareInvites.update(sourceInvitee.token, {
+        inviteeAccountId: targetInvitee ? null : target.id,
+      });
+    }
+    migrated.shareInvites = startedShares.length + (sourceInvitee ? 1 : 0);
+
+    const analytics = db.collection<AnalyticsEventDoc>(collections.analyticsEvents);
+    const sourceEvents = await listAll(analytics, { where: { accountId: source.id } });
+    for (const row of sourceEvents) {
+      await analytics.update(row.id, { accountId: target.id });
+    }
+    migrated.analyticsEvents = sourceEvents.length;
+
+    const accounts = db.collection<AccountDoc>(collections.accounts);
+    await accounts.update(source.id, {
+      webAuthUidHash: null,
+      phoneHash: null,
+      phoneNumber: null,
+      balanceCents: 0,
+      status: 'disabled',
+      mergedIntoAccountId: target.id,
+      updatedAt: now,
+    });
+    await accounts.update(target.id, {
+      webAuthUidHash: target.webAuthUidHash ?? source.webAuthUidHash ?? null,
+      phoneHash: target.phoneHash ?? source.phoneHash ?? null,
+      phoneNumber: target.phoneNumber ?? source.phoneNumber ?? null,
+      balanceCents: mergedBalanceCents,
+      mergedIntoAccountId: null,
+      updatedAt: now,
+    });
+    return migrated;
   }
 
   private async resolveWechatOpenId(code: string, appId?: string, appSecret?: string): Promise<string> {
@@ -581,8 +819,13 @@ export class OrderService {
     };
   }
 
-  async create(request: QuoteRequest, accountId: string): Promise<VirtualOrder> {
-    await this.wallet.initializeAccount(accountId);
+  async create(
+    request: QuoteRequest,
+    subject: string | { visitorId?: string; accountId?: string },
+  ): Promise<VirtualOrder> {
+    const identity = typeof subject === 'string' ? { accountId: subject } : subject;
+    if (!identity.accountId && !identity.visitorId) unauthorized();
+    if (identity.accountId) await this.wallet.initializeAccount(identity.accountId);
     const quote = await this.quote(request);
     const store = await this.catalog.find(request.storeId);
     const id = randomUUID();
@@ -598,11 +841,13 @@ export class OrderService {
       ...quote,
       id,
       isVirtual: true,
-      accountId,
+      visitorId: identity.visitorId,
+      accountId: identity.accountId,
+      settlementMode: identity.accountId ? 'virtual_balance' : 'guest_simulation',
       virtualDestinationId: request.virtualDestinationId,
       storeName: store.name,
       deliveryAddress,
-      paymentMethod: PAYMENT_METHOD,
+      paymentMethod: identity.accountId ? PAYMENT_METHOD : undefined,
       status: 'created',
       startedAt: createdAt,
       createdAt,
@@ -611,7 +856,7 @@ export class OrderService {
       route,
       incident,
       failedAt: incident?.failedAt,
-      refundStatus: incident ? 'pending' : undefined,
+      refundStatus: incident && identity.accountId ? 'pending' : undefined,
       easterEgg,
     };
     await this.db.transaction(async (tx) => {
@@ -619,8 +864,9 @@ export class OrderService {
       await tx.collection<VirtualOrderDoc>(collections.virtualOrders).insert({
         _id: id,
         id,
-        visitorId: null,
-        accountId,
+        visitorId: identity.visitorId ?? null,
+        accountId: identity.accountId ?? null,
+        settlementMode: order.settlementMode,
         status: order.status,
         storeId: order.storeId,
         storeName: order.storeName,
@@ -647,7 +893,9 @@ export class OrderService {
         createdAt: order.createdAt,
         updatedAt: now,
       });
-      await this.wallet.debitOrder(tx, accountId, order.totalCents, id);
+      if (identity.accountId) {
+        await this.wallet.debitOrder(tx, identity.accountId, order.totalCents, id);
+      }
     });
     return order;
   }
@@ -685,7 +933,7 @@ export class OrderService {
     const rows = await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).list({ where: { accountId } });
     return rows.reduce<AccountSavings>((summary, row) => {
       if (this.currentStatus(row) !== 'completed') return summary;
-      summary.savedMoneyCents += row.totalCents;
+      if (this.settlementMode(row) === 'virtual_balance') summary.savedMoneyCents += row.totalCents;
       summary.savedCaloriesKcal += row.itemsTotalCaloriesKcal;
       summary.completedOrderCount += 1;
       return summary;
@@ -727,13 +975,14 @@ export class OrderService {
     return {
       id: row.id,
       isVirtual: true,
-      visitorId: row.visitorId ?? 'anonymous',
+      visitorId: row.visitorId ?? undefined,
       accountId: row.accountId ?? undefined,
+      settlementMode: this.settlementMode(row),
       storeId: row.storeId,
       virtualDestinationId: row.destinationId,
       storeName: row.storeName ?? undefined,
       deliveryAddress: isDeliveryAddressSnapshot(row.deliveryAddress) ? row.deliveryAddress : undefined,
-      paymentMethod: PAYMENT_METHOD,
+      paymentMethod: this.settlementMode(row) === 'virtual_balance' ? PAYMENT_METHOD : undefined,
       status: this.currentStatus(row),
       startedAt: row.startedAt,
       createdAt: row.createdAt || row.startedAt,
@@ -748,7 +997,9 @@ export class OrderService {
       route: row.route as VirtualRoute,
       incident,
       failedAt: row.failedAt ?? undefined,
-      refundStatus: incident ? (row.refundedAt ? 'refunded' : 'pending') : undefined,
+      refundStatus: incident && this.settlementMode(row) === 'virtual_balance'
+        ? (row.refundedAt ? 'refunded' : 'pending')
+        : undefined,
       easterEgg: this.currentStatus(row) === 'completed' ? row.easterEgg ?? undefined : undefined,
     };
   }
@@ -764,6 +1015,12 @@ export class OrderService {
       if (elapsed >= ORDER_STEP_TIMES[index]) return ['created', 'merchant_accepted', 'preparing', 'rider_assigned', 'picked_up', 'delivering'][index] as DeliveryStatus;
     }
     return 'created';
+  }
+
+  private settlementMode(row: VirtualOrderDoc): VirtualOrder['settlementMode'] {
+    return row.settlementMode === 'guest_simulation' || (!row.accountId && row.visitorId)
+      ? 'guest_simulation'
+      : 'virtual_balance';
   }
 
   private route(id: string, requestedDestination?: GeoPoint): VirtualRoute {
@@ -851,10 +1108,7 @@ export class AddressService {
   }
 
   async merge(visitorId: string, accountId: string, db = this.db) {
-    const addresses = db.collection<AddressDoc>(collections.addresses);
-    const rows = await addresses.list({ where: { visitorId } });
-    await Promise.all(rows.map((row) => addresses.update(row.id, { visitorId: null, accountId, updatedAt: db.now().toISOString() })));
-    return { merged: rows.length };
+    return { merged: await mergeVisitorAddresses(db, visitorId, accountId) };
   }
 }
 
@@ -987,7 +1241,7 @@ export class ShareService {
     const orders = db.collection<VirtualOrderDoc>(collections.virtualOrders);
     const account = await db.collection<AccountDoc>(collections.accounts).get(accountId);
     const identity = input.showIdentity === false ? undefined : {
-      nickname: account?.nickname || '一位白吃选手',
+      nickname: publicAccountNickname(account),
       avatarUrl: account?.avatarUrl || '',
     };
     if (input.kind === 'order' || input.kind === 'order_egg') {
@@ -1019,7 +1273,7 @@ export class ShareService {
         storeName: order.storeName || '神秘小馆',
         orderLines: order.lines as VirtualOrder['lines'],
         dishNames: (order.lines as VirtualOrder['lines']).map((line) => line.name),
-        savedMoneyCents: order.totalCents,
+        savedMoneyCents: order.settlementMode === 'guest_simulation' ? 0 : order.totalCents,
         savedCaloriesKcal: order.itemsTotalCaloriesKcal,
         completedOrderCount: 1,
         ...(input.kind === 'order_egg' ? { easterEgg } : {}),
@@ -1029,7 +1283,9 @@ export class ShareService {
     const rows = (await orders.list({ where: { accountId } })).filter((order) => (
       order.status !== 'failed' && Date.now() >= new Date(order.startedAt).getTime() + DELIVERY_START_MS + order.durationMs
     ));
-    const savedMoneyCents = rows.reduce((sum, order) => sum + order.totalCents, 0);
+    const savedMoneyCents = rows.reduce((sum, order) => (
+      sum + (order.settlementMode === 'guest_simulation' ? 0 : order.totalCents)
+    ), 0);
     const savedCaloriesKcal = rows.reduce((sum, order) => sum + order.itemsTotalCaloriesKcal, 0);
     const completedOrderCount = rows.length;
     const allLines = rows.flatMap((order) => order.lines as VirtualOrder['lines']);
@@ -1087,13 +1343,13 @@ function virtualDeliveryDurationMs(minutes: number, seed: string): number {
 export class AnalyticsService {
   constructor(private readonly db: Database, private readonly auth: AuthService) {}
 
-  async record(body: unknown, authorization?: string, openId?: string) {
+  async record(body: unknown, authorization?: string, openId?: string, webUid?: string) {
     const input = body && typeof body === 'object' ? body as Record<string, unknown> : {};
     const eventName = typeof input.eventName === 'string' ? input.eventName.trim() : '';
     if (!eventName || eventName.length > 64 || !/^[a-zA-Z0-9._-]+$/.test(eventName)) badRequest('eventName 格式不正确');
     const payload = input.payload && typeof input.payload === 'object' ? input.payload as Record<string, unknown> : {};
     if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > 8_192) badRequest('埋点数据过大', 'PAYLOAD_TOO_LARGE');
-    const identity = await this.auth.resolvePersistedIdentity(authorization, openId);
+    const identity = await this.auth.resolvePersistedIdentity(authorization, openId, webUid);
     const id = randomUUID();
     await this.db.collection<AnalyticsEventDoc>(collections.analyticsEvents).insert({
       _id: id,
@@ -1248,6 +1504,114 @@ function toAddress(row: AddressDoc): Address {
 function belongsTo(row: AddressDoc, identity: { visitorId?: string; accountId?: string }) {
   return Boolean((identity.accountId && row.accountId === identity.accountId)
     || (identity.visitorId && row.visitorId === identity.visitorId));
+}
+
+function emptyAccountMergeSummary(): AccountMergeSummary {
+  return {
+    orders: 0,
+    visitorSessions: 0,
+    addresses: 0,
+    walletTransactions: 0,
+    shareInvites: 0,
+    analyticsEvents: 0,
+  };
+}
+
+async function mergeVisitorAddresses(db: Database, visitorId: string, accountId: string): Promise<number> {
+  const addresses = db.collection<AddressDoc>(collections.addresses);
+  const [sourceRows, targetRows] = await Promise.all([
+    listAll(addresses, { where: { visitorId }, orderBy: [['createdAt', 'asc']] }),
+    listAll(addresses, { where: { accountId }, orderBy: [['createdAt', 'asc']] }),
+  ]);
+  return mergeAddressRows(db, sourceRows, targetRows, accountId);
+}
+
+async function mergeAccountAddresses(db: Database, sourceAccountId: string, targetAccountId: string): Promise<number> {
+  const addresses = db.collection<AddressDoc>(collections.addresses);
+  const [sourceRows, targetRows] = await Promise.all([
+    listAll(addresses, { where: { accountId: sourceAccountId }, orderBy: [['createdAt', 'asc']] }),
+    listAll(addresses, { where: { accountId: targetAccountId }, orderBy: [['createdAt', 'asc']] }),
+  ]);
+  return mergeAddressRows(db, sourceRows, targetRows, targetAccountId);
+}
+
+async function mergeAddressRows(
+  db: Database,
+  sourceRows: AddressDoc[],
+  targetRows: AddressDoc[],
+  targetAccountId: string,
+): Promise<number> {
+  if (!sourceRows.length) return 0;
+  const addresses = db.collection<AddressDoc>(collections.addresses);
+  const rowsByKey = new Map(targetRows.map((row) => [addressMergeKey(row), row]));
+  const targetDefault = targetRows.find((row) => row.isDefault);
+  let preferredDefaultId = targetDefault?.id;
+
+  for (const row of sourceRows) {
+    const duplicate = rowsByKey.get(addressMergeKey(row));
+    if (duplicate) {
+      if (!preferredDefaultId && row.isDefault) preferredDefaultId = duplicate.id;
+      await addresses.remove(row.id);
+      continue;
+    }
+    await addresses.update(row.id, {
+      visitorId: null,
+      accountId: targetAccountId,
+      isDefault: false,
+      updatedAt: db.now().toISOString(),
+    });
+    rowsByKey.set(addressMergeKey(row), { ...row, visitorId: null, accountId: targetAccountId, isDefault: false });
+    if (!preferredDefaultId && row.isDefault) preferredDefaultId = row.id;
+  }
+
+  const mergedRows = await addresses.list({
+    where: { accountId: targetAccountId },
+    orderBy: [['createdAt', 'asc']],
+  });
+  preferredDefaultId ??= mergedRows[0]?.id;
+  for (const row of mergedRows) {
+    const shouldBeDefault = row.id === preferredDefaultId;
+    if (row.isDefault !== shouldBeDefault) {
+      await addresses.update(row.id, { isDefault: shouldBeDefault, updatedAt: db.now().toISOString() });
+    }
+  }
+  return sourceRows.length;
+}
+
+function addressMergeKey(row: Pick<AddressDoc, 'phone' | 'address' | 'detail'>): string {
+  return [row.phone, row.address, row.detail]
+    .map((value) => value.trim().replace(/\s+/g, ' ').toLowerCase())
+    .join('\n');
+}
+
+function publicAccountNickname(account: AccountDoc | null): string {
+  if (!account) return '一位白吃选手';
+  if (account.phoneNumber && (!account.wechatOpenIdHash || account.nickname === account.phoneNumber)) {
+    return maskPhoneNumber(account.phoneNumber);
+  }
+  return account.nickname || '一位白吃选手';
+}
+
+export function normalizeChinaPhone(input: string): string {
+  const compact = String(input ?? '').trim().replace(/[\s-]/g, '');
+  const national = compact.startsWith('+86')
+    ? compact.slice(3)
+    : compact.startsWith('86') && compact.length === 13
+      ? compact.slice(2)
+      : compact;
+  if (!/^1[3-9]\d{9}$/.test(national)) {
+    badRequest('仅支持中国大陆 +86 手机号', 'INVALID_PHONE_NUMBER');
+  }
+  return national;
+}
+
+export function maskPhoneNumber(input: string): string {
+  const phone = normalizeChinaPhone(input);
+  return `${phone.slice(0, 3)}****${phone.slice(-4)}`;
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function validateProfile(profile: UserProfile | undefined, code: string) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { onShow } from '@dcloudio/uni-app';
-import { useAuthStore } from '../../stores/auth';
+import { computed, ref } from 'vue';
+import { onShow, onUnload } from '@dcloudio/uni-app';
+import { isWebPlatform, useAuthStore, type LoginContinuation } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { useAddressStore } from '../../stores/address';
 import { useWalletStore } from '../../stores/wallet';
@@ -24,19 +24,30 @@ const orders = useOrderStore();
 const addresses = useAddressStore();
 const wallet = useWalletStore();
 const cart = useCartStore();
+const isWeb = isWebPlatform();
 const showLoginPopup = ref(false);
 const avatarUrl = ref('');
 const nickname = ref('');
+const phoneNumber = ref('');
+const phoneCode = ref('');
+const smsCooldown = ref(0);
+const sendingCode = ref(false);
+const bindingPhone = ref(false);
 const loading = ref(false);
 const walletAction = ref<'check-in' | ''>('');
 const preparingShare = ref(false);
+let verifyPhoneOtp: ((code: string) => Promise<string>) | undefined;
+let smsTimer: ReturnType<typeof setInterval> | undefined;
+
+const loginButtonLabel = computed(() => isWeb ? '手机号登录' : '微信登录');
+const accountBadge = computed(() => auth.provider === 'phone' ? '手机号用户' : '微信用户');
 
 onShow(() => {
   void orders.load();
   void addresses.load();
   if (auth.accountId) {
     void wallet.load().catch(() => uni.showToast({ title: '余额加载失败', icon: 'none' }));
-    if (!/^(cloud:\/\/|https:\/\/)/.test(auth.userProfile.avatarUrl)) {
+    if (!isWeb && !/^(cloud:\/\/|https:\/\/)/.test(auth.userProfile.avatarUrl)) {
       avatarUrl.value = '';
       nickname.value = auth.userProfile.nickname;
       showLoginPopup.value = true;
@@ -45,7 +56,15 @@ onShow(() => {
   else if (auth.consumeLoginRequest()) showLoginPopup.value = true;
 });
 
-function openLogin() {
+onUnload(() => {
+  if (smsTimer) clearInterval(smsTimer);
+});
+
+function openLogin(continuation: LoginContinuation = '') {
+  if (continuation) {
+    auth.requestLogin(continuation);
+    auth.consumeLoginRequest();
+  }
   showLoginPopup.value = true;
 }
 
@@ -54,6 +73,10 @@ function openAddresses() {
 }
 
 function openWallet() {
+  if (!auth.accountId) {
+    openLogin('wallet');
+    return;
+  }
   uni.navigateTo({ url: '/pages/wallet/index' });
 }
 
@@ -63,7 +86,7 @@ function openPersonalityTest() {
 
 async function shareAchievement() {
   if (!auth.accountId) {
-    openLogin();
+    openLogin('share-achievement');
     return;
   }
   if (preparingShare.value) return;
@@ -75,7 +98,7 @@ async function shareAchievement() {
 
 function openShareReward() {
   if (!auth.accountId) {
-    openLogin();
+    openLogin('share-reward');
     return;
   }
   uni.navigateTo({ url: '/pages/share-reward/index' });
@@ -83,6 +106,10 @@ function openShareReward() {
 function openOrders() { uni.switchTab({ url: '/pages/orders/index' }); }
 
 async function checkIn() {
+  if (!auth.accountId) {
+    openLogin('check-in');
+    return;
+  }
   if (wallet.summary.checkedInToday || walletAction.value) return;
   walletAction.value = 'check-in';
   try {
@@ -98,6 +125,55 @@ async function checkIn() {
 function closeLogin() {
   if (loading.value) return;
   showLoginPopup.value = false;
+}
+
+function startSmsCooldown() {
+  smsCooldown.value = 60;
+  if (smsTimer) clearInterval(smsTimer);
+  smsTimer = setInterval(() => {
+    smsCooldown.value -= 1;
+    if (smsCooldown.value <= 0 && smsTimer) {
+      clearInterval(smsTimer);
+      smsTimer = undefined;
+    }
+  }, 1000);
+}
+
+async function sendPhoneCode() {
+  if (sendingCode.value || smsCooldown.value) return;
+  sendingCode.value = true;
+  try {
+    // #ifdef H5
+    const { sendWebPhoneOtp } = await import('../../platform/cloudbase-web');
+    verifyPhoneOtp = await sendWebPhoneOtp(phoneNumber.value);
+    startSmsCooldown();
+    uni.showToast({ title: '验证码已发送', icon: 'success' });
+    return;
+    // #endif
+    throw new Error('当前平台不支持手机号验证码登录');
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '验证码发送失败', icon: 'none' });
+  } finally {
+    sendingCode.value = false;
+  }
+}
+
+async function loginWithPhone() {
+  if (loading.value) return;
+  if (!verifyPhoneOtp) {
+    uni.showToast({ title: '请先获取验证码', icon: 'none' });
+    return;
+  }
+  loading.value = true;
+  try {
+    const verifiedPhone = await verifyPhoneOtp(phoneCode.value);
+    await auth.createWebPhoneSession(verifiedPhone);
+    await completeLogin();
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '手机号登录失败', icon: 'none' });
+  } finally {
+    loading.value = false;
+  }
 }
 
 function chooseAvatar(event: ChooseAvatarEvent) {
@@ -118,11 +194,7 @@ async function login() {
       avatarUrl: avatarUrl.value,
       nickname: trimmedNickname,
     });
-    showLoginPopup.value = false;
-    uni.showToast({ title: '登录成功', icon: 'success' });
-    void orders.load();
-    void addresses.load();
-    void wallet.load().catch(() => uni.showToast({ title: '余额加载失败', icon: 'none' }));
+    await completeLogin();
     void submitPendingOrderAfterLogin();
   } catch (error) {
     uni.showToast({
@@ -131,6 +203,72 @@ async function login() {
     });
   } finally {
     loading.value = false;
+  }
+}
+
+async function completeLogin() {
+  showLoginPopup.value = false;
+  phoneCode.value = '';
+  verifyPhoneOtp = undefined;
+  uni.showToast({ title: '登录成功', icon: 'success' });
+  await Promise.all([
+    orders.load(),
+    addresses.load(),
+    wallet.load().catch(() => undefined),
+  ]);
+  const continuation = auth.consumeLoginContinuation();
+  if (continuation === 'wallet') uni.navigateTo({ url: '/pages/wallet/index' });
+  else if (continuation === 'check-in') await checkIn();
+  else if (continuation === 'share-achievement') await shareAchievement();
+  else if (continuation === 'share-reward') openShareReward();
+  else if (continuation.startsWith('share-order:') || continuation.startsWith('share-egg:')) {
+    const [kind, orderId] = continuation.split(':');
+    const card = await shareService.create({
+      kind: kind === 'share-egg' ? 'order_egg' : 'order',
+      orderId,
+      showIdentity: true,
+    });
+    uni.navigateTo({ url: shareLandingUrl(card) });
+  }
+}
+
+async function logout() {
+  if (!isWeb || loading.value) return;
+  loading.value = true;
+  try {
+    await auth.logoutWebPhone();
+    await Promise.all([orders.load(), addresses.load()]);
+    wallet.$reset();
+    uni.showToast({ title: '已退出登录', icon: 'success' });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '退出失败', icon: 'none' });
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function bindWechatPhone(event: { detail?: { code?: string; errMsg?: string } }) {
+  const code = event.detail?.code;
+  if (!code || bindingPhone.value) {
+    if (!code && !event.detail?.errMsg?.includes('deny')) {
+      uni.showToast({ title: '未获取到手机号授权，请重试', icon: 'none' });
+    }
+    return;
+  }
+  bindingPhone.value = true;
+  try {
+    const result = await auth.bindWechatPhone(code);
+    await Promise.all([orders.load(), addresses.load(), wallet.load(true)]);
+    const migratedCount = result.migrated.orders + result.migrated.addresses;
+    uni.showToast({
+      title: result.merged ? `已同步 ${migratedCount} 项 Web 数据` : '手机号绑定成功',
+      icon: 'success',
+      duration: 2400,
+    });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '手机号绑定失败', icon: 'none' });
+  } finally {
+    bindingPhone.value = false;
   }
 }
 
@@ -173,7 +311,7 @@ async function submitPendingOrderAfterLogin() {
         <view class="identity">
           <text class="nickname">{{ auth.userProfile.nickname }}</text>
           <view class="badge">
-            <text class="badge-text">微信用户</text>
+            <text class="badge-text">{{ accountBadge }}</text>
           </view>
         </view>
       </view>
@@ -197,11 +335,11 @@ async function submitPendingOrderAfterLogin() {
     <view v-else class="hero guest">
       <view class="guest-icon"><image src="/static/tabbar/profile.svg" mode="aspectFit" /></view>
       <text class="guest-title">登录这顿白吃</text>
-      <text class="guest-desc">登录后会合并游客订单，并在这里显示你的头像和昵称</text>
-      <button class="login-btn" @tap="openLogin">
-        <text class="login-btn-text">微信登录</text>
+      <text class="guest-desc">{{ isWeb ? '登录后自动合并本机试玩订单，解锁钱包、签到和分享奖励' : '登录后会合并游客订单，并在这里显示你的头像和昵称' }}</text>
+      <button class="login-btn" @tap="openLogin()">
+        <text class="login-btn-text">{{ loginButtonLabel }}</text>
       </button>
-      <text class="guest-hint">你可以先浏览店铺，登录后使用虚拟余额下单</text>
+      <text class="guest-hint">{{ isWeb ? '不登录也能完成基础模拟点餐' : '你可以先浏览店铺，登录后使用虚拟余额下单' }}</text>
     </view>
 
     <view v-if="auth.accountId" class="wallet-card">
@@ -244,12 +382,12 @@ async function submitPendingOrderAfterLogin() {
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-divider" />
-      <view v-if="auth.accountId" class="menu-item" @tap="openWallet">
+      <view class="menu-item" @tap="openWallet">
         <text class="menu-icon">钱</text>
         <text class="menu-text">我的钱包</text>
         <text class="menu-arrow">›</text>
       </view>
-      <view v-if="auth.accountId" class="menu-divider" />
+      <view class="menu-divider" />
       <view class="menu-item" @tap="openOrders">
         <text class="menu-icon">单</text>
         <text class="menu-text">我的订单</text>
@@ -267,6 +405,27 @@ async function submitPendingOrderAfterLogin() {
         <text class="menu-text">收货地址</text>
         <text class="menu-arrow">›</text>
       </view>
+      <template v-if="auth.accountId && !isWeb && auth.provider === 'wechat'">
+        <view class="menu-divider" />
+        <button
+          class="menu-item bind-phone-button"
+          open-type="getPhoneNumber"
+          :loading="bindingPhone"
+          @getphonenumber="bindWechatPhone"
+        >
+          <text class="menu-icon phone-icon">机</text>
+          <text class="menu-text">绑定手机号并同步网页版</text>
+          <text class="menu-arrow">›</text>
+        </button>
+      </template>
+      <template v-if="auth.accountId && isWeb">
+        <view class="menu-divider" />
+        <view class="menu-item logout-item" @tap="logout">
+          <text class="menu-icon logout-icon">退</text>
+          <text class="menu-text">退出手机号登录</text>
+          <text class="menu-arrow">›</text>
+        </view>
+      </template>
     </view>
 
     <!-- About section -->
@@ -286,12 +445,46 @@ async function submitPendingOrderAfterLogin() {
     <view :style="showLoginPopup ? '' : 'display:none'" class="overlay">
       <view class="popup" @tap.stop>
         <view class="popup-header">
-          <text class="popup-title">完善登录信息</text>
+          <text class="popup-title">{{ isWeb ? '手机号登录' : '完善登录信息' }}</text>
           <text class="popup-close" @tap="closeLogin">✕</text>
         </view>
-        <text class="popup-desc">选择微信头像和昵称，登录后会合并游客订单。</text>
+        <text class="popup-desc">{{ isWeb ? '登录后自动合并当前浏览器的订单和地址。' : '选择微信头像和昵称，登录后会合并游客订单。' }}</text>
 
-        <view class="popup-form">
+        <view v-if="isWeb" class="popup-form phone-form">
+          <view class="form-nickname">
+            <text class="form-label">手机号</text>
+            <input
+              v-model="phoneNumber"
+              class="nickname-input"
+              type="number"
+              maxlength="11"
+              placeholder="请输入中国大陆手机号"
+            />
+          </view>
+          <view class="form-nickname">
+            <text class="form-label">验证码</text>
+            <view class="code-row">
+              <input
+                v-model="phoneCode"
+                class="nickname-input code-input"
+                type="number"
+                maxlength="8"
+                placeholder="短信验证码"
+              />
+              <button
+                class="send-code-button"
+                :loading="sendingCode"
+                :disabled="!!smsCooldown || sendingCode"
+                @tap="sendPhoneCode"
+              >
+                {{ smsCooldown ? `${smsCooldown}s` : '发送验证码' }}
+              </button>
+            </view>
+          </view>
+          <text class="phone-note">首次登录会自动创建账号，昵称默认使用手机号。</text>
+        </view>
+
+        <view v-else class="popup-form">
           <view class="form-avatar">
             <button class="avatar-picker" open-type="chooseAvatar" @chooseavatar="chooseAvatar">
               <image v-if="avatarUrl" class="avatar-preview" :src="avatarUrl" mode="aspectFill" />
@@ -318,7 +511,24 @@ async function submitPendingOrderAfterLogin() {
 
         <view class="popup-actions">
           <button class="cancel-button" :disabled="loading" @tap="closeLogin">取消</button>
-          <button class="primary-button confirm-button" :loading="loading" :disabled="!avatarUrl || !nickname.trim()" @tap="login">确认登录</button>
+          <button
+            v-if="isWeb"
+            class="primary-button confirm-button"
+            :loading="loading"
+            :disabled="!phoneNumber.trim() || !phoneCode.trim()"
+            @tap="loginWithPhone"
+          >
+            登录
+          </button>
+          <button
+            v-else
+            class="primary-button confirm-button"
+            :loading="loading"
+            :disabled="!avatarUrl || !nickname.trim()"
+            @tap="login"
+          >
+            确认登录
+          </button>
         </view>
       </view>
     </view>
@@ -605,6 +815,34 @@ async function submitPendingOrderAfterLogin() {
   margin: 0 28rpx;
 }
 
+.bind-phone-button {
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+  background: #fff;
+  line-height: normal;
+  text-align: left;
+}
+
+.bind-phone-button::after {
+  border: 0;
+}
+
+.phone-icon {
+  color: #fff;
+  background: #259b58;
+}
+
+.logout-item .menu-text {
+  color: #a23a2c;
+}
+
+.logout-icon {
+  color: #fff;
+  background: #f04426;
+}
+
 /* About card */
 .about-card {
   background: #fff;
@@ -777,6 +1015,48 @@ async function submitPendingOrderAfterLogin() {
   background: #fff;
   font-size: 28rpx;
   border: 1rpx solid #e8e8e8;
+}
+
+.phone-form {
+  gap: 28rpx;
+}
+
+.code-row {
+  display: flex;
+  gap: 14rpx;
+}
+
+.code-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.send-code-button {
+  width: 190rpx;
+  height: 84rpx;
+  margin: 0;
+  padding: 0 16rpx;
+  border-radius: 16rpx;
+  color: #171717;
+  background: #ffd400;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 84rpx;
+}
+
+.send-code-button::after {
+  border: 0;
+}
+
+.send-code-button[disabled] {
+  color: #999;
+  background: #ececec;
+}
+
+.phone-note {
+  color: #999;
+  font-size: 22rpx;
+  line-height: 1.5;
 }
 
 .popup-actions {

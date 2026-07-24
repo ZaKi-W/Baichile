@@ -1,6 +1,6 @@
 import type { AccountSavings, OrderQuote, QuoteRequest, VirtualOrder } from '@baichile/api-contract';
 import { useAuthStore } from '../stores/auth';
-import { ApiRequestError, requestApi } from './http';
+import { requestApi } from './http';
 
 export const orderService = {
   async quote(request: QuoteRequest): Promise<OrderQuote> {
@@ -8,17 +8,17 @@ export const orderService = {
   },
   async create(request: QuoteRequest): Promise<VirtualOrder> {
     const auth = useAuthStore();
-    if (auth.accountId) return requestApi<VirtualOrder>('POST', '/v1/orders/virtual', auth.accessToken, request);
-    throw new ApiRequestError('服务未配置，暂时无法创建订单');
+    await auth.ensureGuest();
+    return requestApi<VirtualOrder>('POST', '/v1/orders/virtual', auth.accessToken, request);
   },
   async list(): Promise<VirtualOrder[]> {
     const auth = useAuthStore();
-    if (!auth.accountId) return [];
+    await auth.ensureGuest();
     return requestApi<VirtualOrder[]>('GET', '/v1/orders/me', auth.accessToken);
   },
   async detail(id: string): Promise<VirtualOrder> {
     const auth = useAuthStore();
-    if (!auth.accountId) throw new ApiRequestError('请先登录后查看订单');
+    await auth.ensureGuest();
     return requestApi<VirtualOrder>('GET', `/v1/orders/${encodeURIComponent(id)}`, auth.accessToken);
   },
   async savings(): Promise<AccountSavings> {

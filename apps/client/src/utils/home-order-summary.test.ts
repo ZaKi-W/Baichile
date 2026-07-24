@@ -71,6 +71,11 @@ describe('home order summary', () => {
       remainingMs: 0,
       terminal: true,
     });
+    expect(createHomeOrderSummary({
+      ...failed,
+      settlementMode: 'guest_simulation',
+      refundStatus: undefined,
+    }, startedAt + 45_000).refundLabel).toBe('游客试玩不涉及退款');
     expect(createHomeOrderSummary(order(), startedAt + 78_000)).toMatchObject({
       statusLabel: '已完成',
       remainingMs: 0,

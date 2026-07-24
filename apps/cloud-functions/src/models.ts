@@ -20,6 +20,10 @@ export interface AccountDoc {
   _id: string;
   id: string;
   wechatOpenIdHash?: string | null;
+  webAuthUidHash?: string | null;
+  phoneHash?: string | null;
+  phoneNumber?: string | null;
+  mergedIntoAccountId?: string | null;
   nickname?: string | null;
   avatarUrl?: string | null;
   balanceCents: number;
@@ -130,6 +134,7 @@ export interface VirtualOrderDoc {
   id: string;
   visitorId?: string | null;
   accountId?: string | null;
+  settlementMode?: 'guest_simulation' | 'virtual_balance' | null;
   status: string;
   storeId: string;
   storeName?: string | null;

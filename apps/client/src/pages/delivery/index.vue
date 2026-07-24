@@ -10,6 +10,8 @@ import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain
 import { reorder } from '../../utils/reorder';
 import { shareService } from '../../services/shares';
 import { shareLandingUrl } from '../../utils/share-navigation';
+import { useAuthStore } from '../../stores/auth';
+import { getSafeMenuButtonRect } from '../../platform/system-ui';
 import {
   createOrderEggPresentation,
   hasSeenOrderEgg,
@@ -17,6 +19,7 @@ import {
 } from '../../utils/order-easter-egg';
 
 const orders = useOrderStore();
+const auth = useAuthStore();
 const addressStore = useAddressStore();
 const cart = useCartStore();
 
@@ -40,7 +43,7 @@ const forceEggRevealRequested = ref(false);
 let cameraFramed = false;
 
 const systemInfo = uni.getSystemInfoSync();
-const menuButtonRect = uni.getMenuButtonBoundingClientRect();
+const menuButtonRect = getSafeMenuButtonRect(systemInfo);
 const safeTopStyle = { paddingTop: `${Math.max((systemInfo.statusBarHeight ?? 20) + 8, menuButtonRect.bottom + 8)}px` };
 const eggRevealBackdropStyle = {
   paddingTop: `${Math.max((systemInfo.statusBarHeight ?? 20) + 16, menuButtonRect.bottom + 16)}px`,
@@ -71,7 +74,9 @@ const deliveryContactPhone = computed(() => {
   if (order.value?.deliveryAddress?.phone) return order.value.deliveryAddress.phone;
   return addressStore.addresses.find((a) => a.id === order.value?.virtualDestinationId)?.phone || '';
 });
-const paymentMethodText = computed(() => '虚拟余额支付');
+const paymentMethodText = computed(() => (
+  order.value?.settlementMode === 'guest_simulation' ? '游客模拟结算' : '虚拟余额支付'
+));
 
 /* ── map center: destination (收货地址) ── */
 const mapCenter = computed(() => {
@@ -293,7 +298,11 @@ const etaText = computed(() => {
 });
 const deliveryTimeText = computed(() => {
   if (!order.value) return '';
-  if (hasFailed.value) return '配送失败，已原路退款';
+  if (hasFailed.value) {
+    return order.value.settlementMode === 'guest_simulation'
+      ? '配送失败，游客模拟结算'
+      : '配送失败，已原路退款';
+  }
   const deliveredAt = new Date(new Date(order.value.startedAt).getTime() + DELIVERY_START_MS + order.value.durationMs);
   return currentStepIndex.value === FINAL_STEP
     ? `${formatDateTime(deliveredAt.toISOString())} 已送达`
@@ -302,7 +311,10 @@ const deliveryTimeText = computed(() => {
 
 /* ── distance display ── */
 const distanceText = computed(() => {
-  if (hasFailed.value) return order.value?.refundStatus === 'refunded' ? '已退款' : '退款处理中';
+  if (hasFailed.value) {
+    if (order.value?.settlementMode === 'guest_simulation') return '游客试玩无需退款';
+    return order.value?.refundStatus === 'refunded' ? '已退款' : '退款处理中';
+  }
   if (hasIncident.value) return '';
   return `距离收货地址约 ${storeDistanceKm.value.toFixed(1)} 公里`;
 });
@@ -439,6 +451,11 @@ async function reorderCurrent() {
 
 async function prepareOrderShare() {
   if (!order.value || preparingShare.value) return;
+  if (!auth.accountId) {
+    auth.requestLogin(`share-order:${order.value.id}`);
+    uni.switchTab({ url: '/pages/profile/index' });
+    return;
+  }
   preparingShare.value = true;
   try { const card = await shareService.create({ kind: 'order', orderId: order.value.id, showIdentity: true }); uni.navigateTo({ url: shareLandingUrl(card) }); }
   catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' }); }
@@ -447,6 +464,11 @@ async function prepareOrderShare() {
 
 async function prepareEggShare() {
   if (!order.value || !canShareEgg.value || preparingShare.value) return;
+  if (!auth.accountId) {
+    auth.requestLogin(`share-egg:${order.value.id}`);
+    uni.switchTab({ url: '/pages/profile/index' });
+    return;
+  }
   preparingShare.value = true;
   try { const card = await shareService.create({ kind: 'order_egg', orderId: order.value.id, showIdentity: true }); uni.navigateTo({ url: shareLandingUrl(card) }); }
   catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' }); }

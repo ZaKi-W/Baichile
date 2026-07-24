@@ -3,6 +3,8 @@
 interface ImportMetaEnv {
   readonly VITE_CLOUDBASE_ENV_ID?: string;
   readonly VITE_CLOUDBASE_API_FUNCTION?: string;
+  readonly VITE_CLOUDBASE_REGION?: string;
+  readonly VITE_CLOUDBASE_ACCESS_KEY?: string;
   readonly VITE_TENCENT_MAP_KEY?: string;
 }
 

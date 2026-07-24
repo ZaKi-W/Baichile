@@ -43,7 +43,9 @@ export function createHomeOrderSummary(order: VirtualOrder, now = Date.now()): H
     remainingMs = 0;
     terminal = true;
     incidentText = incident?.failedText || '';
-    refundLabel = order.refundStatus === 'refunded' ? '已退款' : '退款处理中';
+    refundLabel = order.settlementMode === 'guest_simulation'
+      ? '游客试玩不涉及退款'
+      : order.refundStatus === 'refunded' ? '已退款' : '退款处理中';
     progress = 1;
   } else if (terminal) {
     statusLabel = '已完成';

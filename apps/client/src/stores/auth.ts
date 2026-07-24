@@ -1,5 +1,10 @@
 import { defineStore } from 'pinia';
-import type { AccountSession, UserProfile, WechatMiniLoginRequest } from '@baichile/api-contract';
+import type {
+  AccountSession,
+  UserProfile,
+  WechatMiniLoginRequest,
+  WechatPhoneBindResult,
+} from '@baichile/api-contract';
 import { requestApi } from '../services/http';
 
 const VISITOR_KEY = 'baichile:visitor';
@@ -7,6 +12,15 @@ const ACCOUNT_KEY = 'baichile:account';
 const EMPTY_PROFILE: UserProfile = { avatarUrl: '', nickname: '' };
 const REFERRAL_KEY = 'baichile:referral-token';
 const WECHAT_BINDING_KEY = 'baichile:wechat-native-bound:v2';
+export const DEFAULT_ACCOUNT_AVATAR = '/static/tabbar/profile.svg';
+export type LoginContinuation =
+  | ''
+  | 'wallet'
+  | 'check-in'
+  | 'share-achievement'
+  | 'share-reward'
+  | `share-order:${string}`
+  | `share-egg:${string}`;
 let guestInitialization: Promise<void> | undefined;
 
 function errorMessage(value: unknown, fallback: string): string {
@@ -89,9 +103,10 @@ export const useAuthStore = defineStore('auth', {
     visitorId: '' as string,
     accessToken: '' as string,
     accountId: '' as string,
-    provider: 'guest' as 'guest' | 'dev-mock' | 'wechat',
+    provider: 'guest' as 'guest' | AccountSession['provider'],
     userProfile: { ...EMPTY_PROFILE } as UserProfile,
     loginRequested: false,
+    loginContinuation: '' as LoginContinuation,
   }),
   actions: {
     async ensureGuest() {
@@ -104,19 +119,20 @@ export const useAuthStore = defineStore('auth', {
     },
     async initializeGuest() {
       const account = uni.getStorageSync(ACCOUNT_KEY) as AccountSession | '';
-      if (account) this.applyAccount(account);
       const saved = uni.getStorageSync(VISITOR_KEY) as { visitorId: string; accessToken: string } | '';
       if (saved) {
         this.visitorId = saved.visitorId;
-        if (!account) this.accessToken = saved.accessToken;
-        if (account) await this.ensureWechatBinding(account);
+        this.accessToken = saved.accessToken;
+      } else {
+        const data = await requestApi<{ visitorId: string; accessToken: string }>('POST', '/v1/auth/guest', '');
+        this.visitorId = data.visitorId;
+        this.accessToken = data.accessToken;
+        uni.setStorageSync(VISITOR_KEY, { visitorId: this.visitorId, accessToken: this.accessToken });
+      }
+      if (isWebPlatform()) {
+        await this.restoreWebPhoneSession();
         return;
       }
-      const data = await requestApi<{ visitorId: string; accessToken: string }>('POST', '/v1/auth/guest', '');
-      this.visitorId = data.visitorId;
-      this.accessToken = data.accessToken;
-      const guestAccessToken = this.accessToken;
-      uni.setStorageSync(VISITOR_KEY, { visitorId: this.visitorId, accessToken: guestAccessToken });
       if (account) {
         this.applyAccount(account);
         await this.ensureWechatBinding(account);
@@ -148,6 +164,56 @@ export const useAuthStore = defineStore('auth', {
       this.persistAccount();
       uni.setStorageSync(WECHAT_BINDING_KEY, true);
       uni.removeStorageSync(REFERRAL_KEY);
+    },
+    async restoreWebPhoneSession() {
+      // #ifdef H5
+      const { hasWebPhoneSession } = await import('../platform/cloudbase-web');
+      if (!await hasWebPhoneSession()) {
+        this.clearAccount();
+        return false;
+      }
+      const session = await requestApi<AccountSession>(
+        'POST',
+        '/v1/auth/web-phone/session',
+        this.guestAccessToken(),
+      );
+      this.applyAccount(session);
+      this.persistAccount();
+      return true;
+      // #endif
+      this.clearAccount();
+      return false;
+    },
+    async createWebPhoneSession(phoneNumber?: string) {
+      const session = await requestApi<AccountSession>(
+        'POST',
+        '/v1/auth/web-phone/session',
+        this.guestAccessToken(),
+        phoneNumber ? { phoneNumber } : undefined,
+      );
+      this.applyAccount(session);
+      this.persistAccount();
+      return session;
+    },
+    async logoutWebPhone() {
+      // #ifdef H5
+      const { signOutWebPhone } = await import('../platform/cloudbase-web');
+      await signOutWebPhone();
+      this.clearAccount();
+      return;
+      // #endif
+      this.clearAccount();
+    },
+    async bindWechatPhone(code: string): Promise<WechatPhoneBindResult> {
+      const result = await requestApi<WechatPhoneBindResult>(
+        'POST',
+        '/v1/auth/wechat-phone-bind',
+        this.accessToken,
+        { code },
+      );
+      this.applyAccount(result.session);
+      this.persistAccount();
+      return result;
     },
     async ensureWechatBinding(account: AccountSession) {
       if (account.provider !== 'wechat' || uni.getStorageSync(WECHAT_BINDING_KEY)) return;
@@ -182,13 +248,34 @@ export const useAuthStore = defineStore('auth', {
         profile: this.userProfile,
       } satisfies AccountSession);
     },
-    requestLogin() {
+    guestAccessToken() {
+      const saved = uni.getStorageSync(VISITOR_KEY) as { visitorId?: string; accessToken?: string } | '';
+      return saved && typeof saved.accessToken === 'string' ? saved.accessToken : '';
+    },
+    clearAccount() {
+      this.accountId = '';
+      this.provider = 'guest';
+      this.userProfile = { ...EMPTY_PROFILE };
+      this.accessToken = this.guestAccessToken();
+      uni.removeStorageSync(ACCOUNT_KEY);
+    },
+    requestLogin(continuation: LoginContinuation = '') {
       this.loginRequested = true;
+      this.loginContinuation = continuation;
     },
     consumeLoginRequest() {
       const requested = this.loginRequested;
       this.loginRequested = false;
       return requested;
     },
+    consumeLoginContinuation(): LoginContinuation {
+      const continuation = this.loginContinuation;
+      this.loginContinuation = '';
+      return continuation;
+    },
   },
 });
+
+export function isWebPlatform(): boolean {
+  return typeof window !== 'undefined' && (typeof wx === 'undefined' || !wx.cloud);
+}

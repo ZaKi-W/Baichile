@@ -6,6 +6,7 @@ import { shareService } from '../../services/shares';
 import { useAuthStore } from '../../stores/auth';
 import { legacyShareTarget } from '../../utils/share-navigation';
 import { saveGachaPoster, shareCoverPath } from '../../utils/share-poster-canvas';
+import { shareWebPage } from '../../platform/web-share';
 
 const auth = useAuthStore();
 const data = ref<ShareLanding>();
@@ -43,6 +44,10 @@ onLoad(async (options) => {
 function sharePayload() { return { title: data.value?.title || `我的白吃人格是 ${data.value?.persona?.name || '神秘人格'}`, query: `token=${encodeURIComponent(token.value)}`, imageUrl: shareCoverPath('persona') }; }
 onShareTimeline(() => sharePayload());
 onShareAppMessage(() => ({ ...sharePayload(), path: `/pages/share-landing/index?token=${encodeURIComponent(token.value)}` }));
+const shareOnWeb = () => shareWebPage(
+  sharePayload().title,
+  `/pages/share-landing/index?token=${encodeURIComponent(token.value)}`,
+);
 
 async function savePoster() {
   if (!data.value || saving.value) return;
@@ -77,7 +82,7 @@ function start() { uni.switchTab({ url: '/pages/profile/index' }); auth.requestL
       <view class="persona-footer"><view class="gacha-identity"><image v-if="data.identity?.avatarUrl" :src="data.identity.avatarUrl" aria-label="分享者头像" /><view v-else class="gacha-avatar-fallback"><text>{{ ownerName.slice(0, 1) }}</text></view><text>{{ ownerName }}</text></view><view v-if="data.miniProgramCodeUrl" class="gacha-qr"><text>抽同款人格</text><image :src="data.miniProgramCodeUrl" aria-label="小程序码" /></view></view>
     </template>
     <view v-else class="gacha-empty">这枚人格扭蛋找不到了。</view>
-    <view v-if="sharing && data?.active && data.kind === 'persona'" class="gacha-action-bar"><button class="gacha-secondary" :loading="saving" @tap="savePoster">保存海报</button><button class="gacha-primary" open-type="share">发给朋友</button></view>
+    <view v-if="sharing && data?.active && data.kind === 'persona'" class="gacha-action-bar"><button class="gacha-secondary" :loading="saving" @tap="savePoster">保存海报</button><button class="gacha-primary" open-type="share" @tap="shareOnWeb">发给朋友</button></view>
     <view v-else-if="data && data.kind === 'persona'" class="gacha-visitor"><text>你的白吃人格扭蛋，正在等你开启。</text><button class="gacha-primary" @tap="start">进入这顿白吃</button></view>
     <canvas canvas-id="personaPoster" class="gacha-canvas" />
   </view>

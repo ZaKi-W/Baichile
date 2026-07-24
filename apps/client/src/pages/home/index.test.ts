@@ -8,7 +8,7 @@ describe('home page sections', () => {
     expect(source).toContain('class="platform-header"');
     expect(source).not.toContain('openLocationPicker');
     expect(source).not.toContain('location.locate()');
-    expect(source).toContain('uni.getMenuButtonBoundingClientRect()');
+    expect(source).toContain('getSafeMenuButtonRect(systemInfo)');
     expect(source).toContain(':style="brandRowStyle"');
     expect(source).toContain('class="brand-name">这顿白吃');
     expect(source).toContain('class="address-name">{{ displayAddress }}');

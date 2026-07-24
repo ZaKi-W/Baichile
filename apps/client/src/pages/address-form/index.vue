@@ -64,7 +64,7 @@ async function pickOnMap() {
   } catch (err: any) {
     // User cancelled — do nothing
     if (err?.errMsg?.includes('cancel')) return;
-    uni.showToast({ title: '地图选点失败', icon: 'none' });
+    uni.showToast({ title: '地图选点不可用，请用关键词搜索地址', icon: 'none' });
   }
 }
 

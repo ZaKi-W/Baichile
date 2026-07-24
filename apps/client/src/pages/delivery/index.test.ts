@@ -26,6 +26,7 @@ describe('delivery page status initialization', () => {
 
     expect(source).toContain('配送失败');
     expect(source).toContain('已退款');
+    expect(source).toContain('游客试玩无需退款');
     expect(source).toContain('重新点一单');
     expect(source).toContain('再来一单');
     expect(source).toContain('reorderCurrent');

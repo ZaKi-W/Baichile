@@ -93,6 +93,14 @@ describe('order easter egg presentation', () => {
       description: '本单虚拟饭钱已原路退回。',
       meta: '配送彩蛋 · 已退款',
     });
+    expect(createOrderEggPresentation({
+      ...incidentOrder,
+      settlementMode: 'guest_simulation',
+    }, startedAt + 45_000)).toMatchObject({
+      state: 'revealed',
+      description: '本单为游客模拟结算，无需退款。',
+      meta: '配送彩蛋 · 游客模拟',
+    });
   });
 
   it('maps all sixteen egg stories to unique hosted artwork and safely falls back', () => {

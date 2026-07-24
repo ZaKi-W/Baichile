@@ -125,15 +125,18 @@ describe('order store ownership', () => {
     });
   });
 
-  it('does not expose cached orders before login', async () => {
+  it('loads visitor orders before login without exposing legacy cached orders', async () => {
     storage.set('baichile:orders', [{ id: 'order_from_another_user' }]);
+    const visitorOrders = [{ id: 'order_visitor', visitorId: 'visitor_new' }];
+    listOrders.mockResolvedValue(visitorOrders);
     const { useOrderStore } = await import('./orders');
     const orders = useOrderStore();
 
     await orders.load();
 
-    expect(orders.orders).toEqual([]);
-    expect(listOrders).not.toHaveBeenCalled();
+    expect(orders.orders).toEqual(visitorOrders);
+    expect(orders.orders).not.toContainEqual({ id: 'order_from_another_user' });
+    expect(listOrders).toHaveBeenCalledOnce();
   });
 
   it('loads and caches only the logged-in account orders', async () => {

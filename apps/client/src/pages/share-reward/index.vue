@@ -6,6 +6,7 @@ import { shareLandingUrl } from '../../utils/share-navigation';
 import { useSharePage } from '../../features/share-page';
 import { useAuthStore } from '../../stores/auth';
 import { saveGachaPoster, shareCoverPath } from '../../utils/share-poster-canvas';
+import { shareWebPage } from '../../platform/web-share';
 
 const auth = useAuthStore();
 const page = useSharePage();
@@ -19,7 +20,7 @@ onLoad(async (options) => {
   const input = options ?? {};
   const token = String(input.token || input.t || input.scene || '');
   if (!token) {
-    if (!auth.accountId) { uni.switchTab({ url: '/pages/profile/index' }); auth.requestLogin(); return; }
+    if (!auth.accountId) { auth.requestLogin('share-reward'); uni.switchTab({ url: '/pages/profile/index' }); return; }
     try { const card = await shareService.create({ kind: 'reward', showIdentity: true }); uni.redirectTo({ url: shareLandingUrl(card) }); }
     catch (error) { uni.showToast({ title: error instanceof Error ? error.message : '分享准备失败', icon: 'none' }); uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/profile/index' }) }); }
     return;
@@ -29,6 +30,10 @@ onLoad(async (options) => {
 
 onShareTimeline(() => { page.rewardShare(); return { title: title.value, query: page.shareQuery(), imageUrl: shareCoverPath('reward') }; });
 onShareAppMessage(() => { page.rewardShare(); return { title: title.value, path: `/pages/share-reward/index?${page.shareQuery()}`, imageUrl: shareCoverPath('reward') }; });
+const shareOnWeb = () => {
+  page.rewardShare();
+  return shareWebPage(title.value, `/pages/share-reward/index?${page.shareQuery()}`);
+};
 
 async function savePoster() {
   const data = page.data.value;
@@ -54,7 +59,7 @@ async function savePoster() {
       <view class="reward-footer"><view class="gacha-identity"><image v-if="page.data.value.identity?.avatarUrl" :src="page.data.value.identity.avatarUrl" aria-label="邀请发起人头像" /><view v-else class="gacha-avatar-fallback"><text>{{ ownerName.slice(0, 1) }}</text></view><text>{{ ownerName }} 发出</text></view><view v-if="page.data.value.miniProgramCodeUrl" class="gacha-qr"><text>扫码领取</text><image :src="page.data.value.miniProgramCodeUrl" aria-label="小程序码" /></view></view>
     </template>
     <view v-else class="gacha-empty">这枚饭钱胶囊找不到了。</view>
-    <view v-if="page.sharing.value && page.data.value?.active" class="gacha-action-bar"><button class="gacha-secondary" :loading="saving" @tap="savePoster">保存海报</button><button class="gacha-primary" open-type="share">发给朋友</button></view>
+    <view v-if="page.sharing.value && page.data.value?.active" class="gacha-action-bar"><button class="gacha-secondary" :loading="saving" @tap="savePoster">保存海报</button><button class="gacha-primary" open-type="share" @tap="shareOnWeb">发给朋友</button></view>
     <view v-else-if="page.data.value" class="gacha-visitor"><text>{{ page.data.value.benefitText || '朋友请你来抽一枚饭钱胶囊。' }}</text><button class="gacha-primary" @tap="page.enterApp">领 ¥{{ inviteeReward.toFixed(0) }} 虚拟饭钱</button></view>
     <canvas canvas-id="rewardPoster" class="gacha-canvas" />
   </view>

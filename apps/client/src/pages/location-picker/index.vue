@@ -5,10 +5,11 @@ import AppIcon from '../../components/AppIcon.vue';
 import { AREA_DATA } from '../../data/area-data';
 import { suggestPlaces } from '../../services/location';
 import { useLocationStore } from '../../stores/location';
+import { getSafeMenuButtonRect } from '../../platform/system-ui';
 
 const location = useLocationStore();
 const systemInfo = uni.getSystemInfoSync();
-const menuButtonRect = uni.getMenuButtonBoundingClientRect();
+const menuButtonRect = getSafeMenuButtonRect(systemInfo);
 const safeTopStyle = {
   paddingTop: `${Math.max((systemInfo.statusBarHeight ?? 20) + 14, menuButtonRect.bottom + 10)}px`,
 };

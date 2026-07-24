@@ -10,6 +10,7 @@ import { useAddressStore } from '../../stores/address';
 import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { createHomeOrderSummary, homeOrderSeenKey } from '../../utils/home-order-summary';
+import { getSafeMenuButtonRect } from '../../platform/system-ui';
 
 const data = ref<HomeResponse>();
 const loading = ref(true);
@@ -26,7 +27,7 @@ const sortFilters = ['综合排序', '销量最高', '距离最近', '评分最�
 const quickFilters = ['全部', '免配送费', '30分钟内', '满减优惠'];
 const systemInfo = uni.getSystemInfoSync();
 const statusBarHeight = systemInfo.statusBarHeight ?? 20;
-const menuButtonRect = uni.getMenuButtonBoundingClientRect();
+const menuButtonRect = getSafeMenuButtonRect(systemInfo);
 const safeTopStyle = computed(() => ({ paddingTop: `${Math.max(statusBarHeight + 8, menuButtonRect.top)}px` }));
 const brandRowStyle = computed(() => ({ paddingRight: `${Math.max(0, systemInfo.windowWidth - menuButtonRect.left + 10)}px` }));
 let orderTimer: ReturnType<typeof setInterval> | undefined;
@@ -108,18 +109,18 @@ function openFlashSale(item: FlashSaleItem) {
 }
 
 function seenStorageKey() {
-  return homeOrderSeenKey(auth.accountId);
+  return homeOrderSeenKey(auth.accountId || auth.visitorId);
 }
 
 function loadDismissedOrderIds() {
-  dismissedOrderIds.value = auth.accountId
+  dismissedOrderIds.value = (auth.accountId || auth.visitorId)
     ? (uni.getStorageSync(seenStorageKey()) || []) as string[]
     : [];
 }
 
 function dismissOrder(orderId: string) {
   sessionOrderIds.value = sessionOrderIds.value.filter((id) => id !== orderId);
-  if (!auth.accountId || dismissedOrderIds.value.includes(orderId)) return;
+  if ((!auth.accountId && !auth.visitorId) || dismissedOrderIds.value.includes(orderId)) return;
   dismissedOrderIds.value = [...dismissedOrderIds.value, orderId];
   uni.setStorageSync(seenStorageKey(), dismissedOrderIds.value);
 }
@@ -143,6 +144,7 @@ function refreshFailedIncidentRefunds() {
   const pendingRefunds = orders.orders.filter((order) => (
     order.incident
     && getDeliveryIncidentPhase(order.incident, orderNow.value) === 'failed'
+    && order.settlementMode !== 'guest_simulation'
     && order.refundStatus !== 'refunded'
     && !settlementRequested.has(order.id)
   ));

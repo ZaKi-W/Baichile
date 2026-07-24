@@ -18,6 +18,8 @@ export interface RequestContext {
   data: unknown;
   authorization?: string;
   openId?: string;
+  webUid?: string;
+  webPhoneNumber?: string;
   ipAddress?: string;
   origin?: string;
 }
