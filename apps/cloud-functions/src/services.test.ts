@@ -7,6 +7,7 @@ import type {
   AddressDoc,
   MenuItemDoc,
   PromotionCampaignDoc,
+  ShareInviteDoc,
   ShareRewardDailyDoc,
   StoreDoc,
   VirtualOrderDoc,
@@ -721,9 +722,71 @@ describe('wallet idempotency', () => {
     expect(rows[0]?.id).toMatch(/^daily_checkin_account_me_\d{4}-\d{2}-\d{2}$/);
     await expect(services.wallet.checkIn('account_me')).rejects.toMatchObject({ code: 'ALREADY_CHECKED_IN' });
   });
+
+  it('normalizes a legacy description at the public DTO boundary', async () => {
+    const retired = '\u6a21\u62df';
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_legacy_wallet');
+    await db.collection<WalletTransactionDoc>(collections.walletTransactions).insert({
+      _id: 'legacy_wallet_copy',
+      id: 'legacy_wallet_copy',
+      accountId: 'account_legacy_wallet',
+      type: 'order_payment',
+      amountCents: -100,
+      balanceAfterCents: 200,
+      description: `${retired}订单扣款（虚拟余额）`,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const transactions = await services.wallet.listTransactions('account_legacy_wallet');
+    expect(transactions.find((row) => row.id === 'legacy_wallet_copy')?.description)
+      .toBe('订单扣款（虚拟余额）');
+    expect((await db.collection<WalletTransactionDoc>(collections.walletTransactions)
+      .get('legacy_wallet_copy'))?.description).toContain(retired);
+  });
 });
 
 describe('share snapshots', () => {
+  it('normalizes historical system copy while preserving catalog snapshot text', async () => {
+    const retired = '\u6a21\u62df';
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await db.collection<ShareInviteDoc>(collections.shareInvites).insert({
+      _id: 'legacy_share_copy',
+      token: 'legacy_share_copy',
+      inviterAccountId: 'account_legacy_share',
+      kind: 'persona',
+      title: `我的这顿白吃人格是 CALN · ${retired}热量忍者`,
+      snapshot: {
+        storeName: `${retired}小馆`,
+        dishNames: [`${retired}炒饭`],
+        savedMoneyCents: 100,
+        savedCaloriesKcal: 200,
+        completedOrderCount: 1,
+        persona: {
+          id: 'caln',
+          acronym: 'CALN',
+          name: `${retired}热量忍者`,
+          verdict: `${retired}热量刚到门口，你已经完成了整桌推演。`,
+          description: `对${retired}热量极其敏锐，最享受在虚拟点单里研究一整桌。`,
+          callToAction: `看看你的${retired}热量人格`,
+          imageUrl: '/persona.png',
+        },
+      },
+      initiatedRewardGranted: false,
+      expiresAt: '2020-01-01T00:00:00.000Z',
+      createdAt: '2020-01-01T00:00:00.000Z',
+    });
+
+    const landing = await services.shares.landing('legacy_share_copy');
+
+    expect(landing.title).toBe('我的这顿白吃人格是 CALN · 热量忍者');
+    expect(JSON.stringify(landing.persona)).not.toContain(retired);
+    expect(landing.storeName).toBe(`${retired}小馆`);
+    expect(landing.dishNames).toEqual([`${retired}炒饭`]);
+  });
+
   it('masks a phone-only account in public share identity', async () => {
     const db = new MemoryDatabase();
     const services = new BaichileCloudServices(db);

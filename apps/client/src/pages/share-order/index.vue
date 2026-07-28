@@ -67,14 +67,14 @@ async function savePoster() {
               <view class="order-store-copy"><text class="order-store-name">{{ page.data.value.storeName || '神秘小馆' }}</text><text class="order-store-meta">本单共 {{ itemCount }} 件餐品 · 虚拟配送完成</text></view>
             </view>
             <view class="order-amount-row">
-              <view class="order-paid"><text class="order-amount-label">模拟订单金额</text><text class="order-amount-value">¥{{ money.toFixed(2) }}</text></view>
+              <view class="order-paid"><text class="order-amount-label">订单金额</text><text class="order-amount-value">¥{{ money.toFixed(2) }}</text></view>
               <view class="order-saved-tag">真实支付 ¥0.00</view>
             </view>
           </view>
         </view>
 
         <view class="order-section">
-          <view class="order-section-head"><text class="order-section-title">这顿模拟点了什么</text><text class="order-section-count">{{ dishCount }} 件商品</text></view>
+          <view class="order-section-head"><text class="order-section-title">这顿点了什么</text><text class="order-section-count">{{ dishCount }} 件商品</text></view>
           <view v-if="lines.length" class="order-dish-list">
             <view v-for="line in lines" :key="line.menuItemId + line.optionNames.join(',')" class="order-dish">
               <image v-if="line.imageUrl" class="order-dish-image" :src="line.imageUrl" mode="aspectFill" aria-label="菜品图片" />
@@ -85,17 +85,17 @@ async function savePoster() {
           </view>
           <view v-else class="order-dish-empty">这顿没留下菜品明细。</view>
           <view class="order-divider" />
-          <view class="order-total"><text class="order-total-label">模拟餐品金额</text><text class="order-total-value">¥{{ money.toFixed(2) }}</text></view>
+          <view class="order-total"><text class="order-total-label">餐品金额</text><text class="order-total-value">¥{{ money.toFixed(2) }}</text></view>
         </view>
 
         <view class="order-metrics">
-          <view class="order-metric order-metric--mint"><text class="order-metric-label">模拟口径</text><text class="order-metric-value">{{ page.data.value.savedCaloriesKcal }} kcal</text><text class="order-metric-caption">本单模拟热量</text></view>
-          <view class="order-metric order-metric--peach"><text class="order-metric-label">本单汇总</text><text class="order-metric-value">¥{{ money.toFixed(0) }}</text><text class="order-metric-caption">模拟订单金额</text></view>
-          <view class="order-metric order-metric--yellow"><text class="order-metric-label">换算展示</text><text class="order-metric-value">{{ equivalentSteps }} 步</text><text class="order-metric-caption">模拟热量步数换算</text></view>
-          <view class="order-metric order-metric--blue"><text class="order-metric-label">模拟完成</text><text class="order-metric-value">100%</text><text class="order-metric-caption">虚拟配送进度</text></view>
+          <view class="order-metric order-metric--mint"><text class="order-metric-label">热量统计</text><text class="order-metric-value">{{ page.data.value.savedCaloriesKcal }} kcal</text><text class="order-metric-caption">本单热量</text></view>
+          <view class="order-metric order-metric--peach"><text class="order-metric-label">本单汇总</text><text class="order-metric-value">¥{{ money.toFixed(0) }}</text><text class="order-metric-caption">订单金额</text></view>
+          <view class="order-metric order-metric--yellow"><text class="order-metric-label">换算展示</text><text class="order-metric-value">{{ equivalentSteps }} 步</text><text class="order-metric-caption">热量步数换算</text></view>
+          <view class="order-metric order-metric--blue"><text class="order-metric-label">订单完成</text><text class="order-metric-value">100%</text><text class="order-metric-caption">虚拟配送进度</text></view>
         </view>
 
-        <view class="order-quote"><text class="order-quote-label">今日虚拟点单宣言</text><text class="order-quote-body">菜单认真选，配送全模拟。</text><text class="order-quote-body">今天这顿，游戏里见。</text><text class="order-quote-from">— 来自「这顿白吃」虚拟订单战报</text></view>
+        <view class="order-quote"><text class="order-quote-label">今日虚拟点单宣言</text><text class="order-quote-body">菜单认真选，配送有惊喜。</text><text class="order-quote-body">今天这顿，游戏里见。</text><text class="order-quote-from">— 来自「这顿白吃」虚拟订单战报</text></view>
       </view>
     </template>
     <view v-else class="gacha-empty">这张订单战报找不到了。</view>

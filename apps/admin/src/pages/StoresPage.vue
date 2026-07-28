@@ -65,7 +65,7 @@ onMounted(load);
       <el-table-column prop="name" label="商家" min-width="180" />
       <el-table-column prop="categoryId" label="分类" width="130" />
       <el-table-column label="虚拟配送费" width="145"><template #default="{ row }">虚拟 ¥{{ centsToYuan(row.deliveryFeeCents) }}</template></el-table-column>
-      <el-table-column prop="monthlySales" label="模拟热度" width="100" />
+      <el-table-column prop="monthlySales" label="热度" width="100" />
       <el-table-column prop="rating" label="评分" width="80" />
       <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'info'" effect="plain">{{ row.status === 'active' ? '上架' : '下架' }}</el-tag></template></el-table-column>
       <el-table-column label="操作" width="170" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="router.push({ name: 'store-detail', params: { storeId: row.id } })">管理</el-button><el-button v-if="auth.has('catalog:write')" link :type="row.status === 'active' ? 'danger' : 'success'" @click="toggle(row)">{{ row.status === 'active' ? '下架' : '上架' }}</el-button></template></el-table-column>
@@ -86,7 +86,7 @@ onMounted(load);
       <el-form-item label="虚拟包装费（元）"><el-input-number v-model="form.packingFeeYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
       <el-form-item label="虚拟起送金额（元）"><el-input-number v-model="form.minimumOrderYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
       <el-form-item label="虚拟配送分钟"><el-input-number v-model="form.virtualDeliveryMinutes" :min="1" style="width:100%" /></el-form-item>
-      <el-form-item label="模拟热度"><el-input-number v-model="form.monthlySales" :min="0" style="width:100%" /></el-form-item>
+      <el-form-item label="热度"><el-input-number v-model="form.monthlySales" :min="0" style="width:100%" /></el-form-item>
       <el-form-item label="距离（km）"><el-input-number v-model="form.distanceKm" :min="0" :precision="2" style="width:100%" /></el-form-item>
       <el-form-item label="评分"><el-input-number v-model="form.rating" :min="0" :max="5" :precision="1" style="width:100%" /></el-form-item>
       <el-form-item label="排序"><el-input-number v-model="form.sortOrder" :min="0" style="width:100%" /></el-form-item>

@@ -43,6 +43,7 @@ import {
 import type { PageQuery } from './types';
 import { shanghaiBusinessDate } from './business-time';
 import { sanitizeForAuditLog } from './redaction';
+import { sanitizeWalletTransactionCopy } from './product-copy';
 
 const SESSION_MS = 8 * 60 * 60 * 1000;
 const ORDER_STEP_TIMES = [0, 2_000, 5_000, 9_000, 14_000, 18_000] as const;
@@ -335,13 +336,20 @@ export class AdminQueryService {
         compactQuery({ accountId, type: query.type }),
         [['createdAt', 'desc']],
       );
-      return { account, transactions };
+      return {
+        account,
+        transactions: {
+          ...transactions,
+          items: transactions.items.map(sanitizeWalletTransactionCopy),
+        },
+      };
     }
     const rows = await this.db.collection<WalletTransactionDoc>(collections.walletTransactions).list({
       where: { accountId },
       orderBy: [['createdAt', 'desc']],
     });
-    return { account, transactions: page(filterRows(rows, query, ['description'], ['type']), query) };
+    const safeRows = rows.map(sanitizeWalletTransactionCopy);
+    return { account, transactions: page(filterRows(safeRows, query, ['description'], ['type']), query) };
   }
 
   async listOrders(query: PageQuery) {

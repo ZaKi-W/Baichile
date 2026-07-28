@@ -33,7 +33,7 @@ const openStore = (id: string) => uni.navigateTo({ url: `/pages/store/index?id=$
 <template>
   <view class="page">
     <view class="search-row"><input v-model="query" confirm-type="search" placeholder="搜索店铺或菜品" @confirm="search" /><button @tap="search">搜索</button></view>
-    <view v-if="loading" class="card muted">正在搜索模拟店铺…</view>
+    <view v-if="loading" class="card muted">正在搜索店铺…</view>
     <view v-else-if="error" class="card search-error"><text>{{ error }}</text><button @tap="search">重试</button></view>
     <view v-else-if="stores.length" class="result-list"><StoreCard v-for="store in stores" :key="store.id" :store="store" @open="openStore(store.id)" /></view>
     <view v-else-if="searched" class="card muted">没有找到相关内容，换个词试试。</view>

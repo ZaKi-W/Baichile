@@ -5,7 +5,6 @@
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "build:h5": "pnpm --filter @baichile/client build:h5",
     "build:mp-weixin": "pnpm --filter @baichile/client build:mp-weixin",
     "catalog:refresh:choutuan": "pnpm --filter @baichile/catalog-data refresh:choutuan",
     "cloudbase:build": "pnpm --filter @baichile/cloud-functions build",
@@ -18,7 +17,6 @@
     "catalog-images:migrate": "pnpm --filter @baichile/cloud-functions migrate:catalog-images",
     "dev": "pnpm --filter @baichile/client dev:mp-weixin",
     "dev:admin": "pnpm --filter @baichile/admin dev",
-    "dev:h5": "pnpm --filter @baichile/client dev:h5",
     "dev:mp-weixin": "pnpm --filter @baichile/client dev:mp-weixin",
     "test": "vitest run",
     "typecheck": "pnpm -r --if-present typecheck"

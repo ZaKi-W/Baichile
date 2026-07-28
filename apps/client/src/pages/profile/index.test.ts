@@ -17,7 +17,8 @@ describe('profile page cross-platform login', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
     expect(source).toContain('open-type="getPhoneNumber"');
-    expect(source).toContain('绑定手机号并同步网页版');
+    expect(source).toContain('绑定手机号');
+    expect(source).not.toContain('同步历史数据');
     expect(source).toContain("sendWebPhoneOtp(phoneNumber.value)");
     expect(source).toContain('await auth.createWebPhoneSession(verifiedPhone)');
     expect(source).toContain('smsCooldown.value = 60');
@@ -39,8 +40,8 @@ describe('profile page cross-platform login', () => {
     expect(source).toContain('orders.gameStats.simulatedOrderAmountCents');
     expect(source).toContain('orders.gameStats.simulatedCaloriesKcal');
     expect(source).toContain('orders.gameStats.completedOrderCount');
-    expect(source).toContain('模拟订单金额');
-    expect(source).toContain('模拟热量');
+    expect(source).toContain('订单金额');
+    expect(source).toContain('热量');
     expect(source).toContain('min-height: 52rpx');
     expect(source).not.toContain('money-value');
   });

@@ -38,7 +38,7 @@ const imageFailed = ref(false);
       </view>
       <view class="store-meta">
         <text class="score">评分 {{ store.rating.toFixed(1) }}</text>
-        <text>模拟热度{{ store.monthlySales }}</text>
+        <text>热度{{ store.monthlySales }}</text>
         <text class="delivery-speed">{{ store.virtualDeliveryMinutes }}分钟</text>
         <text>{{ distance(store.distanceKm) }}</text>
       </view>

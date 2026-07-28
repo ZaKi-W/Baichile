@@ -30,7 +30,7 @@ describe('gacha share pages', () => {
 
   it('gives every content type a distinct subject and full poster action', () => {
     expect(order).toContain('class="order-report"');
-    expect(order).toContain('这顿模拟点了什么');
+    expect(order).toContain('这顿点了什么');
     expect(order).toContain('catalogService.search(storeName)');
     expect(order).toContain('order-store-mark--image');
     expect(order).toContain("kind: 'order'");

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue';
-import { onLoad } from '@dcloudio/uni-app';
+import { onLoad, onShow } from '@dcloudio/uni-app';
 import type { MenuItem, StoreDetail } from '@baichile/api-contract';
 import AppIcon from '../../components/AppIcon.vue';
 import CartSheet from '../../components/CartSheet.vue';
@@ -29,6 +29,13 @@ onLoad((options) => {
   routeOptions = options || {};
   void loadStore();
 });
+
+function syncCartOnShow() {
+  isCartOpen.value = false;
+  if (store.value) cart.selectStore(store.value);
+}
+
+onShow(syncCartOnShow);
 
 async function loadStore(force = false) {
   loadingStore.value = true;
@@ -197,7 +204,7 @@ const checkout = () => {
 <template>
   <page-meta page-style="height: 100%; overflow: hidden;" />
   <view v-if="loadingStore" class="store-state">
-    <text class="state-title">正在准备模拟菜单…</text>
+    <text class="state-title">正在准备菜单…</text>
   </view>
   <view v-else-if="loadError" class="store-state error-state">
     <text class="state-title">店铺暂时没开门</text>
@@ -226,7 +233,7 @@ const checkout = () => {
       <view class="merchant-meta">
         <text><text class="meta-strong">{{ store.rating.toFixed(1) }}</text> 分</text>
         <text class="meta-dot"></text>
-        <text>模拟热度 {{ store.monthlySales }}+</text>
+        <text>热度 {{ store.monthlySales }}+</text>
         <text class="meta-dot"></text>
         <text>{{ store.virtualDeliveryMinutes }} 分钟</text>
         <text class="meta-dot"></text>
@@ -247,8 +254,8 @@ const checkout = () => {
       <view class="service-items">
         <view class="service-item">起送 <text>¥{{ (store.minimumOrderCents / 100).toFixed(0) }}</text></view>
         <view class="service-item">配送 <text>{{ store.deliveryFeeCents ? `¥${(store.deliveryFeeCents / 100).toFixed(0)}` : '免配送费' }}</text></view>
-        <view class="service-item">模拟时长</view>
-        <view class="service-item">模拟菜单</view>
+        <view class="service-item">预计时长</view>
+        <view class="service-item">店铺菜单</view>
       </view>
     </scroll-view>
 
@@ -286,7 +293,7 @@ const checkout = () => {
             <view class="product-info">
               <text class="product-name">{{ item.name }}</text>
               <text v-if="item.subtitle" class="product-desc">{{ item.subtitle }}</text>
-              <text class="product-sales">模拟点选 {{ item.monthlySales }}</text>
+              <text class="product-sales">月售 {{ item.monthlySales }}</text>
               <view class="product-bottom">
                 <view class="product-price">
                   <text class="price-symbol">¥</text>{{ (displayBasePriceCents(item) / 100).toFixed(2) }}

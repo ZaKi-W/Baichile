@@ -105,6 +105,18 @@ describe('cart pricing', () => {
     expect(cart.lines[0]?.quantity).toBe(MAX_CART_QUANTITY);
   });
 
+  it('keeps a completed store cart empty when the store page becomes active again', async () => {
+    const cart = useCartStore();
+    await cart.add(store, item, ['standard'], 2);
+
+    cart.clear(store.id);
+    cart.selectStore(store);
+
+    expect(cart.count).toBe(0);
+    expect(cart.lines).toEqual([]);
+    expect(cart.group(store.id)).toBeNull();
+  });
+
   it('refreshes persisted line prices and option names from the latest catalog snapshot', async () => {
     const cart = useCartStore();
     await cart.add(store, item, ['standard'], 2);

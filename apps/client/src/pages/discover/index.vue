@@ -89,8 +89,8 @@ onShow(() => {
           <view class="store-summary">
             <view><text>活动后商品</text><text>{{ formatMoney(group.itemsTotalCents) }}</text></view>
             <view v-if="group.storeDiscountCents"><text>店铺满减</text><text>-{{ formatMoney(group.storeDiscountCents) }}</text></view>
-            <view><text>模拟配送费</text><text>{{ formatMoney(group.store.deliveryFeeCents) }}</text></view>
-            <view><text>模拟包装费</text><text>{{ formatMoney(group.store.packingFeeCents) }}</text></view>
+            <view><text>配送费</text><text>{{ formatMoney(group.store.deliveryFeeCents) }}</text></view>
+            <view><text>包装费</text><text>{{ formatMoney(group.store.packingFeeCents) }}</text></view>
             <view class="store-summary-total"><text>本店预估</text><text>{{ formatMoney(group.totalCents) }}</text></view>
           </view>
         </view>
@@ -110,7 +110,7 @@ onShow(() => {
           <text>-{{ formatMoney(cart.allStoreDiscountCents) }}</text>
         </view>
         <view class="summary-row">
-          <text>模拟配送/包装费</text>
+          <text>配送/包装费</text>
           <text>{{ formatMoney(cart.allTotalCents - cart.allItemsTotalCents + cart.allStoreDiscountCents) }}</text>
         </view>
         <view class="summary-total">

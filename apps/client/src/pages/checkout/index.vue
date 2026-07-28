@@ -246,7 +246,7 @@ async function submit() {
       if (!pendingCheckoutHasWork(pending) && recovered.length) {
         if (requests.value.length) {
           uni.showToast({
-            title: `已恢复 ${recovered.length} 个模拟订单，其余商品仍在购物车`,
+            title: `已恢复 ${recovered.length} 个订单，其余商品仍在购物车`,
             icon: 'none',
             duration: 2400,
           });
@@ -326,7 +326,7 @@ async function submit() {
     if (result.created.length === 1) {
       uni.redirectTo({ url: `/pages/delivery/index?id=${result.created[0].id}` });
     } else if (result.created.length > 1) {
-      uni.showToast({ title: `已生成 ${result.created.length} 个模拟订单`, icon: 'none' });
+      uni.showToast({ title: `已生成 ${result.created.length} 个订单`, icon: 'none' });
       setTimeout(() => uni.switchTab({ url: '/pages/orders/index' }), 500);
     }
   } catch (error) {
@@ -363,7 +363,7 @@ function openCreatedOrders(created: NonNullable<Awaited<ReturnType<typeof submit
   if (created.length === 1) {
     uni.redirectTo({ url: `/pages/delivery/index?id=${created[0].id}` });
   } else if (created.length > 1) {
-    uni.showToast({ title: `已恢复 ${created.length} 个模拟订单`, icon: 'none' });
+    uni.showToast({ title: `已恢复 ${created.length} 个订单`, icon: 'none' });
     setTimeout(() => uni.switchTab({ url: '/pages/orders/index' }), 500);
   }
 }
@@ -398,7 +398,7 @@ function adoptPendingQuote(pending: PendingCheckout) {
 <template>
   <view class="page">
     <view class="virtual-notice">
-      {{ auth.accountId ? '模拟订单仅扣应用内虚拟余额，不产生真实支付或配送。' : '游客模拟下单不扣余额，也不产生真实支付或配送。' }}
+      {{ auth.accountId ? '订单仅扣应用内虚拟余额，不产生真实支付或配送。' : '游客下单不扣余额，也不产生真实支付或配送。' }}
     </view>
 
     <!-- 收货地址卡片 -->
@@ -459,15 +459,15 @@ function adoptPendingQuote(pending: PendingCheckout) {
         <text>¥{{ ((quoteStores.get(group.store.id)?.itemsTotalCents ?? group.itemsTotalCents) / 100).toFixed(2) }}</text>
       </view>
       <view class="line fee">
-        <text>模拟配送费</text>
+        <text>配送费</text>
         <text>¥{{ ((quoteStores.get(group.store.id)?.deliveryFeeCents ?? group.store.deliveryFeeCents) / 100).toFixed(2) }}</text>
       </view>
       <view class="line fee">
-        <text>模拟包装费</text>
+        <text>包装费</text>
         <text>¥{{ ((quoteStores.get(group.store.id)?.packingFeeCents ?? group.store.packingFeeCents) / 100).toFixed(2) }}</text>
       </view>
       <view class="line total">
-        <text>本店模拟小计</text>
+        <text>本店小计</text>
         <text class="total-price">¥{{ ((quoteStores.get(group.store.id)?.totalCents ?? group.totalCents) / 100).toFixed(2) }}</text>
       </view>
       <view v-if="storeShortfallCents(group) > 0" class="store-shortfall">
@@ -477,7 +477,7 @@ function adoptPendingQuote(pending: PendingCheckout) {
 
     <view v-if="checkoutGroups.length > 1" class="card merge-card">
       <view class="line total merge-total">
-        <text>多店模拟合计</text>
+        <text>多店合计</text>
         <text class="total-price">¥{{ (checkoutTotalCents / 100).toFixed(2) }}</text>
       </view>
       <text v-if="promotionDiscountCents" class="discount-summary">
@@ -495,7 +495,7 @@ function adoptPendingQuote(pending: PendingCheckout) {
 
     <!-- 提交按钮 -->
     <button class="submit-btn" :loading="submitting || quoting" :disabled="!canSubmit || quoting" @tap="submit">
-      {{ !selectedAddress ? '请先选择地址' : !eligibleStoreCount ? '未达到起送门槛' : quoting ? '正在确认活动与价格' : `提交 ${eligibleStoreCount} 家模拟订单` }}
+      {{ !selectedAddress ? '请先选择地址' : !eligibleStoreCount ? '未达到起送门槛' : quoting ? '正在确认活动与价格' : '提交订单' }}
     </button>
   </view>
 </template>

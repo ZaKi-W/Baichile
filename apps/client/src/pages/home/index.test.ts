@@ -22,12 +22,12 @@ describe('home page sections', () => {
     expect(source).toContain('class="campaign-grid"');
     expect(source).toContain('今日精选');
     expect(source).toContain('限时秒杀');
-    expect(source).toContain('class="sale-action">模拟抢购');
+    expect(source).toContain('class="sale-action">限时抢购');
     expect(source).toContain('const flashSaleItems = computed');
     expect(source).toContain('v-if="flashSaleItems.length"');
     expect(source).toContain('class="sale-time"');
     expect(source).toContain('class="filter-row"');
-    expect(source).toContain("const sortFilters = ['综合排序', '模拟热度', '距离最近', '评分最高']");
+    expect(source).toContain("const sortFilters = ['综合排序', '热度', '距离最近', '评分最高']");
     expect(source).toContain("const quickFilters = ['全部', '免配送费', '30分钟内', '满减优惠']");
     expect(source).toContain("activeQuickFilter.value === '30分钟内'");
     expect(source).toContain("activeQuickFilter.value === '免配送费'");

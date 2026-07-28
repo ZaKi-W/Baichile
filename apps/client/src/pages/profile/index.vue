@@ -353,7 +353,7 @@ async function submitPendingOrderAfterLogin() {
       uni.showToast({
         title: result.created.length
           ? `已完成 ${result.created.length} 店，剩余可继续重试`
-          : '登录成功，模拟订单提交失败，可继续重试',
+          : '登录成功，订单提交失败，可继续重试',
         icon: 'none',
         duration: 2400,
       });
@@ -377,7 +377,7 @@ async function submitPendingOrderAfterLogin() {
       uni.navigateTo({ url: '/pages/checkout/index?resume=1' });
       return;
     }
-    uni.showToast({ title: '登录成功，但模拟订单提交失败，可继续重试', icon: 'none' });
+    uni.showToast({ title: '登录成功，但订单提交失败，可继续重试', icon: 'none' });
   } finally {
     pendingSubmitting.value = false;
   }
@@ -408,7 +408,7 @@ async function deleteAccount() {
   if (!auth.accountId || deletingAccount.value) return;
   const first = await confirmModal(
     '注销账户',
-    '将永久删除登录身份和已保存地址；匿名化的模拟订单与虚拟流水会保留，且无法重新关联。',
+    '将永久删除登录身份和已保存地址；匿名化的订单与虚拟流水会保留，且无法重新关联。',
     '继续',
   );
   if (!first) return;
@@ -451,7 +451,7 @@ async function deleteAccount() {
     </view>
     <view v-if="auth.accountId && pendingCheckoutAvailable" class="pending-card">
       <view>
-        <text class="pending-title">有未完成的多店模拟订单</text>
+        <text class="pending-title">有未完成的多店订单</text>
         <text class="pending-desc">成功店铺不会重复提交，失败店铺可继续重试。</text>
       </view>
       <button :loading="pendingSubmitting" :disabled="pendingSubmitting" @tap="submitPendingOrderAfterLogin">继续提交</button>
@@ -475,11 +475,11 @@ async function deleteAccount() {
         </view>
         <view class="stat-item">
           <text class="stat-value">¥{{ (orders.gameStats.simulatedOrderAmountCents / 100).toFixed(2) }}</text>
-          <text class="stat-label">模拟订单金额</text>
+          <text class="stat-label">订单金额</text>
         </view>
         <view class="stat-item">
           <text class="stat-value">{{ orders.gameStats.simulatedCaloriesKcal }}</text>
-          <text class="stat-label">模拟热量</text>
+          <text class="stat-label">热量</text>
         </view>
       </view>
     </view>
@@ -492,7 +492,7 @@ async function deleteAccount() {
       <button class="login-btn" @tap="openLogin()">
         <text class="login-btn-text">{{ loginButtonLabel }}</text>
       </button>
-      <text class="guest-hint">{{ isWeb ? '不登录也能完成基础模拟点餐' : '游客也可完成一次模拟结算，登录后可跨设备保留记录' }}</text>
+      <text class="guest-hint">{{ isWeb ? '不登录也能完成基础点餐' : '游客也可完成一次结算，登录后可跨设备保留记录' }}</text>
     </view>
 
     <view v-if="auth.accountId" class="wallet-card">
@@ -567,7 +567,7 @@ async function deleteAccount() {
           @getphonenumber="bindWechatPhone"
         >
           <text class="menu-icon phone-icon">机</text>
-          <text class="menu-text">绑定手机号并同步网页版</text>
+          <text class="menu-text">绑定手机号</text>
           <text class="menu-arrow">›</text>
         </button>
       </template>
@@ -594,7 +594,7 @@ async function deleteAccount() {
       <view class="about-header">
         <text class="about-title">关于这顿白吃</text>
       </view>
-      <text class="about-desc">这是互动模拟产品，不提供真实支付、接单或配送。</text>
+      <text class="about-desc">这是互动点餐产品，不提供真实支付、接单或配送。</text>
       <view class="about-meta">
         <text class="version">v1.0.0 · 代码版本 {{ CODE_VERSION }}</text>
       </view>

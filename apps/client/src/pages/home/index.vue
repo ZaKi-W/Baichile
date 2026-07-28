@@ -25,7 +25,7 @@ const dismissedOrderIds = ref<string[]>([]);
 const sessionOrderIds = ref<string[]>([]);
 const activeSort = ref('综合排序');
 const activeQuickFilter = ref('全部');
-const sortFilters = ['综合排序', '模拟热度', '距离最近', '评分最高'];
+const sortFilters = ['综合排序', '热度', '距离最近', '评分最高'];
 const quickFilters = ['全部', '免配送费', '30分钟内', '满减优惠'];
 const systemInfo = uni.getSystemInfoSync();
 const statusBarHeight = systemInfo.statusBarHeight ?? 20;
@@ -58,7 +58,7 @@ const sortedStores = computed(() => {
   if (activeQuickFilter.value === '30分钟内') stores = stores.filter((store) => store.virtualDeliveryMinutes <= 30);
   if (activeQuickFilter.value === '免配送费') stores = stores.filter((store) => store.deliveryFeeCents === 0);
   if (activeQuickFilter.value === '满减优惠') stores = stores.filter((store) => storePromotionByStore.value.has(store.id));
-  if (activeSort.value === '模拟热度') return stores.sort((a, b) => b.monthlySales - a.monthlySales);
+  if (activeSort.value === '热度') return stores.sort((a, b) => b.monthlySales - a.monthlySales);
   if (activeSort.value === '距离最近') return stores.sort((a, b) => a.distanceKm - b.distanceKm);
   if (activeSort.value === '评分最高') return stores.sort((a, b) => b.rating - a.rating);
   return stores;
@@ -263,7 +263,7 @@ onUnload(handleHide);
       <view class="brand-row" :style="brandRowStyle">
         <view>
           <text class="brand-name">这顿白吃</text>
-          <text class="brand-slogan">模拟点餐 · 仅供娱乐</text>
+          <text class="brand-slogan">想吃就点 · 快乐加倍</text>
         </view>
       </view>
       <view class="address-row" @tap="openAddressList">
@@ -321,7 +321,7 @@ onUnload(handleHide);
           <button v-if="featuredStore" class="campaign-card featured-campaign" @tap="openStore(featuredStore.id)">
             <view class="campaign-copy">
               <text class="campaign-title">今日精选</text>
-              <text class="campaign-subtitle">口碑好店 · 模拟点单</text>
+              <text class="campaign-subtitle">口碑好店 · 一键点单</text>
               <text class="campaign-button">去看看</text>
             </view>
             <view class="campaign-image-wrap">
@@ -339,7 +339,7 @@ onUnload(handleHide);
                 <text class="sale-price">¥{{ (flashSaleItems[0].flashPriceCents / 100).toFixed(1) }}</text>
                 <text class="original-price">¥{{ (flashSaleItems[0].originalPriceCents / 100).toFixed(1) }}</text>
               </view>
-              <text class="sale-action">模拟抢购</text>
+              <text class="sale-action">限时抢购</text>
             </view>
             <view class="campaign-image-wrap">
               <image class="campaign-image" :src="flashSaleItems[0].imageUrl || saleCampaignImage" mode="aspectFill" />
@@ -383,7 +383,7 @@ onUnload(handleHide);
           <view v-else class="empty-inline">附近暂时没有虚拟店铺</view>
           <view class="route-note">
             <text class="route-label">虚拟外卖演示</text>
-            <text>下单后展示模拟派送路线与送达进度</text>
+            <text>下单后展示派送路线与送达进度</text>
           </view>
         </section>
       </template>

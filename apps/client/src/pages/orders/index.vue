@@ -110,7 +110,7 @@ onHide(() => clearInterval(statusTimer));
       </view>
       <button class="guest-login-button" @tap="openLogin">登录</button>
     </view>
-    <view v-if="loading" class="card muted">正在整理模拟订单…</view>
+    <view v-if="loading" class="card muted">正在整理订单…</view>
     <view v-else-if="error" class="card state-error">
       <text>{{ error }}</text>
       <button @tap="load">重新加载</button>
@@ -134,7 +134,7 @@ onHide(() => clearInterval(statusTimer));
         <view class="order-meta">
           <text>{{ formatOrderTime(order.createdAt || order.startedAt) }}</text>
           <text>· 共{{ itemCount(order) }}件</text>
-          <text>· {{ order.settlementMode === 'guest_simulation' ? '游客模拟金额' : '虚拟余额金额' }} </text>
+          <text>· {{ order.settlementMode === 'guest_simulation' ? '游客订单金额' : '虚拟余额金额' }} </text>
           <text class="paid-money">{{ formatMoney(order.totalCents) }}</text>
         </view>
         <view
@@ -171,9 +171,9 @@ onHide(() => clearInterval(statusTimer));
       :disabled="orders.loadingMore"
       @tap="loadMore"
     >
-      {{ orders.loadingMore ? '正在加载…' : '加载更多模拟订单' }}
+      {{ orders.loadingMore ? '正在加载…' : '加载更多订单' }}
     </button>
-    <view v-if="!loading && !error && !orders.orders.length" class="card muted">还没有模拟订单，先去首页逛逛吧。</view>
+    <view v-if="!loading && !error && !orders.orders.length" class="card muted">还没有订单，先去首页逛逛吧。</view>
     <view class="tab-spacer" />
   </view>
 </template>

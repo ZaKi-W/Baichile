@@ -22,7 +22,9 @@ describe('checkout wallet payment', () => {
     expect(source).toContain("error.code === 'INSUFFICIENT_BALANCE'");
     expect(source).toContain('虚拟余额不足');
     expect(source).toContain('不产生真实支付或配送');
-    expect(source).toContain('游客模拟下单不扣余额');
+    expect(source).toContain('游客下单不扣余额');
     expect(source).toContain('新用户已安排默认收货点，点此可换成自己的');
+    expect(source).toContain(": '提交订单'");
+    expect(source).not.toContain('提交 ${eligibleStoreCount} 家订单');
   });
 });

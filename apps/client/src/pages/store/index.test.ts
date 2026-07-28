@@ -19,6 +19,9 @@ describe('store page cart interaction', () => {
     expect(source).toContain('@remove="removeFromCart"');
     expect(source).toContain('cart.remove(key)');
     expect(source).toContain('cart.clear(store.value.id)');
+    expect(source).toContain('onShow(syncCartOnShow)');
+    expect(source).toContain('function syncCartOnShow()');
+    expect(source).toContain('if (store.value) cart.selectStore(store.value)');
   });
 
   it('renders the complete merchant design structure around existing behavior', () => {
@@ -66,7 +69,7 @@ describe('store page cart interaction', () => {
   it('labels catalog counters as simulated heat', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
-    expect(source).toContain('模拟点选 {{ item.monthlySales }}');
+    expect(source).toContain('月售 {{ item.monthlySales }}');
   });
 
   it('positions a flash-sale dish without changing the cart until the user acts', () => {
@@ -79,6 +82,6 @@ describe('store page cart interaction', () => {
     expect(source).toContain('displayBasePriceCents(item)');
     expect(source).toContain('storePromotionLabel');
     expect(source).not.toContain('cart.add(store.value, flashSaleItem');
-    expect(source).not.toContain('模拟活动商品已加入购物车');
+    expect(source).not.toContain('活动商品已加入购物车');
   });
 });

@@ -214,7 +214,7 @@ onMounted(async () => {
               <el-form-item label="虚拟包装费（元）"><el-input-number v-model="storeForm.packingFeeYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
               <el-form-item label="虚拟起送金额（元）"><el-input-number v-model="storeForm.minimumOrderYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
               <el-form-item label="虚拟配送分钟"><el-input-number v-model="storeForm.virtualDeliveryMinutes" :min="1" style="width:100%" /></el-form-item>
-              <el-form-item label="模拟热度"><el-input-number v-model="storeForm.monthlySales" :min="0" style="width:100%" /></el-form-item>
+              <el-form-item label="热度"><el-input-number v-model="storeForm.monthlySales" :min="0" style="width:100%" /></el-form-item>
               <el-form-item label="距离（km）"><el-input-number v-model="storeForm.distanceKm" :min="0" :precision="2" style="width:100%" /></el-form-item>
               <el-form-item label="评分"><el-input-number v-model="storeForm.rating" :min="0" :max="5" :precision="1" style="width:100%" /></el-form-item>
               <el-form-item label="排序"><el-input-number v-model="storeForm.sortOrder" :min="0" style="width:100%" /></el-form-item>
@@ -238,7 +238,7 @@ onMounted(async () => {
             <el-table-column prop="categoryId" label="分类" width="120" />
             <el-table-column label="虚拟价格" width="140"><template #default="{ row }">虚拟 ¥{{ centsToYuan(row.basePriceCents) }}</template></el-table-column>
             <el-table-column prop="caloriesKcal" label="热量(kcal)" width="110" />
-            <el-table-column prop="monthlySales" label="模拟热度" width="95" />
+            <el-table-column prop="monthlySales" label="热度" width="95" />
             <el-table-column label="状态" width="85"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'info'" effect="plain">{{ row.status === 'active' ? '上架' : '下架' }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="220" fixed="right"><template #default="{ row }">
               <el-button v-if="auth.has('catalog:write')" link type="primary" @click="openItem(row)">编辑</el-button>
@@ -266,7 +266,7 @@ onMounted(async () => {
         <el-form-item class="wide" label="副标题"><el-input v-model="itemForm.subtitle" /></el-form-item>
         <el-form-item class="wide" label="图片 URL"><el-input v-model="itemForm.imageUrl" /></el-form-item>
         <el-form-item label="热量（kcal）"><el-input-number v-model="itemForm.caloriesKcal" :min="0" style="width:100%" /></el-form-item>
-        <el-form-item label="模拟热度"><el-input-number v-model="itemForm.monthlySales" :min="0" style="width:100%" /></el-form-item>
+        <el-form-item label="热度"><el-input-number v-model="itemForm.monthlySales" :min="0" style="width:100%" /></el-form-item>
         <el-form-item label="排序"><el-input-number v-model="itemForm.sortOrder" :min="0" style="width:100%" /></el-form-item>
         <el-form-item class="wide" label="规格组 JSON"><el-input v-model="itemForm.specText" type="textarea" :rows="7" /></el-form-item>
         <el-form-item class="wide" label="热量来源 JSON"><el-input v-model="itemForm.calorieSourceText" type="textarea" :rows="4" /></el-form-item>

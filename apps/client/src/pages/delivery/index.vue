@@ -78,7 +78,7 @@ const deliveryContactPhone = computed(() => {
   return addressStore.addresses.find((a) => a.id === order.value?.virtualDestinationId)?.phone || '';
 });
 const paymentMethodText = computed(() => (
-  order.value?.settlementMode === 'guest_simulation' ? '游客模拟结算' : '虚拟余额支付'
+  order.value?.settlementMode === 'guest_simulation' ? '游客结算' : '虚拟余额支付'
 ));
 const orderStoreDiscountCents = computed(() => order.value?.promotionSnapshots
   ?.filter((snapshot) => snapshot.type === 'store_threshold')
@@ -322,7 +322,7 @@ const deliveryTimeText = computed(() => {
   if (!order.value) return '';
   if (hasFailed.value) {
     return order.value.settlementMode === 'guest_simulation'
-      ? '配送失败，游客模拟结算'
+      ? '配送失败，游客结算'
       : '配送失败，已原路退款';
   }
   const deliveredAt = new Date(new Date(order.value.startedAt).getTime() + DELIVERY_START_MS + order.value.durationMs);
@@ -534,7 +534,7 @@ function handleEggRevealImageLoad() {
 
 <template>
   <view v-if="loadingOrder" class="empty-state">
-    <text class="empty-text">正在加载模拟配送…</text>
+    <text class="empty-text">正在加载配送…</text>
   </view>
   <view v-else-if="orderLoadError" class="empty-state error-state">
     <text class="empty-title">订单暂时走丢了</text>
@@ -589,7 +589,7 @@ function handleEggRevealImageLoad() {
         <text class="eta-text">{{ etaText }}</text>
         <text class="distance-text">{{ distanceText }}</text>
       </view>
-      <text class="simulation-notice">虚拟配送演示 · 路线、骑手与进度均为模拟数据</text>
+      <text class="simulation-notice">配送进度 · 路线与骑手信息</text>
 
       <!-- 时间轴 -->
       <view class="timeline">
@@ -652,7 +652,7 @@ function handleEggRevealImageLoad() {
           <text class="rider-tag">虚拟配送角色</text>
         </view>
         <view class="contact-btn">
-          <text class="contact-text">模拟路线</text>
+          <text class="contact-text">配送路线</text>
         </view>
       </view>
 
@@ -687,9 +687,9 @@ function handleEggRevealImageLoad() {
           </view>
         </view>
         <view v-if="orderStoreDiscountCents" class="fee-line discount-line"><text>店铺满减</text><text>-{{ formatMoney(orderStoreDiscountCents) }}</text></view>
-        <view class="fee-line"><text>模拟配送费</text><text>{{ formatMoney(order.deliveryFeeCents) }}</text></view>
-        <view class="fee-line"><text>模拟包装费</text><text>{{ formatMoney(order.packingFeeCents) }}</text></view>
-        <view class="total-line"><text>模拟订单金额</text><text>{{ formatMoney(order.totalCents) }}</text></view>
+        <view class="fee-line"><text>配送费</text><text>{{ formatMoney(order.deliveryFeeCents) }}</text></view>
+        <view class="fee-line"><text>包装费</text><text>{{ formatMoney(order.packingFeeCents) }}</text></view>
+        <view class="total-line"><text>订单金额</text><text>{{ formatMoney(order.totalCents) }}</text></view>
       </view>
 
       <!-- 分隔线 -->
@@ -717,7 +717,7 @@ function handleEggRevealImageLoad() {
           <text class="info-value">{{ formatDateTime(order.createdAt || order.startedAt) }}</text>
         </view>
         <view class="info-row">
-          <text class="info-label">模拟结算方式</text>
+          <text class="info-label">结算方式</text>
           <text class="info-value">{{ paymentMethodText }}</text>
         </view>
         <view class="info-row">

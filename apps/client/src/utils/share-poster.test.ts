@@ -21,9 +21,9 @@ describe('share poster model', () => {
       kind: 'order',
       eyebrow: '本单空气外卖',
       primary: '¥46.80',
-      primaryLabel: '模拟订单金额',
-      secondary: '模拟热量 820 千卡',
-      stamp: '模拟单完成',
+      primaryLabel: '订单金额',
+      secondary: '热量 820 千卡',
+      stamp: '订单完成',
       ticket: 'ORDER CAPSULE',
       fundsNotice: VIRTUAL_FUNDS_NOTICE,
     });

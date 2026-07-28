@@ -88,12 +88,12 @@ export function createOrderEggPresentation(
       eyebrow: '配送彩蛋结局揭晓',
       title: definition.failedText,
       description: guestSimulation
-        ? '本单为游客模拟结算，无需退款。'
+        ? '本单为游客结算，无需退款。'
         : order.refundStatus === 'refunded'
           ? '本单虚拟饭钱已原路退回。'
           : '本单配送失败，虚拟饭钱正在原路退回。',
       meta: guestSimulation
-        ? '配送彩蛋 · 游客模拟'
+        ? '配送彩蛋 · 游客'
         : `配送彩蛋 · ${order.refundStatus === 'refunded' ? '已退款' : '退款处理中'}`,
       themeColor: '#F04B32',
       imageUrl: orderEggImageUrl('incident', order.incident.key),

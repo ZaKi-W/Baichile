@@ -80,29 +80,29 @@
           <div><div class="shop-name" id="shopName">火星炒饭研究所</div><div class="order-time" id="orderTime">2026年7月15日 · 午餐</div></div>
         </div>
         <div class="amount-row">
-          <div><div class="paid-label">模拟订单金额</div><div class="amount"><small>¥</small><span id="savedAmount">36.00</span></div></div>
+          <div><div class="paid-label">订单金额</div><div class="amount"><small>¥</small><span id="savedAmount">36.00</span></div></div>
           <div class="saved-tag">真实支付 ¥<span id="paidAmount">0.00</span></div>
         </div>
       </div>
     </section>
 
     <section class="section">
-      <div class="section-head"><div class="section-title">这顿模拟点了什么</div><div class="section-sub" id="dishCount">3 件商品</div></div>
+      <div class="section-head"><div class="section-title">这顿点了什么</div><div class="section-sub" id="dishCount">3 件商品</div></div>
       <div class="dish-list" id="dishList"></div>
       <div class="line"></div>
-      <div class="total-row"><span>模拟餐品金额</span><strong>¥<span id="originalAmount">36.00</span></strong></div>
+      <div class="total-row"><span>餐品金额</span><strong>¥<span id="originalAmount">36.00</span></strong></div>
     </section>
 
     <section class="metrics">
-      <article class="metric"><span class="metric-note">模拟口径</span><div class="metric-icon">🔥</div><div class="metric-value"><span id="calories">620</span> kcal</div><div class="metric-label">本单模拟热量</div></article>
-      <article class="metric"><span class="metric-note">本单汇总</span><div class="metric-icon">💰</div><div class="metric-value">¥<span id="moneySaved">36</span></div><div class="metric-label">模拟订单金额</div></article>
-      <article class="metric"><span class="metric-note">换算展示</span><div class="metric-icon">🚶</div><div class="metric-value"><span id="walkSteps">8,300</span> 步</div><div class="metric-label">模拟热量步数换算</div></article>
-      <article class="metric"><span class="metric-note">模拟完成</span><div class="metric-icon">🏆</div><div class="metric-value"><span id="rankPercent">91</span>%</div><div class="metric-label">虚拟配送进度</div></article>
+      <article class="metric"><span class="metric-note">估算口径</span><div class="metric-icon">🔥</div><div class="metric-value"><span id="calories">620</span> kcal</div><div class="metric-label">本单热量</div></article>
+      <article class="metric"><span class="metric-note">本单汇总</span><div class="metric-icon">💰</div><div class="metric-value">¥<span id="moneySaved">36</span></div><div class="metric-label">订单金额</div></article>
+      <article class="metric"><span class="metric-note">换算展示</span><div class="metric-icon">🚶</div><div class="metric-value"><span id="walkSteps">8,300</span> 步</div><div class="metric-label">热量步数换算</div></article>
+      <article class="metric"><span class="metric-note">配送完成</span><div class="metric-icon">🏆</div><div class="metric-value"><span id="rankPercent">91</span>%</div><div class="metric-label">虚拟配送进度</div></article>
     </section>
 
     <section class="quote">
       <div class="quote-label">今日虚拟点单宣言</div>
-      <div class="quote-text" id="shareCopy">菜单认真选，配送全模拟。今天这顿，游戏里见。</div>
+      <div class="quote-text" id="shareCopy">菜单认真选，配送有惊喜。今天这顿，游戏里见。</div>
       <div class="quote-from">— 来自「这顿白吃」虚拟订单战报</div>
     </section>
     <p class="virtual-notice">本页仅展示虚拟外卖游戏记录，不涉及真实资金，不可充值或提现。</p>
@@ -145,7 +145,7 @@
     function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove('show'),1800)}
 
     $('shareBtn').addEventListener('click',async()=>{
-      const text=`我在「${orderData.shopName}」完成了一笔 ¥${orderData.savedAmount} 的模拟订单，还记录了约 ${orderData.calories} kcal。${orderData.copy}（虚拟外卖游戏，不涉及真实资金）`;
+      const text=`我在「${orderData.shopName}」完成了一笔 ¥${orderData.savedAmount} 的订单，还记录了约 ${orderData.calories} kcal。${orderData.copy}（虚拟外卖游戏，不涉及真实资金）`;
       try{if(navigator.share){await navigator.share({title:'我的订单战报',text})}else{await navigator.clipboard.writeText(text);toast('分享文案已复制')}}catch(e){}
     });
 
@@ -156,12 +156,12 @@
       ctx.fillStyle='#171713';roundRect(ctx,60,220,960,500,54);ctx.fill();
       ctx.fillStyle='#FFD400';roundRect(ctx,100,270,120,120,28);ctx.fill();ctx.fillStyle='#111';ctx.font='900 58px sans-serif';ctx.fillText(orderData.shopLogo,160,352);
       ctx.textAlign='left';ctx.fillStyle='#fff';ctx.font='800 52px sans-serif';ctx.fillText(orderData.shopName,250,320);ctx.fillStyle='rgba(255,255,255,.62)';ctx.font='30px sans-serif';ctx.fillText(orderData.orderTime,250,370);
-      ctx.fillStyle='#fff';ctx.font='32px sans-serif';ctx.fillText('模拟订单金额',100,485);ctx.font='900 110px sans-serif';ctx.fillText(`¥${orderData.savedAmount.toFixed(2)}`,100,615);
+      ctx.fillStyle='#fff';ctx.font='32px sans-serif';ctx.fillText('订单金额',100,485);ctx.font='900 110px sans-serif';ctx.fillText(`¥${orderData.savedAmount.toFixed(2)}`,100,615);
       ctx.fillStyle='#FFD400';roundRect(ctx,690,530,260,80,22);ctx.fill();ctx.fillStyle='#111';ctx.textAlign='center';ctx.font='800 30px sans-serif';ctx.fillText(`真实支付 ¥${orderData.paidAmount.toFixed(2)}`,820,582);
-      ctx.textAlign='left';ctx.fillStyle='#fff';roundRect(ctx,60,770,960,520,44);ctx.fill();ctx.fillStyle='#171713';ctx.font='850 42px sans-serif';ctx.fillText('这顿模拟点了什么',100,845);
+      ctx.textAlign='left';ctx.fillStyle='#fff';roundRect(ctx,60,770,960,520,44);ctx.fill();ctx.fillStyle='#171713';ctx.font='850 42px sans-serif';ctx.fillText('这顿点了什么',100,845);
       let y=930;ctx.font='34px sans-serif';orderData.dishes.forEach(d=>{ctx.fillText(`${d.emoji}  ${d.name}`,105,y);ctx.textAlign='right';ctx.font='700 34px sans-serif';ctx.fillText(`¥${d.price.toFixed(2)}`,940,y);ctx.textAlign='left';ctx.font='34px sans-serif';y+=105});
-      ctx.strokeStyle='#ece9e1';ctx.beginPath();ctx.moveTo(100,1210);ctx.lineTo(940,1210);ctx.stroke();ctx.font='800 40px sans-serif';ctx.fillText('模拟餐品金额',100,1265);ctx.textAlign='right';ctx.fillText(`¥${orderData.originalAmount.toFixed(2)}`,940,1265);
-      ctx.textAlign='left';ctx.fillStyle='#EAF8EF';roundRect(ctx,60,1340,460,250,36);ctx.fill();ctx.fillStyle='#FFF0E9';roundRect(ctx,560,1340,460,250,36);ctx.fill();ctx.fillStyle='#171713';ctx.font='34px sans-serif';ctx.fillText('🔥 模拟热量',100,1415);ctx.font='900 58px sans-serif';ctx.fillText(`${orderData.calories} kcal`,100,1510);ctx.font='34px sans-serif';ctx.fillText('🏆 虚拟配送进度',600,1415);ctx.font='900 58px sans-serif';ctx.fillText(`${orderData.rankPercent}%`,600,1510);
+      ctx.strokeStyle='#ece9e1';ctx.beginPath();ctx.moveTo(100,1210);ctx.lineTo(940,1210);ctx.stroke();ctx.font='800 40px sans-serif';ctx.fillText('餐品金额',100,1265);ctx.textAlign='right';ctx.fillText(`¥${orderData.originalAmount.toFixed(2)}`,940,1265);
+      ctx.textAlign='left';ctx.fillStyle='#EAF8EF';roundRect(ctx,60,1340,460,250,36);ctx.fill();ctx.fillStyle='#FFF0E9';roundRect(ctx,560,1340,460,250,36);ctx.fill();ctx.fillStyle='#171713';ctx.font='34px sans-serif';ctx.fillText('🔥 热量',100,1415);ctx.font='900 58px sans-serif';ctx.fillText(`${orderData.calories} kcal`,100,1510);ctx.font='34px sans-serif';ctx.fillText('🏆 虚拟配送进度',600,1415);ctx.font='900 58px sans-serif';ctx.fillText(`${orderData.rankPercent}%`,600,1510);
       ctx.fillStyle='#191915';roundRect(ctx,60,1640,960,190,40);ctx.fill();ctx.fillStyle='#FFD400';ctx.font='700 24px sans-serif';ctx.fillText('今日虚拟点单宣言',100,1700);ctx.fillStyle='#fff';ctx.font='700 37px sans-serif';wrapText(ctx,orderData.copy,100,1760,850,52);
       ctx.fillStyle='#77736b';ctx.textAlign='center';ctx.font='24px sans-serif';ctx.fillText('虚拟外卖游戏 · 不涉及真实资金 · 不可充值提现',540,1880);
       const a=document.createElement('a');a.download='订单分享图.png';a.href=c.toDataURL('image/png');a.click();toast('分享图已保存');

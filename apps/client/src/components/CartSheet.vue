@@ -93,8 +93,8 @@ const markImageFailed = (itemId: string) => {
 
       <view class="footer">
         <view class="fee-summary">
-          <text>模拟配送费 {{ formatMoney(deliveryFeeCents ?? 0) }}</text>
-          <text>模拟包装费 {{ formatMoney(packingFeeCents ?? 0) }}</text>
+          <text>配送费 {{ formatMoney(deliveryFeeCents ?? 0) }}</text>
+          <text>包装费 {{ formatMoney(packingFeeCents ?? 0) }}</text>
           <text v-if="storeDiscountCents">店铺满减 -{{ formatMoney(storeDiscountCents) }}</text>
         </view>
         <view class="total-block">

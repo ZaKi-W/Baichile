@@ -198,7 +198,7 @@ function privacyModal(): Promise<boolean> {
   return new Promise((resolve) => {
     uni.showModal({
       title: '保存地址前请确认',
-      content: '联系人、手机号和地址仅用于模拟订单展示与虚拟路线计算，并会保存到云端账号数据。不会产生真实配送。',
+      content: '联系人、手机号和地址仅用于订单展示与虚拟路线计算，并会保存到云端账号数据。不会产生真实配送。',
       confirmText: '同意并保存',
       cancelText: '暂不保存',
       success: ({ confirm }) => resolve(confirm),

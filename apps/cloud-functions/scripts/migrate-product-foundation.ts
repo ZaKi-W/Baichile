@@ -16,6 +16,10 @@ import { sanitizeForAuditLog, sanitizeLogMessage } from '../src/redaction';
 import { DEFAULT_SHARE_REWARD_CONFIG } from '../src/share-domain';
 import { shanghaiBusinessDate } from '../src/business-time';
 import { CLOUDBASE_SCHEMA_MANIFEST, validateSchemaManifest } from '../src/schema-manifest';
+import {
+  sanitizeShareInviteCopy,
+  sanitizeWalletTransactionCopy,
+} from '../src/product-copy';
 
 const APPLY = process.env.MIGRATION_APPLY === 'true';
 const PAGE_SIZE = 100;
@@ -57,11 +61,23 @@ async function main() {
     seenIdempotencyPairs.add(pair);
     const missingCheckoutMetadata = !(order.checkoutId && order.quoteId && order.idempotencyKey);
     const patch: Partial<VirtualOrderDoc> = {};
-    if (order.subjectKey !== subjectKey) patch.subjectKey = subjectKey;
-    if (order.idempotencyKey !== idempotencyKey) patch.idempotencyKey = idempotencyKey;
-    if (missingCheckoutMetadata && order.legacyCreate !== true) patch.legacyCreate = true;
+    const patchReasons: string[] = [];
+    if (order.subjectKey !== subjectKey) {
+      patch.subjectKey = subjectKey;
+      patchReasons.push('backfill idempotency principal');
+    }
+    if (order.idempotencyKey !== idempotencyKey) {
+      patch.idempotencyKey = idempotencyKey;
+      if (!patchReasons.includes('backfill idempotency principal')) {
+        patchReasons.push('backfill idempotency principal');
+      }
+    }
+    if (missingCheckoutMetadata && order.legacyCreate !== true) {
+      patch.legacyCreate = true;
+      patchReasons.push('mark legacyCreate');
+    }
     if (!Object.keys(patch).length) continue;
-    changes.push(`virtual_orders/${order.id}: backfill idempotency principal${missingCheckoutMetadata ? ' and mark legacyCreate' : ''}`);
+    changes.push(`virtual_orders/${order.id}: ${patchReasons.join(' and ')}`);
     if (APPLY) await orders.update(order.id, patch);
   }
 
@@ -86,6 +102,17 @@ async function main() {
     unknownCount: number;
   }>();
   for (const invite of await listAll(shares)) {
+    const safeInvite = sanitizeShareInviteCopy(invite);
+    if (safeInvite.title !== invite.title
+      || JSON.stringify(safeInvite.snapshot) !== JSON.stringify(invite.snapshot)) {
+      changes.push(`share_invites/${invite.token}: sanitize share product copy`);
+      if (APPLY) {
+        await shares.update(invite.token, {
+          title: safeInvite.title,
+          snapshot: safeInvite.snapshot,
+        });
+      }
+    }
     if (!invite.initiatedRewardGranted) continue;
     const transactionId = `share_initiated_${sha256(`${invite.inviterAccountId}:${invite.token}`).slice(0, 40)}`;
     const rewardTransaction = await walletTransactions.get(transactionId);
@@ -174,6 +201,17 @@ async function main() {
     if (APPLY) {
       if (existing) await rewardDaily.update(id, next);
       else await rewardDaily.insert(next);
+    }
+  }
+
+  for (const transaction of await listAll(walletTransactions)) {
+    const safeTransaction = sanitizeWalletTransactionCopy(transaction);
+    if (safeTransaction.description === transaction.description) continue;
+    changes.push(`wallet_transactions/${transaction.id}: sanitize description product copy`);
+    if (APPLY) {
+      await walletTransactions.update(transaction.id, {
+        description: safeTransaction.description,
+      });
     }
   }
 

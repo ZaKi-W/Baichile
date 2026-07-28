@@ -79,7 +79,7 @@ async function savePoster() {
         <view class="achievement-hero">
           <image class="achievement-hero-mark" :src="shareAsset('achievement-icons/hero-decoration.svg')" mode="aspectFit" />
           <view class="achievement-hero-copy">
-            <text class="achievement-hero-kicker">模拟订单金额</text>
+            <text class="achievement-hero-kicker">订单金额</text>
             <view class="achievement-money"><text>¥</text><text>{{ savedMoneyText }}</text></view>
             <text class="achievement-hero-caption">在白吃了，已成功撤回 {{ orders }} 顿外卖</text>
           </view>
@@ -92,7 +92,7 @@ async function savePoster() {
           </view>
           <view class="achievement-compare-card achievement-calorie-card">
             <view class="achievement-icon achievement-icon--calorie"><image :src="shareAsset('achievement-icons/flame.svg')" mode="aspectFit" /></view>
-            <view><text class="achievement-card-label">模拟热量</text><text class="achievement-card-value">{{ savedCalories.toLocaleString('zh-CN') }}</text><text class="achievement-card-caption">kcal</text></view>
+            <view><text class="achievement-card-label">热量</text><text class="achievement-card-value">{{ savedCalories.toLocaleString('zh-CN') }}</text><text class="achievement-card-caption">kcal</text></view>
           </view>
           <view class="achievement-walk-card">
             <view class="achievement-walk-icon"><image :src="shareAsset('achievement-icons/walk.svg')" mode="aspectFit" /></view>

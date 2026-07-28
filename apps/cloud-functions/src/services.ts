@@ -79,6 +79,10 @@ import { classifyPersona, selectMilestone, selectOrderEasterEgg } from './share-
 import { createShareMiniProgramCode, removeCloudFiles, resolveCloudFileUrls, uploadValidatedAvatar } from './storage';
 import { sanitizeForAuditLog } from './redaction';
 import { shanghaiBusinessDate } from './business-time';
+import {
+  sanitizeShareInviteCopy,
+  sanitizeWalletTransactionCopy,
+} from './product-copy';
 
 const INITIAL_GRANT_CENTS = 300_000;
 const DAILY_CHECKIN_CENTS = 50_000;
@@ -90,7 +94,7 @@ const MIN_DELIVERY_DURATION_MS = 45_000;
 const MAX_DELIVERY_DURATION_MS = 90_000;
 const PAYMENT_METHOD: VirtualOrder['paymentMethod'] = 'virtual_balance';
 const DEFAULT_PHONE_AVATAR = '/static/tabbar/profile.svg';
-const VIRTUAL_FUNDS_NOTICE = '仅为虚拟余额模拟，不可充值、提现或兑换真实货币。';
+const VIRTUAL_FUNDS_NOTICE = '虚拟余额仅限本产品内使用，不可充值、提现或兑换真实货币。';
 const GUEST_ACCESS_TOKEN_MS = 24 * 60 * 60 * 1000;
 const GUEST_REFRESH_TOKEN_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -1034,7 +1038,7 @@ export class WalletService {
         'order_payment',
         -amountCents,
         balanceCents,
-        '模拟订单扣款（虚拟余额）',
+        '订单扣款（虚拟余额）',
         { orderId },
       ));
   }
@@ -2001,10 +2005,11 @@ export class ShareService {
     if (!invite) {
       return { active: false, dishNames: [], savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0, inviteeRewardCents: 0, benefitText: BENEFIT_TEXT };
     }
-    const kind = invite.kind === 'invitation' ? 'reward' : invite.kind;
-    const active = new Date(invite.expiresAt).getTime() > Date.now() && (!isRewardShare(invite.kind) || config.enabled);
+    const safeInvite = sanitizeShareInviteCopy(invite);
+    const kind = safeInvite.kind === 'invitation' ? 'reward' : safeInvite.kind;
+    const active = new Date(safeInvite.expiresAt).getTime() > Date.now() && (!isRewardShare(safeInvite.kind) || config.enabled);
     const miniProgramCodeUrl = active ? await createShareMiniProgramCode(token, sharePagePath(kind).slice(1)) : undefined;
-    const identity = invite.snapshot.identity;
+    const identity = safeInvite.snapshot.identity;
     const avatarUrls = await resolveCloudFileUrls([identity?.avatarUrl]);
     const resolvedIdentity = identity ? {
       ...identity,
@@ -2014,12 +2019,12 @@ export class ShareService {
       active,
       expired: !active,
       kind,
-      title: invite.title,
-      ...invite.snapshot,
+      title: safeInvite.title,
+      ...safeInvite.snapshot,
       identity: resolvedIdentity,
       miniProgramCodeUrl,
-      inviteeRewardCents: active && isRewardShare(invite.kind) ? config.inviteeRewardCents : 0,
-      benefitText: isRewardShare(invite.kind) ? BENEFIT_TEXT : '',
+      inviteeRewardCents: active && isRewardShare(safeInvite.kind) ? config.inviteeRewardCents : 0,
+      benefitText: isRewardShare(safeInvite.kind) ? BENEFIT_TEXT : '',
     };
   }
 
@@ -2074,8 +2079,8 @@ export class ShareService {
         storeName: order.storeName || '神秘小馆',
         orderLines: order.lines as VirtualOrder['lines'],
         dishNames: (order.lines as VirtualOrder['lines']).map((line) => line.name),
-        // Compatibility field name: share clients now present this value as
-        // simulated order amount, regardless of guest/account settlement.
+        // Compatibility field name: share clients present this value as the
+        // order amount, regardless of guest/account settlement.
         savedMoneyCents: order.totalCents,
         savedCaloriesKcal: order.itemsTotalCaloriesKcal,
         completedOrderCount: 1,
@@ -2456,14 +2461,15 @@ function resolveImageUrl(value: string | null | undefined, imageUrls?: Map<strin
 }
 
 function toWalletTransaction(row: WalletTransactionDoc): WalletTransaction {
+  const safeRow = sanitizeWalletTransactionCopy(row);
   return {
-    id: row.id,
-    type: row.type,
-    amountCents: row.amountCents,
-    balanceAfterCents: row.balanceAfterCents,
-    orderId: row.orderId ?? undefined,
-    description: row.description,
-    createdAt: row.createdAt,
+    id: safeRow.id,
+    type: safeRow.type,
+    amountCents: safeRow.amountCents,
+    balanceAfterCents: safeRow.balanceAfterCents,
+    orderId: safeRow.orderId ?? undefined,
+    description: safeRow.description,
+    createdAt: safeRow.createdAt,
   };
 }
 

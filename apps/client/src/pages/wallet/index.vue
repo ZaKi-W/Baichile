@@ -42,7 +42,7 @@ function timeText(value: string): string {
         <text class="currency">¥</text>
         <text class="balance">{{ (wallet.summary.balanceCents / 100).toFixed(2) }}</text>
       </view>
-      <text class="balance-note">仅用于模拟点餐，不可充值、转赠或提现</text>
+      <text class="balance-note">仅用于点餐，不可充值、转赠或提现</text>
     </view>
 
     <view class="history-header">

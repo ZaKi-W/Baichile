@@ -57,7 +57,7 @@ describe('recoverable pending checkout', () => {
           packingFeeCents: 0,
           totalCents: 1500,
           itemsTotalCaloriesKcal: 0,
-          storeName: '模拟店铺',
+          storeName: '测试店铺',
           originalItemsTotalCents: 1200,
           minimumOrderCents: 0,
           minimumOrderShortfallCents: 0,

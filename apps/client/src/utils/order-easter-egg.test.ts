@@ -98,8 +98,8 @@ describe('order easter egg presentation', () => {
       settlementMode: 'guest_simulation',
     }, startedAt + 45_000)).toMatchObject({
       state: 'revealed',
-      description: '本单为游客模拟结算，无需退款。',
-      meta: '配送彩蛋 · 游客模拟',
+      description: '本单为游客结算，无需退款。',
+      meta: '配送彩蛋 · 游客',
     });
   });
 
