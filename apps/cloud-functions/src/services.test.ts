@@ -2,7 +2,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AdminAuditService, AdminAuthService, AdminMutationService } from './admin-services';
 import { collections } from './collections';
 import { MemoryDatabase } from './database';
-import type { AccountDoc, AddressDoc, MenuItemDoc, StoreDoc, VirtualOrderDoc, WalletTransactionDoc } from './models';
+import type {
+  AccountDoc,
+  AddressDoc,
+  MenuItemDoc,
+  PromotionCampaignDoc,
+  ShareRewardDailyDoc,
+  StoreDoc,
+  VirtualOrderDoc,
+  WalletTransactionDoc,
+} from './models';
 import { BaichileRouter } from './router';
 import { BaichileCloudServices } from './services';
 
@@ -63,6 +72,24 @@ function activeMenuItem(overrides: Partial<MenuItemDoc> = {}): MenuItemDoc {
   };
 }
 
+function publishedFlash(menuItemId: string, index: number): PromotionCampaignDoc {
+  const id = `promotion_${index}`;
+  return {
+    _id: id,
+    id,
+    name: `限时活动 ${index}`,
+    type: 'item_flash',
+    storeId: 'store_1',
+    menuItemId,
+    flashPriceCents: 800 + index,
+    startsAt: '2020-01-01T00:00:00.000Z',
+    endsAt: '2099-01-01T00:00:00.000Z',
+    lifecycleStatus: 'published',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
 describe('home catalog', () => {
   it('returns three stable image-backed flash sale items with a display discount', async () => {
     const db = new MemoryDatabase();
@@ -74,12 +101,42 @@ describe('home catalog', () => {
       sortOrder,
       basePriceCents: 1200 + sortOrder * 100,
     }))));
+    await Promise.all([1, 2, 3].map((index) => (
+      db.collection<PromotionCampaignDoc>(collections.promotionCampaigns)
+        .insert(publishedFlash(`dish_${index}`, index))
+    )));
+    await db.collection<PromotionCampaignDoc>(collections.promotionCampaigns).insert({
+      _id: 'promotion_threshold',
+      id: 'promotion_threshold',
+      name: '满 20 减 5',
+      type: 'store_threshold',
+      storeId: 'store_1',
+      tiers: [{ thresholdCents: 2000, discountCents: 500 }],
+      startsAt: '2020-01-01T00:00:00.000Z',
+      endsAt: '2099-01-01T00:00:00.000Z',
+      lifecycleStatus: 'published',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
 
     const home = await new BaichileCloudServices(db).catalog.home();
 
     expect(home.flashSaleItems).toHaveLength(3);
     expect(home.flashSaleItems.map((item) => item.menuItemId)).toEqual(['dish_1', 'dish_2', 'dish_3']);
+    expect(home.flashSaleItems.map((item) => item.promotionId)).toEqual([
+      'promotion_1',
+      'promotion_2',
+      'promotion_3',
+    ]);
     expect(home.flashSaleItems.every((item) => item.imageUrl && item.flashPriceCents < item.originalPriceCents)).toBe(true);
+    expect(home.storePromotions).toEqual([{
+      promotionId: 'promotion_threshold',
+      storeId: 'store_1',
+      name: '满 20 减 5',
+      tiers: [{ thresholdCents: 2000, discountCents: 500 }],
+      startsAt: '2020-01-01T00:00:00.000Z',
+      endsAt: '2099-01-01T00:00:00.000Z',
+    }]);
   });
 
   it('reads only three menu items and shares one in-flight home request', async () => {
@@ -91,14 +148,17 @@ describe('home catalog', () => {
       id: `dish_${index + 1}`,
       sortOrder: index + 1,
     }))));
+    await Promise.all([1, 2, 3].map((index) => (
+      db.collection<PromotionCampaignDoc>(collections.promotionCampaigns)
+        .insert(publishedFlash(`dish_${index}`, index))
+    )));
     const catalog = new BaichileCloudServices(db).catalog;
 
     const [first, second] = await Promise.all([catalog.home(), catalog.home()]);
 
     expect(first).toEqual(second);
-    expect(calls.filter((call) => call.name === collections.menuItems)).toEqual([
-      { name: collections.menuItems, limit: 3 },
-    ]);
+    expect(calls.filter((call) => call.name === collections.menuItems)).toEqual([]);
+    expect(calls.filter((call) => call.name === collections.promotionCampaigns)).toHaveLength(1);
   });
 
   it('loads categories without touching stores or menu items', async () => {
@@ -110,6 +170,47 @@ describe('home catalog', () => {
 
     expect(categories).toEqual([{ id: 'cat_1', name: '盖饭', icon: 'rice' }]);
     expect(calls).toEqual([collections.categories]);
+  });
+
+  it('returns only current published store promotions in store detail', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem());
+    await db.collection<PromotionCampaignDoc>(collections.promotionCampaigns)
+      .insert(publishedFlash('dish_1', 1));
+    await db.collection<PromotionCampaignDoc>(collections.promotionCampaigns).insert({
+      _id: 'store_discount_active',
+      id: 'store_discount_active',
+      name: '满 20 减 5',
+      type: 'store_threshold',
+      storeId: 'store_1',
+      tiers: [{ thresholdCents: 2000, discountCents: 500 }],
+      startsAt: '2020-01-01T00:00:00.000Z',
+      endsAt: '2099-01-01T00:00:00.000Z',
+      lifecycleStatus: 'published',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await db.collection<PromotionCampaignDoc>(collections.promotionCampaigns).insert({
+      _id: 'store_discount_draft',
+      id: 'store_discount_draft',
+      name: '未发布',
+      type: 'store_threshold',
+      storeId: 'store_1',
+      tiers: [{ thresholdCents: 1000, discountCents: 100 }],
+      startsAt: '2020-01-01T00:00:00.000Z',
+      endsAt: '2099-01-01T00:00:00.000Z',
+      lifecycleStatus: 'draft',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const detail = await new BaichileCloudServices(db).catalog.find('store_1');
+
+    expect(detail.flashSaleItems?.map((promotion) => promotion.promotionId))
+      .toEqual(['promotion_1']);
+    expect(detail.storePromotions?.map((promotion) => promotion.promotionId))
+      .toEqual(['store_discount_active']);
   });
 
   it('returns summaries for category and indexed search without loading menus', async () => {
@@ -235,8 +336,8 @@ describe('order detail snapshots', () => {
     });
     expect(order.paymentMethod).toBe('virtual_balance');
     expect(order.createdAt).toBe(order.startedAt);
-    expect(order.packingFeeCents).toBe(0);
-    expect(order.totalCents).toBe(2600);
+    expect(order.packingFeeCents).toBe(100);
+    expect(order.totalCents).toBe(2700);
 
     const saved = await db.collection<VirtualOrderDoc>(collections.virtualOrders).get(order.id);
     expect(saved?.storeName).toBe('白吃小馆');
@@ -322,6 +423,286 @@ describe('guest and account order settlement', () => {
     expect(accountOrder.settlementMode).toBe('virtual_balance');
     expect(accountOrder.paymentMethod).toBe('virtual_balance');
     expect(after.balanceCents).toBe(before.balanceCents - accountOrder.totalCents);
+  });
+});
+
+describe('order cursor pagination', () => {
+  it('uses a stable createdAt+id keyset when newer orders arrive between pages', async () => {
+    const db = new MemoryDatabase();
+    const orders = db.collection<VirtualOrderDoc>(collections.virtualOrders);
+    const accountId = 'account_cursor';
+    for (let index = 1; index <= 5; index += 1) {
+      await orders.insert(shareableOrder({
+        _id: `cursor_${index}`,
+        id: `cursor_${index}`,
+        accountId,
+        status: 'completed',
+        createdAt: `2026-07-0${index}T00:00:00.000Z`,
+      }));
+    }
+    const service = new BaichileCloudServices(db).orders;
+    const first = await service.listPage(undefined, accountId, '2');
+    await orders.insert(shareableOrder({
+      _id: 'cursor_new',
+      id: 'cursor_new',
+      accountId,
+      status: 'completed',
+      createdAt: '2026-07-06T00:00:00.000Z',
+    }));
+
+    const second = await service.listPage(undefined, accountId, '2', first.nextCursor ?? undefined);
+    const third = await service.listPage(undefined, accountId, '2', second.nextCursor ?? undefined);
+
+    expect(first.items.map((order) => order.id)).toEqual(['cursor_5', 'cursor_4']);
+    expect(second.items.map((order) => order.id)).toEqual(['cursor_3', 'cursor_2']);
+    expect(third.items.map((order) => order.id)).toEqual(['cursor_1']);
+    expect(new Set([...first.items, ...second.items, ...third.items].map((order) => order.id)).size)
+      .toBe(5);
+  });
+});
+
+describe('checkout orchestration', () => {
+  it('quotes promotion snapshots, real fees, and creates idempotent first-checkout orders', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore({ minimumOrderCents: 1000 }));
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem());
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_checkout');
+    await services.gameplay.update({
+      firstCheckoutGuaranteed: true,
+      deliveryIncidentRate: 1,
+      successEggRate: 0,
+    });
+    const flash = await services.promotions.save(undefined, {
+      id: 'flash_checkout',
+      name: '招牌饭限时价',
+      type: 'item_flash',
+      storeId: 'store_1',
+      menuItemId: 'dish_1',
+      flashPriceCents: 800,
+      startsAt: '2020-01-01T00:00:00.000Z',
+      endsAt: '2099-01-01T00:00:00.000Z',
+      lifecycleStatus: 'draft',
+    });
+    const threshold = await services.promotions.save(undefined, {
+      id: 'threshold_checkout',
+      name: '满七减一',
+      type: 'store_threshold',
+      storeId: 'store_1',
+      tiers: [{ thresholdCents: 700, discountCents: 100 }],
+      startsAt: '2020-01-01T00:00:00.000Z',
+      endsAt: '2099-01-01T00:00:00.000Z',
+      lifecycleStatus: 'draft',
+    });
+    await services.promotions.publish(flash.id);
+    await services.promotions.publish(threshold.id);
+    const quoteRequest = {
+      stores: [{ storeId: 'store_1', lines: [{ menuItemId: 'dish_1', optionIds: [], quantity: 1 }] }],
+      virtualDestinationId: 'addr_1',
+    };
+
+    const quote = await services.orders.quoteCheckout(quoteRequest, { accountId: 'account_checkout' });
+    expect(quote.stores[0]).toMatchObject({
+      originalItemsTotalCents: 1200,
+      itemsTotalCents: 800,
+      packingFeeCents: 100,
+      minimumOrderShortfallCents: 0,
+      flashDiscountCents: 400,
+      storeDiscountCents: 100,
+      promotionDiscountCents: 500,
+      totalCents: 1000,
+    });
+    const createRequest = {
+      storeId: 'store_1',
+      lines: quoteRequest.stores[0].lines,
+      virtualDestinationId: 'addr_1',
+      checkoutId: quote.checkoutId,
+      quoteId: quote.quoteId,
+      idempotencyKey: 'checkout-account-key-1',
+    };
+    const first = await services.orders.create(createRequest, { accountId: 'account_checkout' });
+    const repeated = await services.orders.create(createRequest, { accountId: 'account_checkout' });
+
+    expect(first.id).toBe(repeated.id);
+    expect(first.incident).toBeUndefined();
+    expect(first.promotionSnapshots).toHaveLength(2);
+    expect(await db.collection<VirtualOrderDoc>(collections.virtualOrders).get(first.id))
+      .toMatchObject({
+        subjectKey: 'account:account_checkout',
+        idempotencyKey: 'checkout-account-key-1',
+      });
+    expect(await db.collection<WalletTransactionDoc>(collections.walletTransactions).count({
+      accountId: 'account_checkout',
+      type: 'order_payment',
+    })).toBe(1);
+    await expect(services.orders.create({
+      ...createRequest,
+      lines: [{ menuItemId: 'dish_1', optionIds: [], quantity: 2 }],
+    }, { accountId: 'account_checkout' })).rejects.toMatchObject({
+      code: 'IDEMPOTENCY_CONFLICT',
+    });
+
+    const secondQuote = await services.orders.quoteCheckout(quoteRequest, { accountId: 'account_checkout' });
+    const second = await services.orders.create({
+      ...createRequest,
+      checkoutId: secondQuote.checkoutId,
+      quoteId: secondQuote.quoteId,
+      idempotencyKey: 'checkout-account-key-2',
+    }, { accountId: 'account_checkout' });
+    expect(second.incident).toBeDefined();
+  });
+
+  it('supports re-quoting the same guest checkout and blocks a second checkout', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem());
+    const services = new BaichileCloudServices(db);
+    const guest = await services.auth.createGuest();
+    const request = {
+      stores: [{ storeId: 'store_1', lines: [{ menuItemId: 'dish_1', optionIds: [], quantity: 1 }] }],
+      virtualDestinationId: 'addr_1',
+    };
+
+    const first = await services.orders.quoteCheckout(request, { visitorId: guest.visitorId });
+    const refreshed = await services.orders.quoteCheckout(
+      { ...request, checkoutId: first.checkoutId },
+      { visitorId: guest.visitorId },
+    );
+
+    expect(refreshed.checkoutId).toBe(first.checkoutId);
+    expect(refreshed.quoteId).not.toBe(first.quoteId);
+    expect(refreshed.checkoutExpiresAt).toBe(first.checkoutExpiresAt);
+    await expect(services.orders.quoteCheckout(request, { visitorId: guest.visitorId }))
+      .rejects.toMatchObject({ code: 'LOGIN_REQUIRED', status: 401 });
+    await services.orders.create({
+      storeId: 'store_1',
+      lines: request.stores[0].lines,
+      virtualDestinationId: request.virtualDestinationId,
+      checkoutId: refreshed.checkoutId,
+      quoteId: refreshed.quoteId,
+      idempotencyKey: 'guest-first-order',
+    }, { visitorId: guest.visitorId });
+    await expect(services.orders.create({
+      storeId: 'store_1',
+      lines: request.stores[0].lines,
+      virtualDestinationId: request.virtualDestinationId,
+    }, { visitorId: guest.visitorId }))
+      .rejects.toMatchObject({ code: 'LOGIN_REQUIRED', status: 401 });
+  });
+
+  it('returns minimum-order shortfall in quotes and blocks create until it is met', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore({ minimumOrderCents: 2000 }));
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem());
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_shortfall');
+    const lines = [{ menuItemId: 'dish_1', optionIds: [], quantity: 1 }];
+    const quote = await services.orders.quoteCheckout({
+      stores: [{ storeId: 'store_1', lines }],
+      virtualDestinationId: 'addr_1',
+    }, { accountId: 'account_shortfall' });
+
+    expect(quote.stores[0].minimumOrderShortfallCents).toBe(800);
+    await expect(services.orders.create({
+      storeId: 'store_1',
+      lines,
+      virtualDestinationId: 'addr_1',
+      checkoutId: quote.checkoutId,
+      quoteId: quote.quoteId,
+      idempotencyKey: 'shortfall-order-key',
+    }, { accountId: 'account_shortfall' })).rejects.toMatchObject({
+      code: 'MINIMUM_ORDER_NOT_MET',
+    });
+  });
+
+  it('returns the original order when a guest retry follows identity merge', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem());
+    const services = new BaichileCloudServices(db);
+    const guest = await services.auth.createGuest();
+    const lines = [{ menuItemId: 'dish_1', optionIds: [], quantity: 1 }];
+    const quote = await services.orders.quoteCheckout({
+      stores: [{ storeId: 'store_1', lines }],
+      virtualDestinationId: 'addr_1',
+    }, { visitorId: guest.visitorId });
+    const request = {
+      storeId: 'store_1',
+      lines,
+      virtualDestinationId: 'addr_1',
+      checkoutId: quote.checkoutId,
+      quoteId: quote.quoteId,
+      idempotencyKey: 'guest-timeout-retry',
+    };
+    const guestOrder = await services.orders.create(request, { visitorId: guest.visitorId });
+    await services.auth.ensureAccount('account_after_merge');
+    await services.orders.merge(guest.visitorId, 'account_after_merge');
+
+    const retried = await services.orders.create(request, { accountId: 'account_after_merge' });
+
+    expect(retried.id).toBe(guestOrder.id);
+    expect(retried.accountId).toBe('account_after_merge');
+    expect(await db.collection<VirtualOrderDoc>(collections.virtualOrders).get(guestOrder.id))
+      .toMatchObject({
+        subjectKey: `visitor:${guest.visitorId}`,
+        accountId: 'account_after_merge',
+      });
+    await expect(services.orders.create({
+      ...request,
+      lines: [{ menuItemId: 'dish_1', optionIds: [], quantity: 2 }],
+    }, { accountId: 'account_after_merge' })).rejects.toMatchObject({
+      code: 'IDEMPOTENCY_CONFLICT',
+    });
+  });
+
+  it('rejects stale quote snapshots after catalog pricing changes', async () => {
+    const db = new MemoryDatabase();
+    await db.collection<StoreDoc>(collections.stores).insert(activeStore());
+    await db.collection<MenuItemDoc>(collections.menuItems).insert(activeMenuItem());
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_price_change');
+    const lines = [{ menuItemId: 'dish_1', optionIds: [], quantity: 1 }];
+    const quote = await services.orders.quoteCheckout({
+      stores: [{ storeId: 'store_1', lines }],
+      virtualDestinationId: 'addr_1',
+    }, { accountId: 'account_price_change' });
+    await db.collection<MenuItemDoc>(collections.menuItems).update('dish_1', { basePriceCents: 1300 });
+
+    await expect(services.orders.create({
+      storeId: 'store_1',
+      lines,
+      virtualDestinationId: 'addr_1',
+      checkoutId: quote.checkoutId,
+      quoteId: quote.quoteId,
+      idempotencyKey: 'changed-price-key',
+    }, { accountId: 'account_price_change' })).rejects.toMatchObject({ code: 'QUOTE_CHANGED' });
+  });
+});
+
+describe('refund maintenance', () => {
+  it('processes the 101st due refund on a subsequent bounded batch', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    await services.auth.ensureAccount('account_refunds');
+    const failedAt = new Date(Date.now() - 10_000).toISOString();
+    await Promise.all(Array.from({ length: 101 }, (_, index) => (
+      db.collection<VirtualOrderDoc>(collections.virtualOrders).insert(shareableOrder({
+        _id: `refund_${index}`,
+        id: `refund_${index}`,
+        accountId: 'account_refunds',
+        incidentKey: 'alien_abduction',
+        incidentStartedAt: new Date(Date.now() - 20_000).toISOString(),
+        failedAt,
+        refundedAt: null,
+        totalCents: 1,
+      }))
+    )));
+
+    const first = await services.orders.settleFailedOrdersBatch(100);
+    const second = await services.orders.settleFailedOrdersBatch(100);
+
+    expect(first).toEqual({ processed: 100, refunded: 100, hasMore: true });
+    expect(second).toEqual({ processed: 1, refunded: 1, hasMore: false });
   });
 });
 
@@ -489,6 +870,15 @@ describe('share snapshots', () => {
 
     expect(regularResult.granted).toBe(false);
     expect(rewardResult.granted).toBe(true);
+    expect(rewardResult.rewardedAt).toMatch(/^20/);
+    const dailyRewards = await db.collection<ShareRewardDailyDoc>(collections.shareRewardDaily).list({
+      where: { accountId: 'account_inviter' },
+    });
+    expect(dailyRewards).toHaveLength(1);
+    expect(dailyRewards[0]).toMatchObject({
+      grantedCount: 1,
+      totalAmountCents: rewardResult.amountCents,
+    });
     expect((await services.shares.landing(reward.token)).kind).toBe('reward');
     expect(legacyInvitation.path).toContain('/pages/share-reward/index');
     expect((await services.shares.landing(legacyInvitation.token)).kind).toBe('reward');

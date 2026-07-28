@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ShareLanding } from '@baichile/api-contract';
-import { buildSharePosterModel } from './share-poster';
+import { buildSharePosterModel, VIRTUAL_FUNDS_NOTICE } from './share-poster';
 
 const landing = (kind: ShareLanding['kind']): ShareLanding => ({
   active: true,
@@ -16,12 +16,19 @@ const landing = (kind: ShareLanding['kind']): ShareLanding => ({
 
 describe('share poster model', () => {
   it('uses the order capsule model for an order share', () => {
-    expect(buildSharePosterModel(landing('order'))).toMatchObject({
+    const model = buildSharePosterModel(landing('order'));
+    expect(model).toMatchObject({
       kind: 'order',
       eyebrow: '本单空气外卖',
       primary: '¥46.80',
+      primaryLabel: '模拟订单金额',
+      secondary: '模拟热量 820 千卡',
+      stamp: '模拟单完成',
       ticket: 'ORDER CAPSULE',
+      fundsNotice: VIRTUAL_FUNDS_NOTICE,
     });
+    expect(`${model.primaryLabel} ${model.secondary} ${model.detail}`)
+      .not.toMatch(/省下|节约|少摄入|躲过/);
   });
 
   it('renders a triggered delivery incident as the order easter egg', () => {
@@ -67,6 +74,7 @@ describe('share poster model', () => {
       kind: 'reward',
       primary: '¥30.00',
       ticket: 'REWARD CAPSULE',
+      fundsNotice: VIRTUAL_FUNDS_NOTICE,
     });
   });
 });

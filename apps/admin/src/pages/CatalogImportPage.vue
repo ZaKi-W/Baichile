@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Download, Files, RefreshLeft, UploadFilled } from '@element-plus/icons-vue';
 import type { CatalogImportJob, CatalogImportPayload, CatalogImportPreview } from '@baichile/api-contract';
+import ListFeedback from '../components/ListFeedback.vue';
 import { adminApi } from '../api/admin';
 import {
   applyCatalogAssetUrls,
@@ -18,6 +19,10 @@ const bundle = ref<CatalogImportBundle | null>(null);
 const payload = ref<CatalogImportPayload | null>(null);
 const preview = ref<CatalogImportPreview | null>(null);
 const jobs = ref<CatalogImportJob[]>([]);
+const jobsLoading = ref(false);
+const jobsError = ref('');
+const jobsPage = ref(1);
+const jobsPageSize = ref(10);
 const stage = ref<'ready' | 'uploading' | 'previewing' | 'publishing'>('ready');
 const uploadProgress = ref({ current: 0, total: 0 });
 
@@ -25,10 +30,21 @@ const busy = computed(() => stage.value !== 'ready');
 const uploadPercent = computed(() => uploadProgress.value.total
   ? Math.round((uploadProgress.value.current / uploadProgress.value.total) * 100)
   : 0);
+const pagedJobs = computed(() => {
+  const start = (jobsPage.value - 1) * jobsPageSize.value;
+  return jobs.value.slice(start, start + jobsPageSize.value);
+});
 
 async function loadJobs() {
+  jobsLoading.value = true;
+  jobsError.value = '';
   try { jobs.value = await adminApi.catalogImportJobs(); }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : '导入历史加载失败'); }
+  catch (error) {
+    jobs.value = [];
+    jobsError.value = error instanceof Error ? error.message : '导入历史加载失败';
+  } finally {
+    jobsLoading.value = false;
+  }
 }
 
 async function selectFile(event: Event) {
@@ -153,13 +169,23 @@ onMounted(loadJobs);
 
     <section class="section-title"><div><h2>导入历史</h2><span>仅可回滚整批数据，图片会保留在 CDN 中以避免影响其他批次。</span></div><el-button text @click="loadJobs">刷新</el-button></section>
     <section class="surface data-surface">
-      <el-table :data="jobs" empty-text="暂无导入记录">
+      <el-table v-loading="jobsLoading" :data="pagedJobs">
         <el-table-column prop="fileName" label="导入包" min-width="250" />
         <el-table-column label="内容" min-width="270"><template #default="{ row }">分类 {{ row.summary.categories.created + row.summary.categories.updated }} · 店铺 {{ row.summary.stores.created + row.summary.stores.updated }} · 菜品 {{ row.summary.menuItems.created + row.summary.menuItems.updated }} · 规格 {{ row.summary.specRows }}</template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="row.status === 'published' ? 'success' : 'info'" effect="plain">{{ row.status === 'published' ? '已发布' : '已回滚' }}</el-tag></template></el-table-column>
         <el-table-column label="时间" width="180"><template #default="{ row }">{{ formatDate(row.createdAt) }}</template></el-table-column>
         <el-table-column label="操作" width="110" fixed="right"><template #default="{ row }"><el-button v-if="row.status === 'published'" link type="danger" @click="rollback(row)">回滚</el-button><span v-else>—</span></template></el-table-column>
+        <template #empty><ListFeedback :error="jobsError" empty-text="暂无导入记录" @retry="loadJobs" /></template>
       </el-table>
+      <div class="pagination">
+        <el-pagination
+          v-model:current-page="jobsPage"
+          v-model:page-size="jobsPageSize"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next"
+          :total="jobs.length"
+        />
+      </div>
     </section>
   </div>
 </template>

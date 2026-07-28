@@ -1,14 +1,32 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import type { Address } from '../../stores/address';
 import { useAddressStore } from '../../stores/address';
 import { isDefaultDeliveryAddress } from '../../config/default-delivery-address';
+import { trackEvent } from '../../services/analytics';
+import { useAuthStore } from '../../stores/auth';
 
 const addressStore = useAddressStore();
+const auth = useAuthStore();
 const addresses = computed(() => addressStore.availableAddresses);
+const loading = ref(true);
+const error = ref('');
+const removingId = ref('');
 
-onShow(() => { void addressStore.load(); });
+onShow(() => { void load(); });
+
+async function load() {
+  loading.value = true;
+  error.value = '';
+  try {
+    await addressStore.load();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '地址加载失败';
+  } finally {
+    loading.value = false;
+  }
+}
 
 function pick(addr: Address) {
   addressStore.select(addr.id);
@@ -22,7 +40,16 @@ function remove(addr: Address) {
     content: `确认删除「${addr.detail || addr.address}」？`,
     success: async ({ confirm }) => {
       if (confirm) {
-        await addressStore.remove(addr.id);
+        removingId.value = addr.id;
+        try {
+          await addressStore.remove(addr.id);
+          void trackEvent('address.deleted', {}, auth.accessToken);
+          uni.showToast({ title: '地址已删除', icon: 'success' });
+        } catch (error) {
+          uni.showToast({ title: error instanceof Error ? error.message : '删除失败，请重试', icon: 'none' });
+        } finally {
+          removingId.value = '';
+        }
       }
     },
   });
@@ -35,7 +62,14 @@ function addNew() {
 
 <template>
   <view class="page">
-    <view v-if="!addresses.length" class="empty">
+    <view v-if="loading" class="empty">
+      <text class="empty-text">正在加载地址…</text>
+    </view>
+    <view v-else-if="error" class="empty error-empty">
+      <text class="empty-text">{{ error }}</text>
+      <button class="retry-btn" @tap="load">重新加载</button>
+    </view>
+    <view v-else-if="!addresses.length" class="empty">
       <view class="empty-icon"><image src="/static/icons/location.svg" mode="aspectFit" /></view>
       <text class="empty-text">还没有收货地址</text>
     </view>
@@ -54,7 +88,7 @@ function addNew() {
       </view>
       <view v-if="!isDefaultDeliveryAddress(addr)" class="addr-actions">
         <view class="action-btn" @tap.stop="remove(addr)">
-          <text>删除</text>
+          <text>{{ removingId === addr.id ? '删除中' : '删除' }}</text>
         </view>
       </view>
     </view>
@@ -81,6 +115,9 @@ function addNew() {
 .empty-icon { width: 112rpx; height: 112rpx; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ffd400; }
 .empty-icon image { width: 58rpx; height: 58rpx; }
 .empty-text { margin-top: 20rpx; color: #999; font-size: 28rpx; }
+.error-empty { gap: 18rpx; }
+.retry-btn { margin: 0; padding: 0 28rpx; border-radius: 22rpx; color: #171717; background: #ffd400; font-size: 24rpx; line-height: 66rpx; }
+.retry-btn::after { border: 0; }
 
 .addr-card {
   display: flex;

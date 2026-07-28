@@ -63,20 +63,22 @@ describe('store page cart interaction', () => {
     expect(source).toContain('cart.add(store.value, item, directOptionIds(item), 1)');
   });
 
-  it('shows each menu item monthly sales', () => {
+  it('labels catalog counters as simulated heat', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
-    expect(source).toContain('月售 {{ item.monthlySales }}');
+    expect(source).toContain('模拟点选 {{ item.monthlySales }}');
   });
 
-  it('positions and immediately adds a flash-sale dish when opened from home', () => {
+  it('positions a flash-sale dish without changing the cart until the user acts', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
-    expect(source).toContain('options?.flashSaleItemId');
+    expect(source).toContain('routeOptions.flashSaleItemId');
     expect(source).toContain('activeCategoryId.value = flashSaleItem.subCategoryId');
     expect(source).toContain('scrollAnchor.value = `cat-${flashSaleItem.subCategoryId}`');
-    expect(source).toContain('const flashSaleOptionIds = (item: MenuItem)');
-    expect(source).toContain('cart.add(store.value, flashSaleItem, flashSaleOptionIds(flashSaleItem), 1)');
-    expect(source).toContain("uni.showToast({ title: '已抢到，已加入购物车', icon: 'none' })");
+    expect(source).toContain('const flashPromotionFor = (itemId: string)');
+    expect(source).toContain('displayBasePriceCents(item)');
+    expect(source).toContain('storePromotionLabel');
+    expect(source).not.toContain('cart.add(store.value, flashSaleItem');
+    expect(source).not.toContain('模拟活动商品已加入购物车');
   });
 });

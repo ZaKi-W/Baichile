@@ -9,7 +9,11 @@ export const collections = {
   virtualOrders: 'virtual_orders',
   walletTransactions: 'wallet_transactions',
   shareRewardConfigs: 'share_reward_configs',
+  shareRewardDaily: 'share_reward_daily',
   shareInvites: 'share_invites',
+  gameplayConfigs: 'gameplay_configs',
+  promotionCampaigns: 'promotion_campaigns',
+  checkoutSessions: 'checkout_sessions',
   analyticsEvents: 'analytics_events',
   adminUsers: 'admin_users',
   adminSessions: 'admin_sessions',
@@ -41,6 +45,8 @@ export const collectionSpecs: CollectionSpec[] = [
   { name: collections.visitorSessions, indexes: [
     { name: 'visitor_id_unique', fields: { visitorId: 1 }, unique: true },
     { name: 'account_id', fields: { accountId: 1 } },
+    { name: 'refresh_token_hash', fields: { refreshTokenHash: 1 } },
+    { name: 'expires_at', fields: { expiresAt: 1 } },
   ] },
   { name: collections.addresses, indexes: [
     { name: 'visitor_id_created', fields: { visitorId: 1, createdAt: 1 } },
@@ -65,16 +71,35 @@ export const collectionSpecs: CollectionSpec[] = [
   { name: collections.virtualOrders, indexes: [
     { name: 'account_created', fields: { accountId: 1, createdAt: -1 } },
     { name: 'visitor_created', fields: { visitorId: 1, createdAt: -1 } },
+    { name: 'account_created_id', fields: { accountId: 1, createdAt: -1, id: -1 } },
+    { name: 'visitor_created_id', fields: { visitorId: 1, createdAt: -1, id: -1 } },
+    { name: 'checkout_created', fields: { checkoutId: 1, createdAt: -1 } },
+    { name: 'checkout_store', fields: { checkoutId: 1, storeId: 1 } },
+    { name: 'subject_idempotency', fields: { subjectKey: 1, idempotencyKey: 1 }, unique: true },
     { name: 'failed_refund', fields: { failedAt: 1, refundedAt: 1 } },
   ] },
   { name: collections.walletTransactions, indexes: [
     { name: 'account_created', fields: { accountId: 1, createdAt: -1 } },
   ] },
   { name: collections.shareRewardConfigs, indexes: [] },
+  { name: collections.shareRewardDaily, indexes: [
+    { name: 'account_business_date_unique', fields: { accountId: 1, businessDate: 1 }, unique: true },
+  ] },
   { name: collections.shareInvites, indexes: [
     { name: 'inviter_created', fields: { inviterAccountId: 1, createdAt: -1 } },
     { name: 'invitee_unique', fields: { inviteeAccountId: 1 }, unique: true, sparse: true },
     { name: 'expires_at', fields: { expiresAt: 1 } },
+  ] },
+  { name: collections.gameplayConfigs, indexes: [] },
+  { name: collections.promotionCampaigns, indexes: [
+    { name: 'store_lifecycle_time', fields: { storeId: 1, lifecycleStatus: 1, startsAt: 1, endsAt: 1 } },
+    { name: 'menu_lifecycle_time', fields: { menuItemId: 1, lifecycleStatus: 1, startsAt: 1, endsAt: 1 } },
+  ] },
+  { name: collections.checkoutSessions, indexes: [
+    { name: 'subject_created', fields: { subjectKey: 1, createdAt: -1 } },
+    { name: 'quote_id', fields: { quoteId: 1 } },
+    { name: 'expires_at', fields: { expiresAt: 1 } },
+    { name: 'checkout_expires', fields: { checkoutExpiresAt: 1 } },
   ] },
   { name: collections.analyticsEvents, indexes: [
     { name: 'event_created', fields: { eventName: 1, createdAt: -1 } },

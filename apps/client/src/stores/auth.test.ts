@@ -29,6 +29,26 @@ describe('auth store WeChat login', () => {
           };
         }) => {
           expect(name).toBe('api');
+          if (data.path === '/v1/auth/guest/rotate') {
+            expect(data).toEqual({
+              method: 'POST',
+              path: '/v1/auth/guest/rotate',
+              data: { refreshToken: '' },
+              authorization: 'Bearer guest.token',
+            });
+            return Promise.resolve({
+              result: {
+                ok: true,
+                data: {
+                  visitorId: 'visitor_existing',
+                  accessToken: 'guest.rotated',
+                  refreshToken: 'guest.refresh',
+                  expiresAt: '2099-01-01T00:00:00.000Z',
+                  refreshExpiresAt: '2099-02-01T00:00:00.000Z',
+                },
+              },
+            });
+          }
           expect(data).toEqual({
             method: 'POST',
             path: '/v1/auth/wechat-mini',
@@ -97,6 +117,24 @@ describe('auth store WeChat login', () => {
     expect(auth.accountId).toBe('account_wechat');
     expect(storage.get('baichile:wechat-native-bound:v2')).toBe(true);
     expect(uni.login).toHaveBeenCalledTimes(1);
+  });
+
+  it('rotates a legacy guest with its bearer token and persists the complete session', async () => {
+    storage.set('baichile:visitor', { visitorId: 'visitor_existing', accessToken: 'guest.token' });
+    const auth = useAuthStore();
+
+    await Promise.all([auth.ready(), auth.ready()]);
+
+    expect(auth.isReady).toBe(true);
+    expect(auth.accessToken).toBe('guest.rotated');
+    expect(storage.get('baichile:visitor')).toEqual({
+      visitorId: 'visitor_existing',
+      accessToken: 'guest.rotated',
+      refreshToken: 'guest.refresh',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      refreshExpiresAt: '2099-02-01T00:00:00.000Z',
+    });
+    expect(wx?.cloud?.callFunction).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the guest identity when WeChat login fails', async () => {

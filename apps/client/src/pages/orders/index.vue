@@ -13,6 +13,9 @@ const auth = useAuthStore();
 const orders = useOrderStore();
 const now = ref(Date.now());
 const storeCovers = ref<Record<string, string>>({});
+const loading = ref(true);
+const error = ref('');
+const loadMoreError = ref('');
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 const openOrder = (id: string, revealEgg = false) => uni.navigateTo({
   url: `/pages/delivery/index?id=${id}${revealEgg ? '&revealEgg=1' : ''}`,
@@ -68,10 +71,30 @@ const formatOrderTime = (value: string) => {
   if (Number.isNaN(date.getTime())) return value;
   return `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 };
-onShow(() => {
+async function load() {
+  loading.value = true;
+  error.value = '';
   now.value = Date.now();
-  void orders.load();
+  try {
+    await orders.load();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '订单加载失败';
+  } finally {
+    loading.value = false;
+  }
   void loadStoreCovers();
+}
+async function loadMore() {
+  if (!orders.nextCursor || orders.loadingMore) return;
+  loadMoreError.value = '';
+  try {
+    await orders.loadMore();
+  } catch (cause) {
+    loadMoreError.value = cause instanceof Error ? cause.message : '更多订单加载失败';
+  }
+}
+onShow(() => {
+  void load();
   clearInterval(statusTimer);
   statusTimer = setInterval(() => { now.value = Date.now(); }, 1000);
 });
@@ -87,6 +110,12 @@ onHide(() => clearInterval(statusTimer));
       </view>
       <button class="guest-login-button" @tap="openLogin">登录</button>
     </view>
+    <view v-if="loading" class="card muted">正在整理模拟订单…</view>
+    <view v-else-if="error" class="card state-error">
+      <text>{{ error }}</text>
+      <button @tap="load">重新加载</button>
+    </view>
+    <template v-else>
     <view v-for="order in orders.orders" :key="order.id" class="order-card">
       <view class="order-main" @tap="openOrder(order.id)">
         <view class="order-top">
@@ -105,7 +134,7 @@ onHide(() => clearInterval(statusTimer));
         <view class="order-meta">
           <text>{{ formatOrderTime(order.createdAt || order.startedAt) }}</text>
           <text>· 共{{ itemCount(order) }}件</text>
-          <text>· {{ order.settlementMode === 'guest_simulation' ? '模拟金额' : '虚拟实付' }} </text>
+          <text>· {{ order.settlementMode === 'guest_simulation' ? '游客模拟金额' : '虚拟余额金额' }} </text>
           <text class="paid-money">{{ formatMoney(order.totalCents) }}</text>
         </view>
         <view
@@ -130,7 +159,21 @@ onHide(() => clearInterval(statusTimer));
         <button class="action-button ghost-action" @tap.stop="openOrder(order.id)">订单详情</button>
       </view>
     </view>
-    <view v-if="!orders.orders.length" class="card muted">还没有虚拟订单，先去首页逛逛吧。</view>
+    </template>
+    <view v-if="loadMoreError" class="card state-error">
+      <text>{{ loadMoreError }}</text>
+      <button @tap="loadMore">重试加载更多</button>
+    </view>
+    <button
+      v-else-if="!loading && !error && orders.nextCursor"
+      class="load-more-button"
+      :loading="orders.loadingMore"
+      :disabled="orders.loadingMore"
+      @tap="loadMore"
+    >
+      {{ orders.loadingMore ? '正在加载…' : '加载更多模拟订单' }}
+    </button>
+    <view v-if="!loading && !error && !orders.orders.length" class="card muted">还没有模拟订单，先去首页逛逛吧。</view>
     <view class="tab-spacer" />
   </view>
 </template>
@@ -142,6 +185,18 @@ onHide(() => clearInterval(statusTimer));
   box-sizing: border-box;
   background: #f6f6f6;
 }
+.state-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  border: 2rpx solid #f04426;
+  background: #fff0ec;
+}
+.state-error button { margin: 0; padding: 0 22rpx; border-radius: 22rpx; color: #171717; background: #ffd400; font-size: 22rpx; line-height: 62rpx; }
+.state-error button::after { border: 0; }
+.load-more-button { width: 100%; height: 76rpx; margin: 8rpx 0 22rpx; border: 2rpx solid #171717; border-radius: 24rpx 8rpx 24rpx 8rpx; color: #171717; background: #ffd400; font-size: 24rpx; font-weight: 900; line-height: 74rpx; }
+.load-more-button::after { border: 0; }
 .guest-notice {
   display: flex;
   align-items: center;

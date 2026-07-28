@@ -11,6 +11,10 @@ export class CloudApiError extends Error {
   }
 }
 
+export function isCloudApiError(error: unknown): error is CloudApiError {
+  return error instanceof CloudApiError;
+}
+
 export function badRequest(message: string, code = 'BAD_REQUEST'): never {
   throw new CloudApiError(400, code, message);
 }
@@ -35,10 +39,25 @@ export function tooManyRequests(message = '请求过于频繁，请稍后再试'
   throw new CloudApiError(429, code, message);
 }
 
-export function toErrorBody(error: unknown) {
+export function serviceUnavailable(message = '上游服务暂不可用', code = 'UPSTREAM_UNAVAILABLE'): never {
+  throw new CloudApiError(503, code, message);
+}
+
+export function toErrorBody(error: unknown, requestId?: string) {
   if (error instanceof CloudApiError) {
-    return { ok: false, status: error.status, code: error.code, message: error.message };
+    return {
+      ok: false,
+      status: error.status,
+      code: error.code,
+      message: error.message,
+      ...(requestId ? { requestId } : {}),
+    };
   }
-  const message = error instanceof Error ? error.message : '服务暂不可用';
-  return { ok: false, status: 500, code: 'INTERNAL_ERROR', message };
+  return {
+    ok: false,
+    status: 500,
+    code: 'INTERNAL_ERROR',
+    message: '服务暂不可用',
+    ...(requestId ? { requestId } : {}),
+  };
 }

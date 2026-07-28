@@ -22,20 +22,22 @@ describe('home page sections', () => {
     expect(source).toContain('class="campaign-grid"');
     expect(source).toContain('今日精选');
     expect(source).toContain('限时秒杀');
-    expect(source).toContain('class="sale-action">马上抢');
-    expect(source).toContain('const flashSaleItems = computed(() => data.value?.flashSaleItems ?? [])');
+    expect(source).toContain('class="sale-action">模拟抢购');
+    expect(source).toContain('const flashSaleItems = computed');
     expect(source).toContain('v-if="flashSaleItems.length"');
     expect(source).toContain('class="sale-time"');
     expect(source).toContain('class="filter-row"');
-    expect(source).toContain("const sortFilters = ['综合排序', '销量最高', '距离最近', '评分最高']");
+    expect(source).toContain("const sortFilters = ['综合排序', '模拟热度', '距离最近', '评分最高']");
     expect(source).toContain("const quickFilters = ['全部', '免配送费', '30分钟内', '满减优惠']");
     expect(source).toContain("activeQuickFilter.value === '30分钟内'");
     expect(source).toContain("activeQuickFilter.value === '免配送费'");
+    expect(source).toContain('storePromotionByStore.value.has(store.id)');
+    expect(source).toContain(':promotion="storePromotionByStore.get(store.id)"');
+    expect(source).toContain('fresh.storePromotions');
     expect(source).toContain('class="quick-filter-row"');
-    expect(source).toContain('tcloudbaseapp.com/baichile-home');
-    expect(source).toContain('/campaigns/featured.png');
-    expect(source).toContain('/campaigns/sale.png');
-    expect(source).toContain('/categories/burger.png');
+    expect(source).toContain("staticAssetUrl('campaigns/featured.png')");
+    expect(source).toContain("staticAssetUrl('campaigns/sale.png')");
+    expect(source).toContain("staticAssetUrl('categories/burger.png')");
     expect(source).toContain('class="route-note"');
     expect(source).toContain('虚拟外卖演示');
     expect(source).toContain('const systemInfo = uni.getSystemInfoSync()');
@@ -64,15 +66,15 @@ describe('home page sections', () => {
     expect(source).not.toMatch(/purple|violet|indigo|fuchsia/i);
   });
 
-  it('starts a fresh fake countdown and cleans up its timer with other home timers', () => {
+  it('derives the activity countdown from endsAt and cleans up its timer', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
     expect(source).toContain('HomeOrderCarousel');
     expect(source).toContain('startFlashSaleTimer');
     expect(source).toContain('stopFlashSaleTimer');
-    expect(source).toContain('10 * 60 * 60 + Math.floor(Math.random() * 8 * 60 * 60)');
-    expect(source).toContain('flashSaleSeconds.value = Math.max(0, flashSaleSeconds.value - 1)');
-    expect(source).toContain('flashSaleItemId=${item.menuItemId}');
+    expect(source).toContain('Date.parse(flashSaleEndsAt.value)');
+    expect(source).not.toContain('Math.random()');
+    expect(source).toContain('flashSaleItemId=${encodeURIComponent(item.menuItemId)}');
     expect(source).toContain('orders.load()');
     expect(source).toContain('startOrderTimer');
     expect(source).toContain('stopOrderTimer');

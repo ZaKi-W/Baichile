@@ -3,7 +3,9 @@ import { onLaunch, onShow } from '@dcloudio/uni-app';
 import { useAuthStore } from './stores/auth';
 
 onLaunch(() => {
-  useAuthStore().ensureGuest();
+  void useAuthStore().ready().catch((error) => {
+    console.warn('[auth] initialization failed', error);
+  });
 });
 
 onShow(() => {

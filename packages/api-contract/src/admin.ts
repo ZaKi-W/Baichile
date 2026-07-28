@@ -10,12 +10,14 @@ export type AdminPermission =
   | 'wallet:adjust'
   | 'orders:read'
   | 'orders:write'
+  | 'promotions:read'
+  | 'promotions:write'
   | 'admins:manage'
   | 'audit:read';
 
 export type AdminUserStatus = 'active' | 'disabled';
 export type ManagedContentStatus = 'active' | 'inactive';
-export type AccountStatus = 'active' | 'disabled';
+export type AccountStatus = 'active' | 'disabled' | 'deleted';
 export type AdminOrderStatus = 'normal' | 'following_up' | 'resolved';
 
 export interface AdminPage<T> {

@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia';
-import type { AdminPermission } from '@baichile/api-contract';
-import { adminApi, type AdminIdentity } from '../api/admin';
+import {
+  adminApi,
+  type AdminConsolePermission,
+  type AdminIdentity,
+} from '../api/admin';
 import { getToken, setToken } from '../api/http';
 
 export const useAuthStore = defineStore('auth', {
@@ -32,7 +35,10 @@ export const useAuthStore = defineStore('auth', {
         this.loaded = true;
       }
     },
-    has(permission?: AdminPermission) {
+    has(permission?: AdminConsolePermission) {
+      if (permission && this.admin?.role === 'support' && !permission.endsWith(':read')) {
+        return false;
+      }
       return !permission || !!this.admin?.permissions.includes(permission);
     },
     async logout() {

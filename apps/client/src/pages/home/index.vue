@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { onHide, onLoad, onShow, onUnload } from '@dcloudio/uni-app';
-import type { FlashSaleItem, HomeResponse } from '@baichile/api-contract';
+import type { FlashSaleItem, HomeResponse, StorePromotion } from '@baichile/api-contract';
 import { getDeliveryIncidentPhase } from '@baichile/domain';
 import HomeOrderCarousel from '../../components/HomeOrderCarousel.vue';
 import StoreCard from '../../components/StoreCard.vue';
 import { catalogService } from '../../services/catalog';
+import { trackEvent } from '../../services/analytics';
 import { useAddressStore } from '../../stores/address';
 import { useAuthStore } from '../../stores/auth';
 import { useOrderStore } from '../../stores/orders';
 import { createHomeOrderSummary, homeOrderSeenKey } from '../../utils/home-order-summary';
 import { getSafeMenuButtonRect } from '../../platform/system-ui';
+import { staticAssetUrl } from '../../config/static-cdn';
 
 const data = ref<HomeResponse>();
 const loading = ref(true);
@@ -23,7 +25,7 @@ const dismissedOrderIds = ref<string[]>([]);
 const sessionOrderIds = ref<string[]>([]);
 const activeSort = ref('综合排序');
 const activeQuickFilter = ref('全部');
-const sortFilters = ['综合排序', '销量最高', '距离最近', '评分最高'];
+const sortFilters = ['综合排序', '模拟热度', '距离最近', '评分最高'];
 const quickFilters = ['全部', '免配送费', '30分钟内', '满减优惠'];
 const systemInfo = uni.getSystemInfoSync();
 const statusBarHeight = systemInfo.statusBarHeight ?? 20;
@@ -34,34 +36,37 @@ let orderTimer: ReturnType<typeof setInterval> | undefined;
 const flashSaleSeconds = ref(0);
 let flashSaleTimer: ReturnType<typeof setInterval> | undefined;
 const settlementRequested = new Set<string>();
+const trackedPromotionIds = new Set<string>();
 let pageVisible = false;
 let primaryLoaded = false;
 let secondaryLoad: Promise<void> | undefined;
-const STATIC_CDN = 'https://cloud1-d8g7o18ula3c12f10-1318253748.tcloudbaseapp.com/baichile-home';
 const categoryImages = [
-  `${STATIC_CDN}/categories/burger.png`,
-  `${STATIC_CDN}/categories/pizza.png`,
-  `${STATIC_CDN}/categories/coffee.png`,
-  `${STATIC_CDN}/categories/drink.png`,
-  `${STATIC_CDN}/categories/dessert.png`,
-  `${STATIC_CDN}/categories/salad.png`,
-  `${STATIC_CDN}/categories/hotpot.png`,
-  `${STATIC_CDN}/categories/bbq.png`,
+  staticAssetUrl('categories/burger.png'),
+  staticAssetUrl('categories/pizza.png'),
+  staticAssetUrl('categories/coffee.png'),
+  staticAssetUrl('categories/drink.png'),
+  staticAssetUrl('categories/dessert.png'),
+  staticAssetUrl('categories/salad.png'),
+  staticAssetUrl('categories/hotpot.png'),
+  staticAssetUrl('categories/bbq.png'),
 ];
-const featuredCampaignImage = `${STATIC_CDN}/campaigns/featured.png`;
-const saleCampaignImage = `${STATIC_CDN}/campaigns/sale.png`;
+const featuredCampaignImage = staticAssetUrl('campaigns/featured.png');
+const saleCampaignImage = staticAssetUrl('campaigns/sale.png');
 
 const sortedStores = computed(() => {
   let stores = [...(data.value?.stores ?? [])];
   if (activeQuickFilter.value === '30分钟内') stores = stores.filter((store) => store.virtualDeliveryMinutes <= 30);
   if (activeQuickFilter.value === '免配送费') stores = stores.filter((store) => store.deliveryFeeCents === 0);
-  if (activeQuickFilter.value === '满减优惠') stores = stores.filter((store) => store.tags.some((tag) => tag.includes('减')));
-  if (activeSort.value === '销量最高') return stores.sort((a, b) => b.monthlySales - a.monthlySales);
+  if (activeQuickFilter.value === '满减优惠') stores = stores.filter((store) => storePromotionByStore.value.has(store.id));
+  if (activeSort.value === '模拟热度') return stores.sort((a, b) => b.monthlySales - a.monthlySales);
   if (activeSort.value === '距离最近') return stores.sort((a, b) => a.distanceKm - b.distanceKm);
   if (activeSort.value === '评分最高') return stores.sort((a, b) => b.rating - a.rating);
   return stores;
 });
 const flashSaleItems = computed(() => data.value?.flashSaleItems ?? []);
+const storePromotions = computed(() => data.value?.storePromotions ?? []);
+const storePromotionByStore = computed(() => new Map(storePromotions.value.map((promotion) => [promotion.storeId, promotion])));
+const flashSaleEndsAt = computed(() => flashSaleItems.value[0]?.endsAt || '');
 const featuredStore = computed(() => data.value?.featured[0] ?? data.value?.stores[0]);
 const displayAddress = computed(() => {
   const selected = address.selected;
@@ -74,7 +79,15 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    data.value = await catalogService.home();
+    data.value = await catalogService.homeStaleWhileRevalidate((fresh) => {
+      data.value = fresh;
+      recordPromotionImpressions(fresh.flashSaleItems.slice(0, 1), fresh.storePromotions ?? []);
+      if (pageVisible) startFlashSaleTimer();
+      else syncFlashSaleCountdown();
+    });
+    recordPromotionImpressions(data.value.flashSaleItems.slice(0, 1), data.value.storePromotions ?? []);
+    if (pageVisible) startFlashSaleTimer();
+    else syncFlashSaleCountdown();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : '加载失败';
   } finally {
@@ -83,10 +96,30 @@ async function load() {
     if (pageVisible) loadSecondaryData();
   }
 }
+
+function recordPromotionImpressions(items: FlashSaleItem[], thresholds: StorePromotion[] = []) {
+  for (const item of [...items, ...thresholds]) {
+    if (trackedPromotionIds.has(item.promotionId)) continue;
+    trackedPromotionIds.add(item.promotionId);
+    void trackEvent('promotion.impression', {
+      promotionId: item.promotionId,
+      storeId: item.storeId,
+      ...('menuItemId' in item ? { menuItemId: item.menuItemId } : {}),
+    }, auth.accessToken);
+  }
+}
 const openSearch = () => uni.navigateTo({ url: '/pages/search/index' });
 const openAddressList = () => uni.navigateTo({ url: '/pages/address-list/index' });
 const openCategory = (id: string, name: string) => uni.navigateTo({ url: `/pages/category/index?id=${id}&name=${encodeURIComponent(name)}` });
-const openStore = (id: string) => uni.navigateTo({ url: `/pages/store/index?id=${id}` });
+const openStore = (id: string, promotion?: StorePromotion) => {
+  if (promotion) {
+    void trackEvent('promotion.clicked', {
+      promotionId: promotion.promotionId,
+      storeId: promotion.storeId,
+    }, auth.accessToken);
+  }
+  uni.navigateTo({ url: `/pages/store/index?id=${id}` });
+};
 const flashSaleTime = computed(() => {
   const hours = Math.floor(flashSaleSeconds.value / 3600);
   const minutes = Math.floor((flashSaleSeconds.value % 3600) / 60);
@@ -95,17 +128,35 @@ const flashSaleTime = computed(() => {
 });
 function startFlashSaleTimer() {
   stopFlashSaleTimer();
-  flashSaleSeconds.value = 10 * 60 * 60 + Math.floor(Math.random() * 8 * 60 * 60);
+  syncFlashSaleCountdown();
+  if (!flashSaleSeconds.value) return;
   flashSaleTimer = setInterval(() => {
-    flashSaleSeconds.value = Math.max(0, flashSaleSeconds.value - 1);
+    syncFlashSaleCountdown();
+    if (!flashSaleSeconds.value) stopFlashSaleTimer();
   }, 1000);
+}
+function syncFlashSaleCountdown() {
+  const endsAt = Date.parse(flashSaleEndsAt.value);
+  flashSaleSeconds.value = Number.isFinite(endsAt)
+    ? Math.max(0, Math.ceil((endsAt - Date.now()) / 1000))
+    : 0;
 }
 function stopFlashSaleTimer() {
   if (flashSaleTimer) clearInterval(flashSaleTimer);
   flashSaleTimer = undefined;
 }
 function openFlashSale(item: FlashSaleItem) {
-  uni.navigateTo({ url: `/pages/store/index?id=${item.storeId}&flashSaleItemId=${item.menuItemId}` });
+  void trackEvent('promotion.clicked', {
+    promotionId: item.promotionId ?? '',
+    storeId: item.storeId,
+    menuItemId: item.menuItemId,
+  }, auth.accessToken);
+  const query = [
+    `id=${encodeURIComponent(item.storeId)}`,
+    `flashSaleItemId=${encodeURIComponent(item.menuItemId)}`,
+    ...(item.promotionId ? [`promotionId=${encodeURIComponent(item.promotionId)}`] : []),
+  ].join('&');
+  uni.navigateTo({ url: `/pages/store/index?${query}` });
 }
 
 function seenStorageKey() {
@@ -172,7 +223,14 @@ function handleShow() {
   settlementRequested.clear();
   startFlashSaleTimer();
   startOrderTimer();
-  if (primaryLoaded) loadSecondaryData();
+  if (primaryLoaded) {
+    loadSecondaryData();
+    void catalogService.homeStaleWhileRevalidate((fresh) => {
+      data.value = fresh;
+      recordPromotionImpressions(fresh.flashSaleItems.slice(0, 1), fresh.storePromotions ?? []);
+      startFlashSaleTimer();
+    }).catch(() => undefined);
+  }
 }
 
 function handleHide() {
@@ -205,7 +263,7 @@ onUnload(handleHide);
       <view class="brand-row" :style="brandRowStyle">
         <view>
           <text class="brand-name">这顿白吃</text>
-          <text class="brand-slogan">好吃不贵 · 准时必达</text>
+          <text class="brand-slogan">模拟点餐 · 仅供娱乐</text>
         </view>
       </view>
       <view class="address-row" @tap="openAddressList">
@@ -216,7 +274,7 @@ onUnload(handleHide);
         <text class="address-arrow">›</text>
         <view class="promise-badge">
           <image class="promise-mark" src="/static/icons/shield.svg" mode="aspectFit" />
-          <text class="promise-title">准时保</text>
+          <text class="promise-title">虚拟路线</text>
         </view>
       </view>
       <view class="search" @tap="openSearch">
@@ -263,8 +321,8 @@ onUnload(handleHide);
           <button v-if="featuredStore" class="campaign-card featured-campaign" @tap="openStore(featuredStore.id)">
             <view class="campaign-copy">
               <text class="campaign-title">今日精选</text>
-              <text class="campaign-subtitle">口碑好店 · 放心下单</text>
-              <text class="campaign-button">立即去吃</text>
+              <text class="campaign-subtitle">口碑好店 · 模拟点单</text>
+              <text class="campaign-button">去看看</text>
             </view>
             <view class="campaign-image-wrap">
               <image class="campaign-image" :src="featuredCampaignImage" mode="aspectFill" />
@@ -274,17 +332,17 @@ onUnload(handleHide);
             <view class="campaign-copy">
               <view class="sale-heading">
                 <text class="campaign-title sale-title">限时秒杀</text>
-                <text class="sale-time">{{ flashSaleTime }}</text>
+                <text class="sale-time">{{ flashSaleSeconds ? flashSaleTime : '活动进行中' }}</text>
               </view>
               <text class="campaign-subtitle">{{ flashSaleItems[0].name }}</text>
               <view class="price-row">
                 <text class="sale-price">¥{{ (flashSaleItems[0].flashPriceCents / 100).toFixed(1) }}</text>
                 <text class="original-price">¥{{ (flashSaleItems[0].originalPriceCents / 100).toFixed(1) }}</text>
               </view>
-              <text class="sale-action">马上抢</text>
+              <text class="sale-action">模拟抢购</text>
             </view>
             <view class="campaign-image-wrap">
-              <image class="campaign-image" :src="saleCampaignImage" mode="aspectFill" />
+              <image class="campaign-image" :src="flashSaleItems[0].imageUrl || saleCampaignImage" mode="aspectFill" />
             </view>
           </button>
         </section>
@@ -318,7 +376,8 @@ onUnload(handleHide);
               :key="store.id"
               :store="store"
               :index="index"
-              @open="openStore(store.id)"
+              :promotion="storePromotionByStore.get(store.id)"
+              @open="openStore(store.id, storePromotionByStore.get(store.id))"
             />
           </view>
           <view v-else class="empty-inline">附近暂时没有虚拟店铺</view>

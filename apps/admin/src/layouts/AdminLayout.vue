@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Avatar,
+  Calendar,
   Coin,
   DataAnalysis,
   FolderOpened,
@@ -10,6 +11,7 @@ import {
   Goods,
   List,
   Setting,
+  SetUp,
   SwitchButton,
   UserFilled,
 } from '@element-plus/icons-vue';
@@ -24,6 +26,8 @@ const menu = computed(() => [
   { path: '/catalog-imports', label: '数据导入', icon: FolderOpened, permission: 'catalog:write' as const },
   { path: '/accounts', label: '用户与货币', icon: Coin, permission: 'accounts:read' as const },
   { path: '/orders', label: '订单管理', icon: List, permission: 'orders:read' as const },
+  { path: '/promotions', label: '促销中心', icon: Calendar, permission: 'promotions:read' as const },
+  { path: '/gameplay', label: '玩法配置', icon: SetUp, permission: 'promotions:read' as const },
   { path: '/share-rewards', label: '分享奖励', icon: Setting, permission: 'wallet:read' as const },
   { path: '/admins', label: '管理员', icon: UserFilled, permission: 'admins:manage' as const },
   { path: '/audit', label: '审计日志', icon: Document, permission: 'audit:read' as const },

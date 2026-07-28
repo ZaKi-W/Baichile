@@ -41,20 +41,34 @@
 店铺、分类和菜单的源数据在 `packages/catalog-data`。改名或改菜单后同步到 CloudBase：
 
 ```bash
-CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10 pnpm --filter @baichile/cloud-functions seed:catalog
-CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10 pnpm --filter @baichile/cloud-functions verify:cloudbase
+export CLOUDBASE_ENV_ID=your-env-id
+export TENCENTCLOUD_SECRETID=...
+export TENCENTCLOUD_SECRETKEY=...
+# 临时凭证还需设置 TENCENTCLOUD_SESSIONTOKEN
+
+# 先检查，再幂等创建集合/缺失索引并强制 PRIVATE 权限。
+pnpm cloudbase:apply-schema
+CLOUDBASE_SCHEMA_APPLY=true \
+  CLOUDBASE_SCHEMA_STATE_FILE=/tmp/baichile-schema-state.json \
+  pnpm cloudbase:apply-schema
+
+pnpm --filter @baichile/cloud-functions seed:catalog
+CLOUDBASE_SCHEMA_STATE_FILE=/tmp/baichile-schema-state.json \
+  pnpm --filter @baichile/cloud-functions verify:cloudbase
 ```
+
+`cloudbase:apply-schema` 不删除集合或索引。若同名索引定义与清单冲突，脚本会停止并要求人工审阅。
+只有显式提供 `CLOUDBASE_EXPORT_FILE` 时，校验脚本才比较导出文件中的精确记录数，避免把用户维护的目录数据误判为异常。
 
 导入历史 CloudBase JSON：
 
 ```bash
-CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10 pnpm --filter @baichile/cloud-functions import:cloudbase
+pnpm --filter @baichile/cloud-functions import:cloudbase
 ```
 
 迁移目录图片：
 
 ```bash
-CLOUDBASE_ENV_ID=cloud1-d8g7o18ula3c12f10 \
 CATALOG_IMAGE_BASE_URL=https://example.com/choutuan-img \
 pnpm --filter @baichile/cloud-functions migrate:catalog-images
 ```

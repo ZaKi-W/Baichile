@@ -12,7 +12,9 @@
     "import:kamii-buffet": "ts-node scripts/import-kamii-buffet.ts",
     "backfill:catalog-search": "ts-node scripts/backfill-catalog-search.ts",
     "import:cloudbase": "ts-node scripts/import-cloudbase.ts",
+    "apply:schema": "ts-node scripts/apply-cloudbase-schema.ts",
     "verify:cloudbase": "ts-node scripts/verify-cloudbase.ts",
+    "migrate:product-foundation": "ts-node scripts/migrate-product-foundation.ts",
     "migrate:catalog-images": "ts-node scripts/migrate-catalog-images.ts"
   },
   "dependencies": {
@@ -21,10 +23,11 @@
     "@baichile/domain": "workspace:*",
     "@baichile/map-core": "workspace:*",
     "@cloudbase/node-sdk": "^3.18.3",
-    "wx-server-sdk": "^4.0.2",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "wx-server-sdk": "^4.0.2"
   },
   "devDependencies": {
+    "@cloudbase/manager-node": "5.6.4",
     "@types/node": "^22.15.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"

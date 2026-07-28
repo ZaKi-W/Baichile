@@ -6,42 +6,68 @@ import AppIcon from '../../components/AppIcon.vue';
 import CartSheet from '../../components/CartSheet.vue';
 import SkuSheet from '../../components/SkuSheet.vue';
 import { catalogService } from '../../services/catalog';
+import { trackEvent } from '../../services/analytics';
+import { useAuthStore } from '../../stores/auth';
 import { useCartStore } from '../../stores/cart';
 
 const store = ref<StoreDetail>();
 const selected = ref<MenuItem | null>(null);
 const isCartOpen = ref(false);
 const cart = useCartStore();
+const auth = useAuthStore();
 const activeCategoryId = ref('');
 const scrollAnchor = ref('');
 const sectionOffsets = new Map<string, number>();
 const failedImages = ref<string[]>([]);
+const loadingStore = ref(true);
+const loadError = ref('');
+let routeOptions: Record<string, string | undefined> = {};
 let isProgrammatic = false;
+let trackedStoreId = '';
 
-onLoad(async (options) => {
-  store.value = await catalogService.store(options?.id || '');
-  cart.selectStore(store.value);
-  const flashSaleItem = options?.flashSaleItemId
-    ? store.value.menu.find((item) => item.id === options.flashSaleItemId)
-    : undefined;
-  if (flashSaleItem?.subCategoryId) {
-    activeCategoryId.value = flashSaleItem.subCategoryId;
-    scrollAnchor.value = `cat-${flashSaleItem.subCategoryId}`;
-  }
-  if (flashSaleItem && await cart.add(store.value, flashSaleItem, flashSaleOptionIds(flashSaleItem), 1)) {
-    uni.showToast({ title: '已抢到，已加入购物车', icon: 'none' });
-  }
-  await nextTick();
-  setTimeout(measureSections, 200);
+onLoad((options) => {
+  routeOptions = options || {};
+  void loadStore();
 });
 
+async function loadStore(force = false) {
+  loadingStore.value = true;
+  loadError.value = '';
+  try {
+    store.value = await catalogService.store(routeOptions.id || '', { force });
+    cart.selectStore(store.value);
+    if (trackedStoreId !== store.value.id) {
+      trackedStoreId = store.value.id;
+      void trackEvent('store.entered', {
+        storeId: store.value.id,
+        promotionId: routeOptions.promotionId ?? '',
+      }, auth.accessToken);
+    }
+    const flashSaleItem = routeOptions.flashSaleItemId
+      ? store.value.menu.find((item) => item.id === routeOptions.flashSaleItemId)
+      : undefined;
+    if (flashSaleItem?.subCategoryId) {
+      activeCategoryId.value = flashSaleItem.subCategoryId;
+      scrollAnchor.value = `cat-${flashSaleItem.subCategoryId}`;
+    }
+    await nextTick();
+    setTimeout(measureSections, 200);
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : '店铺加载失败';
+  } finally {
+    loadingStore.value = false;
+  }
+}
+
 const hasCartItems = computed(() => cart.count > 0);
-const meetsMinimumOrder = computed(() => !store.value || cart.itemsTotalCents >= store.value.minimumOrderCents);
+const meetsMinimumOrder = computed(() => (
+  !store.value || cart.originalItemsTotalCents >= store.value.minimumOrderCents
+));
 const canCheckout = computed(() => cart.count > 0 && meetsMinimumOrder.value);
 const checkoutText = computed(() => {
   if (!cart.count) return '购物车为空';
   if (!meetsMinimumOrder.value && store.value) {
-    const missing = Math.max(0, store.value.minimumOrderCents - cart.itemsTotalCents);
+    const missing = Math.max(0, store.value.minimumOrderCents - cart.originalItemsTotalCents);
     return `差¥${(missing / 100).toFixed(0)}起送`;
   }
   return '去结算';
@@ -69,11 +95,13 @@ const directOptionIds = (item: MenuItem) => item.specGroups.flatMap((group) => {
   if (defaults.length) return defaults;
   return group.options.length === 1 ? [group.options[0].id] : [];
 });
-const flashSaleOptionIds = (item: MenuItem) => item.specGroups.flatMap((group) => {
-  const defaults = group.options.filter((option) => option.isDefault).map((option) => option.id);
-  if (defaults.length) return defaults;
-  return group.required && group.options[0] ? [group.options[0].id] : [];
-});
+const flashPromotionFor = (itemId: string) => store.value?.flashSaleItems?.find(
+  (promotion) => promotion.menuItemId === itemId && Date.parse(promotion.endsAt) > Date.now(),
+);
+const displayBasePriceCents = (item: MenuItem) => flashPromotionFor(item.id)?.flashPriceCents ?? item.basePriceCents;
+const storePromotionLabel = computed(() => store.value?.storePromotions?.[0]?.tiers
+  .map((tier) => `满${(tier.thresholdCents / 100).toFixed(0)}减${(tier.discountCents / 100).toFixed(0)}`)
+  .join(' · ') ?? '');
 
 function measureSections() {
   uni.createSelectorQuery()
@@ -115,7 +143,14 @@ function selectCategory(id: string) {
 
 async function add(optionIds: string[], quantity: number) {
   if (!store.value || !selected.value) return;
-  if (await cart.add(store.value, selected.value, optionIds, quantity)) {
+  const item = selected.value;
+  if (await cart.add(store.value, item, optionIds, quantity)) {
+    void trackEvent('cart.item_added', {
+      storeId: store.value.id,
+      menuItemId: item.id,
+      quantity,
+      source: 'sku',
+    }, auth.accessToken);
     selected.value = null;
     uni.showToast({ title: '已加入购物车', icon: 'none' });
   }
@@ -127,6 +162,12 @@ async function addItem(item: MenuItem) {
     return;
   }
   if (await cart.add(store.value, item, directOptionIds(item), 1)) {
+    void trackEvent('cart.item_added', {
+      storeId: store.value.id,
+      menuItemId: item.id,
+      quantity: 1,
+      source: 'store',
+    }, auth.accessToken);
     uni.showToast({ title: '已加入购物车', icon: 'none' });
   }
 }
@@ -155,7 +196,15 @@ const checkout = () => {
 
 <template>
   <page-meta page-style="height: 100%; overflow: hidden;" />
-  <view v-if="store" class="page store-page">
+  <view v-if="loadingStore" class="store-state">
+    <text class="state-title">正在准备模拟菜单…</text>
+  </view>
+  <view v-else-if="loadError" class="store-state error-state">
+    <text class="state-title">店铺暂时没开门</text>
+    <text class="state-copy">{{ loadError }}</text>
+    <button @tap="loadStore(true)">重新加载</button>
+  </view>
+  <view v-else-if="store" class="page store-page">
     <view class="merchant-hero">
       <image v-if="imageVisible('store-cover', store.coverUrl)" class="merchant-cover" :src="store.coverUrl" mode="aspectFill" @error="markImageFailed('store-cover')" />
       <view v-if="imageVisible('store-cover', store.coverUrl)" class="merchant-cover-shade" />
@@ -177,7 +226,7 @@ const checkout = () => {
       <view class="merchant-meta">
         <text><text class="meta-strong">{{ store.rating.toFixed(1) }}</text> 分</text>
         <text class="meta-dot"></text>
-        <text>月售 {{ store.monthlySales }}+</text>
+        <text>模拟热度 {{ store.monthlySales }}+</text>
         <text class="meta-dot"></text>
         <text>{{ store.virtualDeliveryMinutes }} 分钟</text>
         <text class="meta-dot"></text>
@@ -188,14 +237,18 @@ const checkout = () => {
         <text class="notice-sign">i</text>
         <text>本店与菜单均为虚拟内容，不会真实接单或配送。</text>
       </view>
+      <view v-if="storePromotionLabel" class="promotion-row">
+        <text class="promotion-sign">满减</text>
+        <text>{{ storePromotionLabel }}</text>
+      </view>
     </view>
 
     <scroll-view class="service-strip" scroll-x :show-scrollbar="false">
       <view class="service-items">
         <view class="service-item">起送 <text>¥{{ (store.minimumOrderCents / 100).toFixed(0) }}</text></view>
         <view class="service-item">配送 <text>{{ store.deliveryFeeCents ? `¥${(store.deliveryFeeCents / 100).toFixed(0)}` : '免配送费' }}</text></view>
-        <view class="service-item">准时达</view>
-        <view class="service-item">食材现做</view>
+        <view class="service-item">模拟时长</view>
+        <view class="service-item">模拟菜单</view>
       </view>
     </scroll-view>
 
@@ -222,7 +275,7 @@ const checkout = () => {
         <view v-for="group in menuGroups" :key="group.id" :id="`cat-${group.id}`" class="menu-section">
           <view class="menu-section-title-row">
             <text class="menu-section-title">{{ group.name }}</text>
-            <text class="menu-section-note">每日现做</text>
+            <text class="menu-section-note">虚拟菜单</text>
           </view>
 
           <view v-for="(item, itemIndex) in group.items" :key="item.id" class="product-card">
@@ -233,10 +286,11 @@ const checkout = () => {
             <view class="product-info">
               <text class="product-name">{{ item.name }}</text>
               <text v-if="item.subtitle" class="product-desc">{{ item.subtitle }}</text>
-              <text class="product-sales">月售 {{ item.monthlySales }}</text>
+              <text class="product-sales">模拟点选 {{ item.monthlySales }}</text>
               <view class="product-bottom">
                 <view class="product-price">
-                  <text class="price-symbol">¥</text>{{ (item.basePriceCents / 100).toFixed(2) }}
+                  <text class="price-symbol">¥</text>{{ (displayBasePriceCents(item) / 100).toFixed(2) }}
+                  <text v-if="flashPromotionFor(item.id)" class="original-product-price">¥{{ (item.basePriceCents / 100).toFixed(2) }}</text>
                   <text class="price-from">起</text>
                 </view>
                 <button class="product-add" :class="{ 'has-spec': requiresSpecSelection(item) }" @tap="addItem(item)">
@@ -258,16 +312,24 @@ const checkout = () => {
       </view>
       <view class="cart-summary">
         <text class="cart-total">¥{{ (cart.totalCents / 100).toFixed(2) }}</text>
-        <text class="cart-note">{{ cart.count ? `已选 ${cart.count} 件` : '购物车还是空的' }}</text>
+        <text class="cart-note">{{ cart.count ? `已选 ${cart.count} 件 · 含活动预估` : '购物车还是空的' }}</text>
       </view>
       <button class="checkout-button" :disabled="!canCheckout" @tap.stop="checkout">{{ checkoutText }}</button>
     </view>
-    <SkuSheet :item="selected" @close="selected = null" @confirm="add" />
+    <SkuSheet
+      :item="selected"
+      :base-price-cents="selected ? displayBasePriceCents(selected) : undefined"
+      @close="selected = null"
+      @confirm="add"
+    />
     <CartSheet
       :visible="isCartOpen"
       :lines="cart.lines"
       :store-name="cart.store?.name"
       :total-cents="cart.totalCents"
+      :delivery-fee-cents="cart.store?.deliveryFeeCents"
+      :packing-fee-cents="cart.store?.packingFeeCents"
+      :store-discount-cents="cart.group(store.id)?.storeDiscountCents"
       :checkout-disabled="!canCheckout"
       :checkout-text="checkoutText"
       @close="isCartOpen = false"
@@ -281,6 +343,34 @@ const checkout = () => {
 </template>
 
 <style scoped>
+.store-state {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 18rpx;
+  box-sizing: border-box;
+  padding: 60rpx;
+  color: #171717;
+  background: #fff9df;
+  text-align: center;
+}
+.store-state.error-state { background: #fff0ec; }
+.state-title { font-size: 34rpx; font-weight: 900; }
+.state-copy { color: #777; font-size: 24rpx; }
+.store-state button {
+  margin: 12rpx 0 0;
+  padding: 0 34rpx;
+  border: 3rpx solid #171717;
+  border-radius: 24rpx 8rpx 24rpx 8rpx;
+  color: #171717;
+  background: #ffd400;
+  font-size: 25rpx;
+  font-weight: 900;
+  line-height: 74rpx;
+}
+.store-state button::after { border: 0; }
 .store-page {
   --ink: #171717;
   --muted: #83837f;
@@ -437,6 +527,25 @@ const checkout = () => {
   background: var(--lime);
   font-size: 20rpx;
   font-weight: 800;
+}
+.promotion-row {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 12rpx;
+  color: #fff4c5;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+.promotion-sign {
+  padding: 6rpx 10rpx;
+  border-radius: 8rpx;
+  color: #8c220e;
+  background: #ffd4c8;
+  font-size: 17rpx;
+  font-weight: 900;
 }
 
 .service-strip {
@@ -622,6 +731,7 @@ const checkout = () => {
 }
 .product-price { color: var(--accent); font-size: 25rpx; line-height: 1; font-weight: 900; white-space: nowrap; }
 .price-symbol { margin-right: 2rpx; font-size: 17rpx; }
+.original-product-price { margin-left: 8rpx; color: #aaa; font-size: 16rpx; text-decoration: line-through; }
 .price-from { margin-left: 4rpx; color: #a9a9a5; font-size: 16rpx; font-weight: 600; }
 .product-add {
   min-width: 52rpx;

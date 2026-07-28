@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app';
 import { useSharePage } from '../../features/share-page';
 import { orderEggImageUrl } from '../../utils/order-easter-egg';
+import { VIRTUAL_FUNDS_NOTICE } from '../../utils/share-poster';
 import { saveGachaPoster, shareCoverPath } from '../../utils/share-poster-canvas';
 import { shareWebPage } from '../../platform/web-share';
 
@@ -67,6 +68,7 @@ async function savePoster() {
       </view>
     </template>
     <view v-else class="gacha-empty">这枚彩蛋找不到了。</view>
+    <view class="gacha-funds-notice">{{ VIRTUAL_FUNDS_NOTICE }}</view>
 
     <view v-if="page.sharing.value && page.data.value?.active" class="egg-share-actions"><button class="egg-share-button" open-type="share" @tap="shareOnWeb">分享彩蛋</button><button class="egg-save-button" :loading="saving" @tap="savePoster">保存到相册</button><button class="egg-copy-button" @tap="copyShareText">复制</button></view>
     <view v-else-if="page.data.value" class="egg-visitor-actions"><text>你的订单里，也可能藏着一枚彩蛋。</text><button class="egg-share-button" @tap="page.enterApp">进入这顿白吃</button></view>

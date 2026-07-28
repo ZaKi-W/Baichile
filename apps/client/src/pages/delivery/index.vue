@@ -9,6 +9,7 @@ import { DELIVERY_START_MS, getOrderStepIndex, ORDER_STEPS } from '../../utils/o
 import { findDeliveryIncident, getDeliveryIncidentPhase } from '@baichile/domain';
 import { reorder } from '../../utils/reorder';
 import { shareService } from '../../services/shares';
+import { trackEvent } from '../../services/analytics';
 import { shareLandingUrl } from '../../utils/share-navigation';
 import { useAuthStore } from '../../stores/auth';
 import { getSafeMenuButtonRect } from '../../platform/system-ui';
@@ -24,6 +25,8 @@ const addressStore = useAddressStore();
 const cart = useCartStore();
 
 const orderId = ref('');
+const loadingOrder = ref(true);
+const orderLoadError = ref('');
 const preparingShare = ref(false);
 const storeName = ref('商家');
 const storeCoverUrl = ref('');
@@ -77,6 +80,9 @@ const deliveryContactPhone = computed(() => {
 const paymentMethodText = computed(() => (
   order.value?.settlementMode === 'guest_simulation' ? '游客模拟结算' : '虚拟余额支付'
 ));
+const orderStoreDiscountCents = computed(() => order.value?.promotionSnapshots
+  ?.filter((snapshot) => snapshot.type === 'store_threshold')
+  .reduce((sum, snapshot) => sum + snapshot.discountCents, 0) ?? 0);
 
 /* ── map center: destination (收货地址) ── */
 const mapCenter = computed(() => {
@@ -191,6 +197,7 @@ const currentStepIndex = ref(0);
 let stepTimer: ReturnType<typeof setInterval> | undefined;
 let failureRefreshRequested = false;
 let completionRefreshRequested = false;
+let trackedDeliveryOutcome = '';
 
 const incidentPhase = computed(() => order.value?.incident
   ? getDeliveryIncidentPhase(order.value.incident, now.value)
@@ -249,6 +256,21 @@ function updateDeliveryState(startedAt: number) {
   if (hasFailed.value && !failureRefreshRequested) {
     failureRefreshRequested = true;
     void orders.load();
+  }
+  const outcome = hasFailed.value
+    ? 'failed'
+    : !currentOrder.incident && currentStepIndex.value >= FINAL_STEP
+      ? 'delivered'
+      : '';
+  const outcomeKey = outcome ? `${currentOrder.id}:${outcome}` : '';
+  if (outcomeKey && outcomeKey !== trackedDeliveryOutcome) {
+    trackedDeliveryOutcome = outcomeKey;
+    void trackEvent('delivery.result', {
+      orderId: currentOrder.id,
+      result: outcome,
+      guest: currentOrder.settlementMode === 'guest_simulation',
+      hasEgg: Boolean(currentOrder.easterEgg),
+    }, auth.accessToken);
   }
 }
 
@@ -416,20 +438,29 @@ function toggleSheet() {
 }
 
 /* ── lifecycle ── */
-onLoad(async (options) => {
+onLoad((options) => {
   forceEggRevealRequested.value = options?.revealEgg === '1';
   orderId.value = options?.id || '';
   void addressStore.load();
-  if (orderId.value) {
-    try {
-      await orders.fetchDetail(orderId.value, { force: forceEggRevealRequested.value });
-    } catch (error) {
-      uni.showToast({ title: error instanceof Error ? error.message : '订单加载失败', icon: 'none' });
-    }
-  }
-  startStepTimer();
-  await resolveStoreInfo();
+  void loadOrder(forceEggRevealRequested.value);
 });
+
+async function loadOrder(force = false) {
+  loadingOrder.value = true;
+  orderLoadError.value = '';
+  try {
+    if (!orderId.value) throw new Error('订单编号为空');
+    if (orderId.value) {
+      await orders.fetchDetail(orderId.value, { force });
+    }
+    startStepTimer();
+    await resolveStoreInfo();
+  } catch (error) {
+    orderLoadError.value = error instanceof Error ? error.message : '订单加载失败';
+  } finally {
+    loadingOrder.value = false;
+  }
+}
 
 onBeforeUnmount(() => clearInterval(stepTimer));
 
@@ -502,7 +533,15 @@ function handleEggRevealImageLoad() {
 </script>
 
 <template>
-  <view class="delivery-page" v-if="order">
+  <view v-if="loadingOrder" class="empty-state">
+    <text class="empty-text">正在加载模拟配送…</text>
+  </view>
+  <view v-else-if="orderLoadError" class="empty-state error-state">
+    <text class="empty-title">订单暂时走丢了</text>
+    <text class="empty-text">{{ orderLoadError }}</text>
+    <button @tap="loadOrder(true)">重新加载</button>
+  </view>
+  <view class="delivery-page" v-else-if="order">
     <!-- ── 全屏地图 ── -->
     <map
       id="deliveryMap"
@@ -550,6 +589,7 @@ function handleEggRevealImageLoad() {
         <text class="eta-text">{{ etaText }}</text>
         <text class="distance-text">{{ distanceText }}</text>
       </view>
+      <text class="simulation-notice">虚拟配送演示 · 路线、骑手与进度均为模拟数据</text>
 
       <!-- 时间轴 -->
       <view class="timeline">
@@ -609,10 +649,10 @@ function handleEggRevealImageLoad() {
         </view>
         <view class="rider-info">
           <text class="rider-name">{{ riderName }}</text>
-          <text class="rider-tag">配送骑手</text>
+          <text class="rider-tag">虚拟配送角色</text>
         </view>
         <view class="contact-btn">
-          <text class="contact-text">联系骑手</text>
+          <text class="contact-text">模拟路线</text>
         </view>
       </view>
 
@@ -646,8 +686,10 @@ function handleEggRevealImageLoad() {
             <text class="unit-price">{{ formatMoney(line.unitPriceCents) }}/份</text>
           </view>
         </view>
-        <view class="fee-line"><text>配送费</text><text>{{ formatMoney(order.deliveryFeeCents) }}</text></view>
-        <view class="total-line"><text>实付</text><text>{{ formatMoney(order.totalCents) }}</text></view>
+        <view v-if="orderStoreDiscountCents" class="fee-line discount-line"><text>店铺满减</text><text>-{{ formatMoney(orderStoreDiscountCents) }}</text></view>
+        <view class="fee-line"><text>模拟配送费</text><text>{{ formatMoney(order.deliveryFeeCents) }}</text></view>
+        <view class="fee-line"><text>模拟包装费</text><text>{{ formatMoney(order.packingFeeCents) }}</text></view>
+        <view class="total-line"><text>模拟订单金额</text><text>{{ formatMoney(order.totalCents) }}</text></view>
       </view>
 
       <!-- 分隔线 -->
@@ -664,7 +706,7 @@ function handleEggRevealImageLoad() {
           <text class="info-value">{{ deliveryAddress }}</text>
         </view>
         <view class="info-row">
-          <text class="info-label">配送时间</text>
+          <text class="info-label">虚拟配送时间</text>
           <text class="info-value">{{ deliveryTimeText }}</text>
         </view>
       </view>
@@ -675,7 +717,7 @@ function handleEggRevealImageLoad() {
           <text class="info-value">{{ formatDateTime(order.createdAt || order.startedAt) }}</text>
         </view>
         <view class="info-row">
-          <text class="info-label">支付方式</text>
+          <text class="info-label">模拟结算方式</text>
           <text class="info-value">{{ paymentMethodText }}</text>
         </view>
         <view class="info-row">
@@ -894,6 +936,16 @@ function handleEggRevealImageLoad() {
   font-size: 24rpx;
   color: #999;
   margin-top: 4rpx;
+}
+.simulation-notice {
+  display: block;
+  margin: -4rpx 0 20rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 12rpx;
+  color: #6c5b00;
+  background: #fff6c7;
+  font-size: 20rpx;
+  line-height: 1.4;
 }
 .reorder-button {
   background: #fff;
@@ -1547,9 +1599,19 @@ function handleEggRevealImageLoad() {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  flex-direction: column;
+  gap: 18rpx;
+  box-sizing: border-box;
+  padding: 48rpx;
+  background: #fff9df;
+  text-align: center;
 }
+.empty-state.error-state { background: #fff0ec; }
+.empty-title { color: #171717; font-size: 34rpx; font-weight: 900; }
 .empty-text {
   font-size: 30rpx;
   color: #999;
 }
+.empty-state button { margin: 6rpx 0 0; padding: 0 30rpx; border: 3rpx solid #171717; border-radius: 24rpx 8rpx 24rpx 8rpx; color: #171717; background: #ffd400; font-size: 24rpx; font-weight: 900; line-height: 72rpx; }
+.empty-state button::after { border: 0; }
 </style>

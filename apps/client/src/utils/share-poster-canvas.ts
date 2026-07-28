@@ -59,6 +59,7 @@ function drawGachaPoster(ctx: UniApp.CanvasContext, data: ShareLanding, kind: Sh
   ctx.setFillStyle(ink); ctx.setFontSize(22); ctx.fillText(data.identity?.nickname || '匿名白吃选手', avatar ? 132 : 54, 1270);
   ctx.drawImage(qr, 554, 1128, 126, 126);
   ctx.setFillStyle('#70695F'); ctx.setFontSize(18); ctx.fillText('扫码来抽同款', 534, 1284);
+  ctx.setFontSize(16); drawText(ctx, model.fundsNotice, 52, 1312, 646, 18, 1);
 }
 
 function drawCapsules(ctx: UniApp.CanvasContext, x: number, y: number, accent: string) {

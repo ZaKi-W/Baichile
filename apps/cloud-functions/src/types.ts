@@ -1,4 +1,4 @@
-export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface CloudFunctionEvent {
   method?: HttpMethod;
@@ -22,6 +22,7 @@ export interface RequestContext {
   webPhoneNumber?: string;
   ipAddress?: string;
   origin?: string;
+  requestId: string;
 }
 
 export interface CloudResult<T = unknown> {
@@ -44,4 +45,5 @@ export interface PageQuery {
   dateTo?: string;
   action?: string;
   resourceType?: string;
+  lifecycleStatus?: string;
 }

@@ -3,10 +3,13 @@ import { computed, ref } from 'vue';
 import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app';
 import type { ShareLanding } from '@baichile/api-contract';
 import { shareService } from '../../services/shares';
+import { trackEvent } from '../../services/analytics';
 import { useAuthStore } from '../../stores/auth';
 import { legacyShareTarget } from '../../utils/share-navigation';
+import { VIRTUAL_FUNDS_NOTICE } from '../../utils/share-poster';
 import { saveGachaPoster, shareCoverPath } from '../../utils/share-poster-canvas';
 import { shareWebPage } from '../../platform/web-share';
+import { staticCloudFileId } from '../../config/static-cdn';
 
 const auth = useAuthStore();
 const data = ref<ShareLanding>();
@@ -38,6 +41,11 @@ onLoad(async (options) => {
     uni.redirectTo({ url: `${target}?${query}` });
     return;
   }
+  void trackEvent('share.landing_viewed', {
+    kind: data.value?.kind ?? 'unknown',
+    active: data.value?.active ?? false,
+    ownerView: sharing.value,
+  }, auth.accessToken);
   if (sharing.value) uni.showShareMenu({ menus: ['shareAppMessage', 'shareTimeline'] });
 });
 
@@ -60,12 +68,16 @@ async function savePoster() {
 async function resolvePersonaImage(personaId: string): Promise<string> {
   const cloud = typeof wx === 'undefined' ? undefined : wx.cloud;
   if (!cloud) throw new Error('云存储未初始化');
-  const fileID = `cloud://cloud1-d8g7o18ula3c12f10/baichile-home/personas/${personaId}.png`;
+  const fileID = staticCloudFileId(`personas/${personaId}.png`);
   const result = await cloud.getTempFileURL({ fileList: [fileID] });
   return result.fileList[0]?.tempFileURL || '';
 }
 
-function start() { uni.switchTab({ url: '/pages/profile/index' }); auth.requestLogin(); }
+function start() {
+  void trackEvent('auth.login_gate_shown', { source: 'share_landing' }, auth.accessToken);
+  uni.switchTab({ url: '/pages/profile/index' });
+  auth.requestLogin();
+}
 </script>
 
 <template>
@@ -77,11 +89,12 @@ function start() { uni.switchTab({ url: '/pages/profile/index' }); auth.requestL
       <view class="gacha-orbit" />
       <view class="persona-title-row"><view><view class="gacha-section-kicker">你的白吃人格</view><text>{{ data.persona.name }}</text></view><text class="persona-code">{{ data.persona.acronym }}</text></view>
       <view class="persona-machine gacha-capsule"><view class="gacha-machine-window persona-window"><image v-if="personaImageUrl" :src="personaImageUrl" mode="aspectFit" aria-label="白吃人格插画" /><view v-else class="persona-fallback"><text>{{ data.persona.acronym }}</text></view><text class="persona-window-label">TYPE FOUND</text></view><view class="persona-verdict"><text>本次扭蛋结果</text><strong>“{{ data.persona.verdict }}”</strong><small>{{ data.persona.description }}</small></view></view>
-      <view class="persona-stats"><view><text>白吃次数</text><strong>{{ data.completedOrderCount }} 顿</strong></view><view><text>累计实付</text><strong>¥{{ (data.savedMoneyCents / 100).toFixed(2) }}</strong></view><view><text>躲过热量</text><strong>{{ data.savedCaloriesKcal }} kcal</strong></view></view>
+      <view class="persona-stats"><view><text>模拟订单</text><strong>{{ data.completedOrderCount }} 顿</strong></view><view><text>模拟订单金额</text><strong>¥{{ (data.savedMoneyCents / 100).toFixed(2) }}</strong></view><view><text>模拟热量</text><strong>{{ data.savedCaloriesKcal }} kcal</strong></view></view>
       <view class="persona-cta"><text>{{ data.persona.callToAction || '来抽你的同款人格' }}</text><strong>每一笔“没吃”都会改变下一枚人格扭蛋。</strong></view>
       <view class="persona-footer"><view class="gacha-identity"><image v-if="data.identity?.avatarUrl" :src="data.identity.avatarUrl" aria-label="分享者头像" /><view v-else class="gacha-avatar-fallback"><text>{{ ownerName.slice(0, 1) }}</text></view><text>{{ ownerName }}</text></view><view v-if="data.miniProgramCodeUrl" class="gacha-qr"><text>抽同款人格</text><image :src="data.miniProgramCodeUrl" aria-label="小程序码" /></view></view>
     </template>
     <view v-else class="gacha-empty">这枚人格扭蛋找不到了。</view>
+    <view class="gacha-funds-notice">{{ VIRTUAL_FUNDS_NOTICE }}</view>
     <view v-if="sharing && data?.active && data.kind === 'persona'" class="gacha-action-bar"><button class="gacha-secondary" :loading="saving" @tap="savePoster">保存海报</button><button class="gacha-primary" open-type="share" @tap="shareOnWeb">发给朋友</button></view>
     <view v-else-if="data && data.kind === 'persona'" class="gacha-visitor"><text>你的白吃人格扭蛋，正在等你开启。</text><button class="gacha-primary" @tap="start">进入这顿白吃</button></view>
     <canvas canvas-id="personaPoster" class="gacha-canvas" />

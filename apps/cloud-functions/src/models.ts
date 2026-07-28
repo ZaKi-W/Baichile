@@ -4,7 +4,12 @@ import type {
   AdminRole,
   AdminUserStatus,
   CatalogImportSummary,
+  CheckoutQuote,
+  CheckoutQuoteRequest,
+  GameplayConfig,
   ManagedContentStatus,
+  PromotionCampaign,
+  PromotionSnapshot,
   ShareKind,
   OrderEasterEgg,
   QuoteLine,
@@ -28,6 +33,7 @@ export interface AccountDoc {
   avatarUrl?: string | null;
   balanceCents: number;
   status: AccountStatus;
+  deletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,7 +43,14 @@ export interface VisitorSessionDoc {
   id: string;
   visitorId: string;
   accountId?: string | null;
+  accessTokenHash?: string | null;
+  refreshTokenHash?: string | null;
+  expiresAt?: string | null;
+  refreshExpiresAt?: string | null;
+  revokedAt?: string | null;
+  rotatedFromId?: string | null;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface RateLimitDoc {
@@ -95,6 +108,7 @@ export interface StoreDoc {
   searchText?: string;
   sortOrder: number;
   status: ManagedContentStatus;
+  promotionPublishRevision?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -132,6 +146,13 @@ export interface MenuItemDoc {
 export interface VirtualOrderDoc {
   _id: string;
   id: string;
+  checkoutId?: string | null;
+  quoteId?: string | null;
+  idempotencyKey?: string | null;
+  /** Immutable idempotency principal captured when the order was created. */
+  subjectKey?: string | null;
+  requestFingerprint?: string | null;
+  legacyCreate?: boolean | null;
   visitorId?: string | null;
   accountId?: string | null;
   settlementMode?: 'guest_simulation' | 'virtual_balance' | null;
@@ -149,6 +170,8 @@ export interface VirtualOrderDoc {
   packingFeeCents: number;
   totalCents: number;
   itemsTotalCaloriesKcal: number;
+  promotionDiscountCents?: number | null;
+  promotionSnapshots?: PromotionSnapshot[];
   lines: unknown[];
   route: unknown;
   incidentKey?: string | null;
@@ -204,9 +227,62 @@ export interface ShareInviteDoc {
     posterTheme?: SharePosterTheme;
   };
   initiatedRewardGranted: boolean;
+  initiatedRewardGrantedAt?: string | null;
+  rewardedAt?: string | null;
+  rewardBusinessDate?: string | null;
+  rewardMigrationReviewRequired?: boolean;
+  rewardMigrationGuardBusinessDate?: string | null;
   inviteeAccountId?: string | null;
   completedAt?: string | null;
   expiresAt: string;
+  createdAt: string;
+}
+
+export interface ShareRewardDailyDoc {
+  _id: string;
+  id: string;
+  accountId: string;
+  businessDate: string;
+  grantedCount: number;
+  totalAmountCents: number;
+  migrationGuardedUnknownCount?: number;
+  updatedAt: string;
+}
+
+export interface GameplayConfigDoc extends GameplayConfig {
+  _id: 'default';
+}
+
+export interface PromotionCampaignDoc extends PromotionCampaign {
+  _id: string;
+}
+
+export interface CheckoutSessionDoc {
+  _id: string;
+  id: string;
+  quoteId: string;
+  subjectKey: string;
+  visitorId?: string | null;
+  accountId?: string | null;
+  request: CheckoutQuoteRequest;
+  quote: CheckoutQuote;
+  quotedAt: string;
+  expiresAt: string;
+  checkoutExpiresAt: string;
+  firstCheckout: boolean;
+  createdOrderIds: string[];
+  createdStoreIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnalyticsEventDoc {
+  _id: string;
+  id: string;
+  visitorId?: string | null;
+  accountId?: string | null;
+  eventName: string;
+  payload: Record<string, unknown>;
   createdAt: string;
 }
 

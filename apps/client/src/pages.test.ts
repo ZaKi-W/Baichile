@@ -15,9 +15,14 @@ describe('native tab bar configuration', () => {
 
   it('registers the wallet page', () => {
     const pages = JSON.parse(readFileSync(new URL('./pages.json', import.meta.url), 'utf8'));
-    expect(pages.pages).toContainEqual({
-      path: 'pages/wallet/index',
-      style: { navigationBarTitleText: '我的钱包' },
+    expect(pages.subPackages).toContainEqual({
+      root: 'pages/wallet',
+      pages: [
+        {
+          path: 'index',
+          style: { navigationBarTitleText: '我的钱包' },
+        },
+      ],
     });
   });
 

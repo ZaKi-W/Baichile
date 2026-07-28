@@ -7,11 +7,18 @@ import { useAddressStore } from '../../stores/address';
 import { useWalletStore } from '../../stores/wallet';
 import { useCartStore } from '../../stores/cart';
 import { CODE_VERSION } from '../../config/code-version';
-import { orderService } from '../../services/orders';
-import { ApiRequestError } from '../../services/http';
-import { consumePendingOrders } from '../../utils/pending-order';
 import { shareService } from '../../services/shares';
 import { shareLandingUrl } from '../../utils/share-navigation';
+import {
+  clearActiveCheckoutSession,
+  clearPendingCheckout,
+  isPendingCheckoutExpired,
+  pendingCheckoutHasWork,
+  readLegacyPendingOrders,
+  readPendingCheckout,
+} from '../../utils/pending-order';
+import { ExpiredCheckoutError, submitPendingCheckout } from '../../features/checkout/submit';
+import { trackEvent } from '../../services/analytics';
 
 interface ChooseAvatarEvent {
   detail: {
@@ -34,6 +41,10 @@ const smsCooldown = ref(0);
 const sendingCode = ref(false);
 const bindingPhone = ref(false);
 const loading = ref(false);
+const deletingAccount = ref(false);
+const refreshError = ref('');
+const pendingCheckoutAvailable = ref(false);
+const pendingSubmitting = ref(false);
 const walletAction = ref<'check-in' | ''>('');
 const preparingShare = ref(false);
 let verifyPhoneOtp: ((code: string) => Promise<string>) | undefined;
@@ -43,17 +54,25 @@ const loginButtonLabel = computed(() => isWeb ? '手机号登录' : '微信登�
 const accountBadge = computed(() => auth.provider === 'phone' ? '手机号用户' : '微信用户');
 
 onShow(() => {
-  void orders.load();
-  void addresses.load();
-  if (auth.accountId) {
-    void wallet.load().catch(() => uni.showToast({ title: '余额加载失败', icon: 'none' }));
-    if (!isWeb && !/^(cloud:\/\/|https:\/\/)/.test(auth.userProfile.avatarUrl)) {
-      avatarUrl.value = '';
-      nickname.value = auth.userProfile.nickname;
-      showLoginPopup.value = true;
+  void (async () => {
+    refreshError.value = '';
+    try {
+      await auth.ready();
+    } catch (error) {
+      refreshError.value = error instanceof Error ? error.message : '登录状态初始化失败';
+      return;
     }
-  }
-  else if (auth.consumeLoginRequest()) showLoginPopup.value = true;
+    const pending = readPendingCheckout();
+    pendingCheckoutAvailable.value = Boolean(pending && pendingCheckoutHasWork(pending));
+    void refreshAccountData().catch(() => undefined);
+    if (auth.accountId) {
+      if (!isWeb && !/^(cloud:\/\/|https:\/\/)/.test(auth.userProfile.avatarUrl)) {
+        avatarUrl.value = '';
+        nickname.value = auth.userProfile.nickname;
+        showLoginPopup.value = true;
+      }
+    } else if (auth.consumeLoginRequest()) showLoginPopup.value = true;
+  })();
 });
 
 onUnload(() => {
@@ -168,6 +187,7 @@ async function loginWithPhone() {
   try {
     const verifiedPhone = await verifyPhoneOtp(phoneCode.value);
     await auth.createWebPhoneSession(verifiedPhone);
+    void trackEvent('auth.login_succeeded', { provider: 'phone' }, auth.accessToken);
     await completeLogin();
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '手机号登录失败', icon: 'none' });
@@ -194,8 +214,8 @@ async function login() {
       avatarUrl: avatarUrl.value,
       nickname: trimmedNickname,
     });
+    void trackEvent('auth.login_succeeded', { provider: 'wechat' }, auth.accessToken);
     await completeLogin();
-    void submitPendingOrderAfterLogin();
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : '登录失败，请重试',
@@ -211,25 +231,47 @@ async function completeLogin() {
   phoneCode.value = '';
   verifyPhoneOtp = undefined;
   uni.showToast({ title: '登录成功', icon: 'success' });
-  await Promise.all([
+  try {
+    await refreshAccountData(true);
+  } catch {
+    // Authentication already succeeded. Refresh failures have their own state
+    // and must not be reported to users as a failed login.
+  }
+  const continuation = auth.consumeLoginContinuation();
+  try {
+    if (continuation === 'wallet') uni.navigateTo({ url: '/pages/wallet/index' });
+    else if (continuation === 'check-in') await checkIn();
+    else if (continuation === 'share-achievement') await shareAchievement();
+    else if (continuation === 'share-reward') openShareReward();
+    else if (continuation.startsWith('share-order:') || continuation.startsWith('share-egg:')) {
+      const [kind, orderId] = continuation.split(':');
+      const card = await shareService.create({
+        kind: kind === 'share-egg' ? 'order_egg' : 'order',
+        orderId,
+        showIdentity: true,
+      });
+      uni.navigateTo({ url: shareLandingUrl(card) });
+    }
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '登录后的操作未完成', icon: 'none' });
+  }
+  await submitPendingOrderAfterLogin();
+}
+
+async function refreshAccountData(showToast = false) {
+  const results = await Promise.allSettled([
     orders.load(),
     addresses.load(),
-    wallet.load().catch(() => undefined),
+    auth.accountId ? wallet.load() : Promise.resolve(),
   ]);
-  const continuation = auth.consumeLoginContinuation();
-  if (continuation === 'wallet') uni.navigateTo({ url: '/pages/wallet/index' });
-  else if (continuation === 'check-in') await checkIn();
-  else if (continuation === 'share-achievement') await shareAchievement();
-  else if (continuation === 'share-reward') openShareReward();
-  else if (continuation.startsWith('share-order:') || continuation.startsWith('share-egg:')) {
-    const [kind, orderId] = continuation.split(':');
-    const card = await shareService.create({
-      kind: kind === 'share-egg' ? 'order_egg' : 'order',
-      orderId,
-      showIdentity: true,
-    });
-    uni.navigateTo({ url: shareLandingUrl(card) });
+  const failed = results.find((result) => result.status === 'rejected');
+  if (!failed) {
+    refreshError.value = '';
+    return;
   }
+  refreshError.value = '账号已登录，但部分数据刷新失败';
+  if (showToast) uni.showToast({ title: '登录成功，数据刷新失败，可稍后重试', icon: 'none' });
+  throw failed.reason;
 }
 
 async function logout() {
@@ -273,37 +315,148 @@ async function bindWechatPhone(event: { detail?: { code?: string; errMsg?: strin
 }
 
 async function submitPendingOrderAfterLogin() {
-  const pending = consumePendingOrders();
-  if (!pending.length) return;
-  const created = [];
-  try {
-    for (const request of pending) {
-      const order = await orderService.create(request);
-      created.push(order);
-      orders.save(order);
+  if (pendingSubmitting.value) return;
+  const pending = readPendingCheckout();
+  if (!pending) {
+    if (readLegacyPendingOrders().length) {
+      uni.navigateTo({ url: '/pages/checkout/index?resume=1' });
     }
-    wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
-    cart.clear();
-    if (created.length === 1) uni.navigateTo({ url: `/pages/delivery/index?id=${created[0].id}` });
-    else uni.switchTab({ url: '/pages/orders/index' });
-    void wallet.load().catch(() => undefined);
-  } catch (error) {
-    if (created.length) {
-      wallet.recordPayment(created.reduce((sum, order) => sum + order.totalCents, 0));
-      cart.clear();
-      void wallet.load().catch(() => undefined);
-      uni.showToast({ title: `已生成${created.length}个订单，剩余订单未完成`, icon: 'none' });
-      uni.switchTab({ url: '/pages/orders/index' });
+    return;
+  }
+  pendingSubmitting.value = true;
+  if (isPendingCheckoutExpired(pending)) {
+    pendingCheckoutAvailable.value = false;
+    void trackEvent('checkout.login_resume_expired', {
+      checkoutId: pending.checkoutId,
+      storeCount: pending.stores.length,
+    }, auth.accessToken);
+    uni.showToast({ title: '登录成功，报价已过期，请重新确认', icon: 'none' });
+    uni.navigateTo({ url: '/pages/checkout/index?resume=1' });
+    pendingSubmitting.value = false;
+    return;
+  }
+  try {
+    void trackEvent('checkout.login_resume_started', {
+      checkoutId: pending.checkoutId,
+      storeCount: pending.stores.length,
+    }, auth.accessToken);
+    const result = await submitPendingCheckout(pending);
+    if (!result) return;
+    if (result.needsRequoteStoreIds.length) {
+      pendingCheckoutAvailable.value = true;
+      uni.showToast({ title: '价格或活动已变化，请重新确认报价', icon: 'none', duration: 2400 });
+      uni.navigateTo({ url: '/pages/checkout/index?resume=1' });
       return;
     }
-    const insufficient = error instanceof ApiRequestError && error.code === 'INSUFFICIENT_BALANCE';
-    uni.showToast({ title: insufficient ? '余额不足' : '登录成功，但订单创建失败，请重新提交', icon: 'none' });
+    pendingCheckoutAvailable.value = result.failedStoreIds.length > 0;
+    if (result.failedStoreIds.length) {
+      uni.showToast({
+        title: result.created.length
+          ? `已完成 ${result.created.length} 店，剩余可继续重试`
+          : '登录成功，模拟订单提交失败，可继续重试',
+        icon: 'none',
+        duration: 2400,
+      });
+      return;
+    }
+    if (result.blockedStoreIds.length) {
+      uni.showToast({
+        title: `已完成 ${result.created.length} 店，${result.blockedStoreIds.length} 店未达起送仍在购物车`,
+        icon: 'none',
+        duration: 2600,
+      });
+      return;
+    }
+    if (result.created.length === 1) {
+      uni.navigateTo({ url: `/pages/delivery/index?id=${result.created[0].id}` });
+    } else if (result.created.length > 1) {
+      uni.switchTab({ url: '/pages/orders/index' });
+    }
+  } catch (error) {
+    if (error instanceof ExpiredCheckoutError) {
+      uni.navigateTo({ url: '/pages/checkout/index?resume=1' });
+      return;
+    }
+    uni.showToast({ title: '登录成功，但模拟订单提交失败，可继续重试', icon: 'none' });
+  } finally {
+    pendingSubmitting.value = false;
+  }
+}
+
+function retryAuthInitialization() {
+  void auth.ready().catch(() => undefined);
+}
+
+function retryAccountRefresh() {
+  void refreshAccountData(true).catch(() => undefined);
+}
+
+function confirmModal(title: string, content: string, confirmText = '确认'): Promise<boolean> {
+  return new Promise((resolve) => {
+    uni.showModal({
+      title,
+      content,
+      confirmText,
+      confirmColor: '#f04426',
+      success: ({ confirm }) => resolve(confirm),
+      fail: () => resolve(false),
+    });
+  });
+}
+
+async function deleteAccount() {
+  if (!auth.accountId || deletingAccount.value) return;
+  const first = await confirmModal(
+    '注销账户',
+    '将永久删除登录身份和已保存地址；匿名化的模拟订单与虚拟流水会保留，且无法重新关联。',
+    '继续',
+  );
+  if (!first) return;
+  const second = await confirmModal('再次确认', '此操作不可撤销。确定永久注销当前账户吗？', '永久注销');
+  if (!second) return;
+  deletingAccount.value = true;
+  void trackEvent('auth.account_delete_confirmed', { provider: auth.provider }, auth.accessToken);
+  try {
+    const guestReady = await auth.deleteAccount();
+    clearActiveCheckoutSession();
+    clearPendingCheckout();
+    cart.clear();
+    orders.$reset();
+    addresses.$reset();
+    wallet.$reset();
+    pendingCheckoutAvailable.value = false;
+    uni.showToast({
+      title: guestReady ? '账户已注销，已切换为游客' : '账户已注销，请重试初始化游客身份',
+      icon: guestReady ? 'success' : 'none',
+      duration: 2400,
+    });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '账户注销失败，请重试', icon: 'none' });
+  } finally {
+    deletingAccount.value = false;
   }
 }
 </script>
 
 <template>
   <view class="page">
+    <view v-if="auth.initializing && !auth.initialized" class="profile-state">正在恢复游客身份…</view>
+    <view v-else-if="auth.initializationError" class="profile-state error-state">
+      <text>{{ auth.initializationError }}</text>
+      <button @tap="retryAuthInitialization">重试</button>
+    </view>
+    <view v-if="refreshError" class="profile-state warning-state">
+      <text>{{ refreshError }}</text>
+      <button @tap="retryAccountRefresh">重新刷新</button>
+    </view>
+    <view v-if="auth.accountId && pendingCheckoutAvailable" class="pending-card">
+      <view>
+        <text class="pending-title">有未完成的多店模拟订单</text>
+        <text class="pending-desc">成功店铺不会重复提交，失败店铺可继续重试。</text>
+      </view>
+      <button :loading="pendingSubmitting" :disabled="pendingSubmitting" @tap="submitPendingOrderAfterLogin">继续提交</button>
+    </view>
+
     <!-- Logged in hero -->
     <view v-if="auth.accountId" class="hero logged-in">
       <view class="profile-header">
@@ -317,16 +470,16 @@ async function submitPendingOrderAfterLogin() {
       </view>
       <view class="stats-row">
         <view class="stat-item">
-          <text class="stat-value">{{ orders.savings.completedOrderCount }}</text>
+          <text class="stat-value">{{ orders.gameStats.completedOrderCount }}</text>
           <text class="stat-label">完成订单</text>
         </view>
         <view class="stat-item">
-          <text class="stat-value">¥{{ (orders.savings.savedMoneyCents / 100).toFixed(2) }}</text>
-          <text class="stat-label">累计实付</text>
+          <text class="stat-value">¥{{ (orders.gameStats.simulatedOrderAmountCents / 100).toFixed(2) }}</text>
+          <text class="stat-label">模拟订单金额</text>
         </view>
         <view class="stat-item">
-          <text class="stat-value">{{ orders.savings.savedCaloriesKcal }}</text>
-          <text class="stat-label">约省卡路里</text>
+          <text class="stat-value">{{ orders.gameStats.simulatedCaloriesKcal }}</text>
+          <text class="stat-label">模拟热量</text>
         </view>
       </view>
     </view>
@@ -339,7 +492,7 @@ async function submitPendingOrderAfterLogin() {
       <button class="login-btn" @tap="openLogin()">
         <text class="login-btn-text">{{ loginButtonLabel }}</text>
       </button>
-      <text class="guest-hint">{{ isWeb ? '不登录也能完成基础模拟点餐' : '你可以先浏览店铺，登录后使用虚拟余额下单' }}</text>
+      <text class="guest-hint">{{ isWeb ? '不登录也能完成基础模拟点餐' : '游客也可完成一次模拟结算，登录后可跨设备保留记录' }}</text>
     </view>
 
     <view v-if="auth.accountId" class="wallet-card">
@@ -366,7 +519,7 @@ async function submitPendingOrderAfterLogin() {
           :loading="preparingShare"
           @tap="openShareReward"
         >
-          分享领饭钱
+          分享领虚拟饭钱
         </button>
       </view>
     </view>
@@ -423,6 +576,14 @@ async function submitPendingOrderAfterLogin() {
         <view class="menu-item logout-item" @tap="logout">
           <text class="menu-icon logout-icon">退</text>
           <text class="menu-text">退出手机号登录</text>
+          <text class="menu-arrow">›</text>
+        </view>
+      </template>
+      <template v-if="auth.accountId">
+        <view class="menu-divider" />
+        <view class="menu-item delete-account-item" @tap="deleteAccount">
+          <text class="menu-icon delete-account-icon">销</text>
+          <text class="menu-text">注销账户</text>
           <text class="menu-arrow">›</text>
         </view>
       </template>
@@ -542,6 +703,49 @@ async function submitPendingOrderAfterLogin() {
   padding: 0;
   padding-bottom: 120rpx;
 }
+.profile-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 18rpx 24rpx;
+  padding: 18rpx 22rpx;
+  border: 2rpx solid #171717;
+  border-radius: 18rpx 8rpx 18rpx 8rpx;
+  color: #171717;
+  background: #fff;
+  font-size: 23rpx;
+  font-weight: 700;
+}
+.profile-state button,
+.pending-card button {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 20rpx;
+  border-radius: 22rpx;
+  color: #171717;
+  background: #ffd400;
+  font-size: 22rpx;
+  line-height: 58rpx;
+}
+.profile-state button::after,
+.pending-card button::after { border: 0; }
+.error-state { border-color: #f04426; background: #fff0ec; }
+.warning-state { border-color: #ffd400; background: #fff9dc; }
+.pending-card {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin: 18rpx 24rpx 24rpx;
+  padding: 22rpx 24rpx;
+  border: 3rpx solid #171717;
+  border-radius: 24rpx 10rpx 24rpx 10rpx;
+  background: #fff;
+  box-shadow: 8rpx 8rpx 0 #ffd400;
+}
+.pending-card > view { flex: 1; min-width: 0; }
+.pending-title { display: block; color: #171717; font-size: 26rpx; font-weight: 900; }
+.pending-desc { display: block; margin-top: 6rpx; color: #777; font-size: 21rpx; line-height: 1.4; }
 
 /* Hero section */
 .hero {
@@ -842,6 +1046,8 @@ async function submitPendingOrderAfterLogin() {
   color: #fff;
   background: #f04426;
 }
+.delete-account-item .menu-text { color: #a23a2c; }
+.delete-account-icon { color: #fff; background: #f04426; }
 
 /* About card */
 .about-card {

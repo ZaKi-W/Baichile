@@ -1,17 +1,20 @@
 import { defineStore } from 'pinia';
 import type {
   AccountSession,
+  GuestSession,
   UserProfile,
   WechatMiniLoginRequest,
   WechatPhoneBindResult,
 } from '@baichile/api-contract';
-import { requestApi } from '../services/http';
+import { ApiRequestError, requestApi } from '../services/http';
+import { rebindPendingCheckoutSubject } from '../utils/pending-order';
 
 const VISITOR_KEY = 'baichile:visitor';
 const ACCOUNT_KEY = 'baichile:account';
 const EMPTY_PROFILE: UserProfile = { avatarUrl: '', nickname: '' };
 const REFERRAL_KEY = 'baichile:referral-token';
 const WECHAT_BINDING_KEY = 'baichile:wechat-native-bound:v2';
+const GUEST_ROTATION_LEEWAY_MS = 60_000;
 export const DEFAULT_ACCOUNT_AVATAR = '/static/tabbar/profile.svg';
 export type LoginContinuation =
   | ''
@@ -102,32 +105,57 @@ export const useAuthStore = defineStore('auth', {
   state: () => ({
     visitorId: '' as string,
     accessToken: '' as string,
+    refreshToken: '' as string,
+    expiresAt: '' as string,
+    refreshExpiresAt: '' as string,
     accountId: '' as string,
     provider: 'guest' as 'guest' | AccountSession['provider'],
     userProfile: { ...EMPTY_PROFILE } as UserProfile,
+    initialized: false,
+    initializing: false,
+    initializationError: '',
     loginRequested: false,
     loginContinuation: '' as LoginContinuation,
   }),
+  getters: {
+    isReady: (state) => state.initialized && !state.initializing,
+  },
   actions: {
     async ensureGuest() {
-      if (!guestInitialization) {
-        guestInitialization = this.initializeGuest().finally(() => {
-          guestInitialization = undefined;
-        });
+      if (this.initialized && (this.accountId || !this.guestNeedsRotation())) return;
+      this.initializing = true;
+      this.initializationError = '';
+      try {
+        if (!guestInitialization) {
+          guestInitialization = (this.initialized
+            ? this.refreshGuestSession()
+            : this.initializeGuest()).finally(() => {
+            guestInitialization = undefined;
+          });
+        }
+        await guestInitialization;
+        this.initialized = true;
+      } catch (error) {
+        this.initializationError = errorMessage(error, '登录状态初始化失败');
+        throw error;
+      } finally {
+        this.initializing = false;
       }
-      return guestInitialization;
+    },
+    async ready() {
+      await this.ensureGuest();
     },
     async initializeGuest() {
       const account = uni.getStorageSync(ACCOUNT_KEY) as AccountSession | '';
-      const saved = uni.getStorageSync(VISITOR_KEY) as { visitorId: string; accessToken: string } | '';
+      const saved = uni.getStorageSync(VISITOR_KEY) as (Partial<GuestSession> & {
+        visitorId?: string;
+        accessToken?: string;
+      }) | '';
       if (saved) {
-        this.visitorId = saved.visitorId;
-        this.accessToken = saved.accessToken;
+        this.applyGuestSession(saved);
+        if (this.guestNeedsRotation()) await this.refreshGuestSession();
       } else {
-        const data = await requestApi<{ visitorId: string; accessToken: string }>('POST', '/v1/auth/guest', '');
-        this.visitorId = data.visitorId;
-        this.accessToken = data.accessToken;
-        uni.setStorageSync(VISITOR_KEY, { visitorId: this.visitorId, accessToken: this.accessToken });
+        await this.createGuestSession();
       }
       if (isWebPlatform()) {
         await this.restoreWebPhoneSession();
@@ -137,6 +165,61 @@ export const useAuthStore = defineStore('auth', {
         this.applyAccount(account);
         await this.ensureWechatBinding(account);
       }
+    },
+    guestNeedsRotation() {
+      if (!this.visitorId || !this.accessToken) return true;
+      const expiresAt = Date.parse(this.expiresAt);
+      return !Number.isFinite(expiresAt) || expiresAt <= Date.now() + GUEST_ROTATION_LEEWAY_MS;
+    },
+    async createGuestSession() {
+      const session = await requestApi<GuestSession>('POST', '/v1/auth/guest', '');
+      this.applyGuestSession(session);
+      this.persistGuestSession();
+    },
+    async refreshGuestSession() {
+      if (!this.visitorId || !this.accessToken) {
+        await this.createGuestSession();
+        return;
+      }
+      const refreshExpiresAt = Date.parse(this.refreshExpiresAt);
+      if (this.refreshToken && Number.isFinite(refreshExpiresAt) && refreshExpiresAt <= Date.now()) {
+        await this.createGuestSession();
+        return;
+      }
+      try {
+        const session = await requestApi<GuestSession>(
+          'POST',
+          '/v1/auth/guest/rotate',
+          this.accessToken,
+          { refreshToken: this.refreshToken },
+        );
+        this.applyGuestSession(session);
+        this.persistGuestSession();
+      } catch (error) {
+        if (error instanceof ApiRequestError
+          && ['UNAUTHORIZED', 'INVALID_REFRESH_TOKEN'].includes(error.code ?? '')) {
+          await this.createGuestSession();
+          return;
+        }
+        throw error;
+      }
+    },
+    applyGuestSession(session: Partial<GuestSession> & { visitorId?: string; accessToken?: string }) {
+      this.visitorId = session.visitorId || '';
+      if (!this.accountId) this.accessToken = session.accessToken || '';
+      this.refreshToken = session.refreshToken || '';
+      this.expiresAt = session.expiresAt || '';
+      this.refreshExpiresAt = session.refreshExpiresAt || '';
+    },
+    persistGuestSession() {
+      const guestAccessToken = this.accountId ? this.guestAccessToken() : this.accessToken;
+      uni.setStorageSync(VISITOR_KEY, {
+        visitorId: this.visitorId,
+        accessToken: guestAccessToken,
+        refreshToken: this.refreshToken,
+        expiresAt: this.expiresAt,
+        refreshExpiresAt: this.refreshExpiresAt,
+      } satisfies GuestSession);
     },
     async wechatLogin(profile: UserProfile) {
       const persistedAvatarUrl = await persistWechatAvatar(profile.avatarUrl.trim(), this.accessToken, this.visitorId);
@@ -160,7 +243,7 @@ export const useAuthStore = defineStore('auth', {
         .catch((error) => {
           throw new Error(errorMessage(error, '微信登录失败'));
         });
-      this.applyAccount(session);
+      this.applyAccountWithPendingRebind(session);
       this.persistAccount();
       uni.setStorageSync(WECHAT_BINDING_KEY, true);
       uni.removeStorageSync(REFERRAL_KEY);
@@ -177,7 +260,7 @@ export const useAuthStore = defineStore('auth', {
         '/v1/auth/web-phone/session',
         this.guestAccessToken(),
       );
-      this.applyAccount(session);
+      this.applyAccountWithPendingRebind(session);
       this.persistAccount();
       return true;
       // #endif
@@ -191,7 +274,7 @@ export const useAuthStore = defineStore('auth', {
         this.guestAccessToken(),
         phoneNumber ? { phoneNumber } : undefined,
       );
-      this.applyAccount(session);
+      this.applyAccountWithPendingRebind(session);
       this.persistAccount();
       return session;
     },
@@ -211,9 +294,32 @@ export const useAuthStore = defineStore('auth', {
         this.accessToken,
         { code },
       );
-      this.applyAccount(result.session);
+      this.applyAccountWithPendingRebind(result.session);
       this.persistAccount();
       return result;
+    },
+    async deleteAccount(): Promise<boolean> {
+      if (!this.accountId) throw new Error('当前未登录');
+      await requestApi<{ deleted: true }>(
+        'POST',
+        '/v1/accounts/me/delete',
+        this.accessToken,
+        { confirmation: 'DELETE' },
+      );
+      this.clearAccount();
+      this.visitorId = '';
+      this.accessToken = '';
+      this.refreshToken = '';
+      this.expiresAt = '';
+      this.refreshExpiresAt = '';
+      this.initialized = false;
+      uni.removeStorageSync(VISITOR_KEY);
+      try {
+        await this.ready();
+        return true;
+      } catch {
+        return false;
+      }
     },
     async ensureWechatBinding(account: AccountSession) {
       if (account.provider !== 'wechat' || uni.getStorageSync(WECHAT_BINDING_KEY)) return;
@@ -239,6 +345,17 @@ export const useAuthStore = defineStore('auth', {
       this.provider = session.provider;
       this.userProfile = { ...session.profile };
     },
+    applyAccountWithPendingRebind(session: AccountSession) {
+      const previousSubject = this.accountId
+        ? `account:${this.accountId}`
+        : this.visitorId
+          ? `visitor:${this.visitorId}`
+          : '';
+      this.applyAccount(session);
+      if (previousSubject) {
+        rebindPendingCheckoutSubject(previousSubject, `account:${session.accountId}`);
+      }
+    },
     persistAccount() {
       if (this.provider === 'guest') return;
       uni.setStorageSync(ACCOUNT_KEY, {
@@ -249,7 +366,7 @@ export const useAuthStore = defineStore('auth', {
       } satisfies AccountSession);
     },
     guestAccessToken() {
-      const saved = uni.getStorageSync(VISITOR_KEY) as { visitorId?: string; accessToken?: string } | '';
+      const saved = uni.getStorageSync(VISITOR_KEY) as Partial<GuestSession> | '';
       return saved && typeof saved.accessToken === 'string' ? saved.accessToken : '';
     },
     clearAccount() {

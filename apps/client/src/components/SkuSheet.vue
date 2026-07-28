@@ -2,8 +2,9 @@
 import { computed, ref, watch } from 'vue';
 import type { MenuItem } from '@baichile/api-contract';
 import { validateSelections } from '@baichile/domain';
+import { MAX_CART_QUANTITY } from '../stores/cart';
 
-const props = defineProps<{ item: MenuItem | null }>();
+const props = defineProps<{ item: MenuItem | null; basePriceCents?: number }>();
 const emit = defineEmits<{ close: []; confirm: [optionIds: string[], quantity: number] }>();
 const selected = ref<string[]>([]);
 const quantity = ref(1);
@@ -16,7 +17,7 @@ const total = computed(() => {
   if (!props.item) return 0;
   const delta = props.item.specGroups.flatMap((group) => group.options)
     .filter((option) => selected.value.includes(option.id)).reduce((sum, option) => sum + option.priceDeltaCents, 0);
-  return (props.item.basePriceCents + delta) * quantity.value;
+  return ((props.basePriceCents ?? props.item.basePriceCents) + delta) * quantity.value;
 });
 function toggle(groupId: string, optionId: string, max: number) {
   if (!props.item) return;
@@ -47,7 +48,7 @@ function confirm() {
         </view>
       </view>
       <view class="footer">
-        <view class="quantity"><button size="mini" @tap="quantity = Math.max(1, quantity - 1)">−</button><text>{{ quantity }}</text><button size="mini" @tap="quantity++">＋</button></view>
+        <view class="quantity"><button size="mini" @tap="quantity = Math.max(1, quantity - 1)">−</button><text>{{ quantity }}</text><button size="mini" :disabled="quantity >= MAX_CART_QUANTITY" @tap="quantity = Math.min(MAX_CART_QUANTITY, quantity + 1)">＋</button></view>
         <button class="primary-button confirm" @tap="confirm">加入 ¥{{ (total / 100).toFixed(2) }}</button>
       </view>
     </view>

@@ -1,4 +1,6 @@
 import { createRouter } from '../../src/index';
+import { maintenanceTaskFromTimer } from '../../src/maintenance';
+import { sanitizeLogMessage } from '../../src/redaction';
 
 const cloud = require('wx-server-sdk');
 const tcb = require('@cloudbase/node-sdk') as {
@@ -28,14 +30,20 @@ exports.main = async (event: unknown, context: unknown) => {
     webUid = cloudbaseAuth.getUserInfo().uid?.trim() ?? '';
     clientIp = cloudbaseAuth.getClientIP();
   } catch (error) {
-    console.warn('[auth] Unable to resolve CloudBase Web caller', error instanceof Error ? error.message : 'unknown error');
+    warnAuthFailure('resolve_web_caller', error);
   }
+  const maintenanceTask = maintenanceTaskFromTimer(event, {
+    openId: wxContext.OPENID,
+    appId: wxContext.APPID,
+    webUid,
+  });
+  if (maintenanceTask) return router.handleMaintenance(maintenanceTask);
   if (webUid && requestPath(event) === '/v1/auth/web-phone/session') {
     try {
       const { userInfo } = await cloudbaseAuth.getEndUserInfo(webUid);
       webPhoneNumber = extractVerifiedPhone(userInfo);
     } catch (error) {
-      console.warn('[auth] Unable to read CloudBase Web profile', error instanceof Error ? error.message : 'unknown error');
+      warnAuthFailure('read_web_profile', error);
     }
     const phoneCandidate = extractRequestedPhone(event);
     if (!webPhoneNumber && phoneCandidate) {
@@ -46,7 +54,7 @@ exports.main = async (event: unknown, context: unknown) => {
           });
           if (extractUid(matched.userInfo) === webUid) webPhoneNumber = phoneCandidate;
       } catch (error) {
-        console.warn('[auth] Unable to verify CloudBase phone identity', error instanceof Error ? error.message : 'unknown error');
+        warnAuthFailure('verify_web_phone_identity', error);
       }
     }
   }
@@ -112,4 +120,11 @@ function extractUid(userInfo: unknown): string {
     if (typeof record[key] === 'string') return record[key].trim();
   }
   return '';
+}
+
+function warnAuthFailure(operation: string, error: unknown): void {
+  console.warn('[auth]', {
+    operation,
+    sanitizedMessage: sanitizeLogMessage(error instanceof Error ? error.message : 'unknown error'),
+  });
 }

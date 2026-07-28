@@ -18,7 +18,7 @@ export interface OrderEggPresentation {
   imageUrl: string;
 }
 
-export const ORDER_EGG_IMAGE_BASE_URL = 'https://cloud1-d8g7o18ula3c12f10-1318253748.tcloudbaseapp.com/baichile-home/order-eggs';
+export const ORDER_EGG_IMAGE_BASE_URL = staticAssetUrl('order-eggs');
 
 export const ORDER_EGG_IMAGE_PATHS = {
   'incident-food_fights_back': 'incident-food-fights-back.webp',

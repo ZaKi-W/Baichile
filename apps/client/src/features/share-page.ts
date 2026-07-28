@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import type { ShareLanding } from '@baichile/api-contract';
 import { shareService } from '../services/shares';
+import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../stores/auth';
 
 type PageOptions = Record<string, string | undefined>;
@@ -22,6 +23,11 @@ export function useSharePage() {
     try {
       const landing = await shareService.landing(token.value);
       data.value = landing;
+      void trackEvent('share.landing_viewed', {
+        kind: landing.kind ?? 'unknown',
+        active: landing.active,
+        ownerView: sharing.value,
+      }, auth.accessToken);
       if (landing.kind === 'reward' && token.value) auth.rememberReferral(token.value);
     } catch {
       data.value = {
@@ -47,14 +53,23 @@ export function useSharePage() {
     if (data.value?.kind !== 'reward' || !sharing.value || !token.value || rewardRequested) return;
     rewardRequested = true;
     void shareService.reward(token.value).then((result) => {
+      void trackEvent('share.reward_result', {
+        granted: result.granted,
+        amountCents: result.amountCents,
+      }, auth.accessToken);
       if (!result.granted) return;
       uni.showToast({ title: `分享奖励 +¥${(result.amountCents / 100).toFixed(0)}`, icon: 'success' });
     }).catch(() => {
+      void trackEvent('share.reward_result', {
+        granted: false,
+        amountCents: 0,
+      }, auth.accessToken);
       rewardRequested = false;
     });
   }
 
   function enterApp() {
+    void trackEvent('auth.login_gate_shown', { source: 'share_landing' }, auth.accessToken);
     auth.requestLogin();
     uni.switchTab({ url: '/pages/profile/index' });
   }

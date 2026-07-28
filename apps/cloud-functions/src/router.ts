@@ -1,11 +1,13 @@
 import { AdminCloudServices, requireAdmin } from './admin-services';
+import { randomUUID } from 'node:crypto';
 import { uploadCatalogImportImage } from './catalog-import';
 import type { WechatMiniLoginRequest } from '@baichile/api-contract';
 import { createCloudBaseDatabase, type Database } from './database';
-import { badRequest, forbidden, notFound, toErrorBody, unauthorized } from './errors';
+import { badRequest, forbidden, isCloudApiError, notFound, toErrorBody, unauthorized } from './errors';
 import { BaichileCloudServices } from './services';
 import type { CloudFunctionEvent, RequestContext } from './types';
 import { PersistentRateLimiter } from './rate-limit';
+import { sanitizeLogMessage } from './redaction';
 
 export class BaichileRouter {
   private readonly services: BaichileCloudServices;
@@ -27,8 +29,22 @@ export class BaichileRouter {
       const data = await this.route(request);
       return { ok: true, status: 200, data };
     } catch (error) {
-      return toErrorBody(error);
+      if (!isCloudApiError(error)) {
+        console.error('[api] Unhandled request error', {
+          requestId: request.requestId,
+          method: request.method,
+          path: request.path,
+          errorName: error instanceof Error ? error.name : typeof error,
+          sanitizedMessage: sanitizeLogMessage(error instanceof Error ? error.message : String(error)),
+        });
+      }
+      return toErrorBody(error, request.requestId);
     }
+  }
+
+  async handleMaintenance(task: string): Promise<unknown> {
+    if (task !== 'refund_failed_orders') badRequest('维护任务不存在', 'MAINTENANCE_TASK_NOT_FOUND');
+    return this.services.orders.settleFailedOrdersBatch(100);
   }
 
   private async route(request: RequestContext): Promise<unknown> {
@@ -48,6 +64,13 @@ export class BaichileRouter {
     if (request.method === 'POST' && path === '/v1/auth/guest') {
       await this.enforceRateLimit(`guest:${request.ipAddress ?? request.openId ?? 'unknown'}`, 20, 60 * 60_000);
       return this.services.auth.createGuest();
+    }
+    if (request.method === 'POST' && path === '/v1/auth/guest/rotate') {
+      await this.enforceRateLimit(`guest-rotate:${request.ipAddress ?? 'unknown'}`, 30, 60 * 60_000);
+      return this.services.auth.rotateGuest(
+        readStringField(request.data, 'refreshToken'),
+        request.authorization,
+      );
     }
     if (request.method === 'POST' && path === '/v1/auth/wechat-mini') {
       if (!request.openId) unauthorized('仅允许微信小程序登录', 'WECHAT_CONTEXT_REQUIRED');
@@ -127,10 +150,18 @@ export class BaichileRouter {
     }
 
     if (request.method === 'POST' && path === '/v1/orders/quote') return this.services.orders.quote(request.data as any);
+    if (request.method === 'POST' && path === '/v1/checkouts/quote') {
+      const identity = await this.services.auth.resolvePersistedIdentity(
+        request.authorization,
+        request.openId,
+        request.webUid,
+      );
+      return this.services.orders.quoteCheckout(request.data as any, identity);
+    }
     if (request.method === 'POST' && path === '/v1/orders/virtual') {
       const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid);
       if (identity.accountId) return this.services.orders.create(request.data as any, identity);
-      if (request.openId || !identity.visitorId) unauthorized();
+      if (!identity.visitorId) unauthorized();
       await this.enforceRateLimit(`guest-order:${identity.visitorId}`, 20, 60 * 60_000);
       if (request.ipAddress) {
         await this.enforceRateLimit(`guest-order-ip:${request.ipAddress}`, 60, 60 * 60_000);
@@ -139,6 +170,14 @@ export class BaichileRouter {
     }
     if (request.method === 'GET' && path === '/v1/orders/me') {
       const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid);
+      if (request.query.has('limit') || request.query.has('cursor')) {
+        return this.services.orders.listPage(
+          identity.visitorId,
+          identity.accountId,
+          request.query.get('limit') ?? undefined,
+          request.query.get('cursor') ?? undefined,
+        );
+      }
       return this.services.orders.list(identity.visitorId, identity.accountId);
     }
     if (request.method === 'GET' && segments[1] === 'orders' && segments[2]) {
@@ -149,6 +188,17 @@ export class BaichileRouter {
     if (request.method === 'GET' && path === '/v1/accounts/me/savings') {
       const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid);
       return this.services.orders.savings(identity.accountId);
+    }
+    if (request.method === 'GET' && path === '/v1/accounts/me/game-stats') {
+      const identity = await this.services.auth.resolvePersistedIdentity(request.authorization, request.openId, request.webUid);
+      return this.services.orders.gameStats(identity.accountId);
+    }
+    if (request.method === 'POST' && path === '/v1/accounts/me/delete') {
+      const accountId = await this.requireAccount(request.authorization, request.openId, request.webUid);
+      const confirmation = request.data && typeof request.data === 'object'
+        ? (request.data as Record<string, unknown>).confirmation
+        : undefined;
+      return this.services.auth.deleteAccount(accountId, confirmation);
     }
     if (request.method === 'GET' && path === '/v1/accounts/me/wallet') {
       const accountId = await this.requireAccount(request.authorization, request.openId, request.webUid);
@@ -331,6 +381,104 @@ export class BaichileRouter {
       }
     }
 
+    if (segments[0] === 'promotions') {
+      if (request.method === 'GET' && !segments[1]) {
+        await requireAdmin(this.admin, request.authorization, 'promotions:read');
+        return this.admin.query.listPromotions(Object.fromEntries(request.query.entries()));
+      }
+      if (request.method === 'POST' && !segments[1]) {
+        const actor = await requireAdmin(this.admin, request.authorization, 'promotions:write');
+        const after = await this.services.promotions.save(undefined, request.data);
+        await this.admin.audit.record(actor, {
+          action: 'promotion.create',
+          resourceType: 'promotion',
+          resourceId: after.id,
+          afterData: after,
+          ipAddress: request.ipAddress,
+        });
+        return after;
+      }
+      if (request.method === 'PUT' && segments[1] && !segments[2]) {
+        const actor = await requireAdmin(this.admin, request.authorization, 'promotions:write');
+        const id = decodeURIComponent(segments[1]);
+        const before = await this.services.promotions.get(id);
+        const after = await this.services.promotions.save(id, request.data);
+        await this.admin.audit.record(actor, {
+          action: 'promotion.update',
+          resourceType: 'promotion',
+          resourceId: id,
+          beforeData: before,
+          afterData: after,
+          ipAddress: request.ipAddress,
+        });
+        return after;
+      }
+      if (request.method === 'DELETE' && segments[1] && !segments[2]) {
+        const actor = await requireAdmin(this.admin, request.authorization, 'promotions:write');
+        const id = decodeURIComponent(segments[1]);
+        const before = await this.services.promotions.remove(id);
+        await this.admin.audit.record(actor, {
+          action: 'promotion.delete',
+          resourceType: 'promotion',
+          resourceId: id,
+          beforeData: before,
+          ipAddress: request.ipAddress,
+        });
+        return { deleted: true, id };
+      }
+      if (request.method === 'POST' && segments[1] && segments[2] === 'publish') {
+        const actor = await requireAdmin(this.admin, request.authorization, 'promotions:write');
+        const id = decodeURIComponent(segments[1]);
+        const before = await this.services.promotions.get(id);
+        const after = await this.services.promotions.publish(id);
+        await this.admin.audit.record(actor, {
+          action: 'promotion.publish',
+          resourceType: 'promotion',
+          resourceId: id,
+          beforeData: before,
+          afterData: after,
+          ipAddress: request.ipAddress,
+        });
+        return after;
+      }
+      if (request.method === 'POST' && segments[1] && segments[2] === 'pause') {
+        const actor = await requireAdmin(this.admin, request.authorization, 'promotions:write');
+        const id = decodeURIComponent(segments[1]);
+        const before = await this.services.promotions.get(id);
+        const after = await this.services.promotions.pause(id);
+        await this.admin.audit.record(actor, {
+          action: 'promotion.pause',
+          resourceType: 'promotion',
+          resourceId: id,
+          beforeData: before,
+          afterData: after,
+          ipAddress: request.ipAddress,
+        });
+        return after;
+      }
+    }
+
+    if (segments.join('/') === 'gameplay-config') {
+      if (request.method === 'GET') {
+        await requireAdmin(this.admin, request.authorization, 'promotions:read');
+        return this.services.gameplay.get();
+      }
+      if (request.method === 'PUT') {
+        const actor = await requireAdmin(this.admin, request.authorization, 'promotions:write');
+        const before = await this.services.gameplay.get();
+        const after = await this.services.gameplay.update(request.data);
+        await this.admin.audit.record(actor, {
+          action: 'gameplay_config.update',
+          resourceType: 'gameplay_config',
+          resourceId: 'default',
+          beforeData: before,
+          afterData: after,
+          ipAddress: request.ipAddress,
+        });
+        return after;
+      }
+    }
+
     badRequest('后台接口不存在', 'NOT_FOUND');
   }
 
@@ -398,7 +546,13 @@ function normalizeRequest(event: CloudFunctionEvent, rawContext?: any): RequestC
       ? rawContext.CLIENT_IP
       : event.headers?.['x-forwarded-for'] ?? event.headers?.['x-real-ip'],
     origin: event.headers?.origin ?? event.headers?.Origin,
+    requestId: trustedRequestId(event.headers?.['x-request-id'] ?? event.headers?.['X-Request-Id']),
   };
+}
+
+function trustedRequestId(value?: string): string {
+  const normalized = value?.trim();
+  return normalized && /^[a-zA-Z0-9._:-]{1,100}$/.test(normalized) ? normalized : randomUUID();
 }
 
 function readStringField(value: unknown, field: string): string {

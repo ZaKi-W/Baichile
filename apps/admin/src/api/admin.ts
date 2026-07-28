@@ -10,12 +10,17 @@ import type {
 } from '@baichile/api-contract';
 import { api, toQuery } from './http';
 
+export type AdminConsolePermission =
+  | AdminPermission
+  | 'promotions:read'
+  | 'promotions:write';
+
 export interface AdminIdentity {
   id: string;
   username: string;
   displayName: string;
   role: AdminRole;
-  permissions: AdminPermission[];
+  permissions: AdminConsolePermission[];
 }
 
 export interface AdminUser extends AdminIdentity {
@@ -68,7 +73,7 @@ export interface AccountRecord {
   nickname?: string | null;
   avatarUrl?: string | null;
   balanceCents: number;
-  status: 'active' | 'disabled';
+  status: 'active' | 'disabled' | 'deleted';
   createdAt: string;
   updatedAt: string;
   orderCount?: number;
@@ -108,6 +113,84 @@ export interface CatalogAssetUploadResult {
   bytes: number;
 }
 
+export interface DashboardProductMetrics {
+  firstCheckoutCompletionRate?: number | null;
+  guestToLoginRate?: number | null;
+  d1ReorderRate?: number | null;
+  d7ReorderRate?: number | null;
+  promotionConversionRate?: number | null;
+  deliveryFailureRate?: number | null;
+  rewardAnomalyRate?: number | null;
+}
+
+export interface AdminDashboardData {
+  stores: { total: number; active: number };
+  menuItems: { total: number; active: number };
+  accounts: { total: number; today: number };
+  orders: {
+    total: number;
+    today: number;
+    byAdminStatus: Partial<Record<OrderRecord['adminStatus'], number>>;
+  };
+  wallet: { totalBalanceCents: number; todayNetCents: number };
+  productMetrics?: DashboardProductMetrics;
+}
+
+export type PromotionType = 'item_flash' | 'store_threshold';
+export type PromotionLifecycleStatus = 'draft' | 'published' | 'paused';
+
+export interface PromotionTier {
+  thresholdCents: number;
+  discountCents: number;
+}
+
+export interface PromotionRecord {
+  id: string;
+  name: string;
+  type: PromotionType;
+  storeId: string;
+  menuItemId?: string | null;
+  flashPriceCents?: number | null;
+  tiers?: PromotionTier[];
+  startsAt: string;
+  endsAt: string;
+  lifecycleStatus: PromotionLifecycleStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PromotionInput = Pick<
+  PromotionRecord,
+  | 'name'
+  | 'type'
+  | 'storeId'
+  | 'menuItemId'
+  | 'flashPriceCents'
+  | 'tiers'
+  | 'startsAt'
+  | 'endsAt'
+>;
+
+export interface GameplayConfig {
+  id: 'default';
+  firstCheckoutGuaranteed: boolean;
+  deliveryIncidentRate: number;
+  successEggRate: number;
+  updatedAt: string;
+}
+
+export interface AuditLogRecord {
+  id?: string;
+  action: string;
+  resourceType: string;
+  resourceId?: string | null;
+  adminUserId: string;
+  ipAddress?: string | null;
+  beforeData?: unknown;
+  afterData?: unknown;
+  createdAt: string;
+}
+
 export function menuItemCollectionPath(storeId: string): string {
   return `/v1/admin/stores/${encodeURIComponent(storeId)}/menu-items`;
 }
@@ -128,7 +211,7 @@ export const adminApi = {
     }),
   me: () => api<AdminIdentity>('/v1/admin/auth/me'),
   logout: () => api<{ success: true }>('/v1/admin/auth/logout', { method: 'POST' }),
-  dashboard: () => api<Record<string, any>>('/v1/admin/dashboard'),
+  dashboard: () => api<AdminDashboardData>('/v1/admin/dashboard'),
 
   listStores: (query: Record<string, any>) =>
     api<AdminPage<StoreRecord>>(`/v1/admin/stores${toQuery(query)}`),
@@ -177,7 +260,10 @@ export const adminApi = {
   listAccounts: (query: Record<string, any>) =>
     api<AdminPage<AccountRecord>>(`/v1/admin/accounts${toQuery(query)}`),
   account: (id: string) => api<AccountRecord>(`/v1/admin/accounts/${id}`),
-  updateAccount: (id: string, body: Pick<AccountRecord, 'nickname' | 'status'>) =>
+  updateAccount: (
+    id: string,
+    body: { nickname?: string | null; status: 'active' | 'disabled' },
+  ) =>
     api<AccountRecord>(`/v1/admin/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   wallet: (id: string, query: Record<string, any>) =>
     api<{ account: AccountRecord; transactions: AdminPage<WalletTransactionRecord> }>(
@@ -204,12 +290,45 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify({ password }),
     }),
-  auditLogs: (query: Record<string, any>) =>
-    api<AdminPage<Record<string, any>>>(`/v1/admin/audit-logs${toQuery(query)}`),
+  auditLogs: (query: Record<string, string | number | null | undefined>) =>
+    api<AdminPage<AuditLogRecord>>(`/v1/admin/audit-logs${toQuery(query)}`),
   shareRewardConfig: () => api<ShareRewardConfig>('/v1/admin/share-rewards/config'),
   updateShareRewardConfig: (config: ShareRewardConfig) =>
     api<ShareRewardConfig>('/v1/admin/share-rewards/config', {
       method: 'PATCH',
+      body: JSON.stringify(config),
+    }),
+  listPromotions: (query: Record<string, string | number | null | undefined>) =>
+    api<AdminPage<PromotionRecord>>(`/v1/admin/promotions${toQuery(query)}`),
+  createPromotion: (record: PromotionInput) =>
+    api<PromotionRecord>('/v1/admin/promotions', {
+      method: 'POST',
+      body: JSON.stringify(record),
+    }),
+  updatePromotion: (id: string, record: PromotionInput) =>
+    api<PromotionRecord>(`/v1/admin/promotions/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(record),
+    }),
+  deletePromotion: (id: string) =>
+    api<{ deleted: true; id: string }>(`/v1/admin/promotions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  publishPromotion: (id: string) =>
+    api<PromotionRecord>(`/v1/admin/promotions/${encodeURIComponent(id)}/publish`, {
+      method: 'POST',
+    }),
+  pausePromotion: (id: string) =>
+    api<PromotionRecord>(`/v1/admin/promotions/${encodeURIComponent(id)}/pause`, {
+      method: 'POST',
+    }),
+  gameplayConfig: () => api<GameplayConfig>('/v1/admin/gameplay-config'),
+  updateGameplayConfig: (config: Pick<
+    GameplayConfig,
+    'firstCheckoutGuaranteed' | 'deliveryIncidentRate' | 'successEggRate'
+  >) =>
+    api<GameplayConfig>('/v1/admin/gameplay-config', {
+      method: 'PUT',
       body: JSON.stringify(config),
     }),
 };

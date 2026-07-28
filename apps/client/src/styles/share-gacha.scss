@@ -48,6 +48,7 @@
 .gacha-primary:active, .gacha-secondary:active { opacity: .72; }
 .gacha-visitor text { display: block; margin-bottom: 14rpx; color: var(--gacha-muted); font-size: 21rpx; line-height: 1.5; }
 .gacha-visitor button { width: 100%; }
+.gacha-funds-notice { display: block; margin-top: 28rpx; padding: 16rpx 20rpx; border: 1rpx solid var(--gacha-line); border-radius: 14rpx; color: var(--gacha-muted); background: rgba(255, 255, 255, .62); font-size: 18rpx; font-weight: 650; line-height: 1.55; text-align: center; }
 .gacha-canvas { position: fixed; top: 0; left: -9999px; width: 750px; height: 1334px; }
 
 @keyframes gacha-loading { 0%, 100% { transform: translateX(-100%); } 50% { transform: translateX(230%); } }

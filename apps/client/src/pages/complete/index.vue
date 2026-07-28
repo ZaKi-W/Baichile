@@ -5,8 +5,8 @@ const goHome = () => uni.switchTab({ url: '/pages/home/index' });
 <template>
   <view class="page complete">
     <view class="success-mark"><image src="/static/icons/shield.svg" mode="aspectFit" /></view>
-    <text class="title">订单已送达</text>
-    <view class="virtual-notice">本单已按预计时间完成配送。</view>
+    <text class="title">虚拟订单已送达</text>
+    <view class="virtual-notice">本单已完成虚拟配送演示。</view>
     <button class="primary-button" @tap="goHome">再次逛逛</button>
   </view>
 </template>

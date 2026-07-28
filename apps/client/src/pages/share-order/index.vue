@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app';
 import { useSharePage } from '../../features/share-page';
 import { catalogService } from '../../services/catalog';
+import { VIRTUAL_FUNDS_NOTICE } from '../../utils/share-poster';
 import { saveGachaPoster, shareCoverPath } from '../../utils/share-poster-canvas';
 import { shareWebPage } from '../../platform/web-share';
 
@@ -10,7 +11,7 @@ const page = useSharePage();
 const saving = ref(false);
 const storeAvatarUrl = ref('');
 const storeAvatarFailed = ref(false);
-const title = computed(() => page.data.value?.title || '我刚刚撤回了这顿外卖');
+const title = computed(() => page.data.value?.title || '我的虚拟外卖订单战报');
 const money = computed(() => (page.data.value?.savedMoneyCents || 0) / 100);
 const lines = computed(() => page.data.value?.orderLines || []);
 const dishCount = computed(() => lines.value.length);
@@ -63,17 +64,17 @@ async function savePoster() {
           <view class="order-hero-content">
             <view class="order-store-row">
               <view class="order-store-mark" :class="{ 'order-store-mark--image': storeAvatarUrl && !storeAvatarFailed }"><image v-if="storeAvatarUrl && !storeAvatarFailed" class="order-store-avatar" :src="storeAvatarUrl" mode="aspectFill" aria-label="店铺头像" @error="storeAvatarFailed = true" /><text v-else>{{ storeMark }}</text></view>
-              <view class="order-store-copy"><text class="order-store-name">{{ page.data.value.storeName || '神秘小馆' }}</text><text class="order-store-meta">本单共 {{ itemCount }} 件餐品 · 已成功撤回</text></view>
+              <view class="order-store-copy"><text class="order-store-name">{{ page.data.value.storeName || '神秘小馆' }}</text><text class="order-store-meta">本单共 {{ itemCount }} 件餐品 · 虚拟配送完成</text></view>
             </view>
             <view class="order-amount-row">
-              <view class="order-paid"><text class="order-amount-label">本单实付</text><text class="order-amount-value">¥0.00</text></view>
-              <view class="order-saved-tag">白吃了 ¥{{ money.toFixed(2) }}</view>
+              <view class="order-paid"><text class="order-amount-label">模拟订单金额</text><text class="order-amount-value">¥{{ money.toFixed(2) }}</text></view>
+              <view class="order-saved-tag">真实支付 ¥0.00</view>
             </view>
           </view>
         </view>
 
         <view class="order-section">
-          <view class="order-section-head"><text class="order-section-title">这顿吃了什么</text><text class="order-section-count">{{ dishCount }} 件商品</text></view>
+          <view class="order-section-head"><text class="order-section-title">这顿模拟点了什么</text><text class="order-section-count">{{ dishCount }} 件商品</text></view>
           <view v-if="lines.length" class="order-dish-list">
             <view v-for="line in lines" :key="line.menuItemId + line.optionNames.join(',')" class="order-dish">
               <image v-if="line.imageUrl" class="order-dish-image" :src="line.imageUrl" mode="aspectFill" aria-label="菜品图片" />
@@ -84,23 +85,24 @@ async function savePoster() {
           </view>
           <view v-else class="order-dish-empty">这顿没留下菜品明细。</view>
           <view class="order-divider" />
-          <view class="order-total"><text class="order-total-label">餐品原价</text><text class="order-total-value">¥{{ money.toFixed(2) }}</text></view>
+          <view class="order-total"><text class="order-total-label">模拟餐品金额</text><text class="order-total-value">¥{{ money.toFixed(2) }}</text></view>
         </view>
 
         <view class="order-metrics">
-          <view class="order-metric order-metric--mint"><text class="order-metric-label">约等于</text><text class="order-metric-value">{{ page.data.value.savedCaloriesKcal }} kcal</text><text class="order-metric-caption">本次少摄入热量</text></view>
-          <view class="order-metric order-metric--peach"><text class="order-metric-label">本单战绩</text><text class="order-metric-value">¥{{ money.toFixed(0) }}</text><text class="order-metric-caption">成功撤回的金额</text></view>
-          <view class="order-metric order-metric--yellow"><text class="order-metric-label">轻松一下</text><text class="order-metric-value">{{ equivalentSteps }} 步</text><text class="order-metric-caption">约等于步行消耗</text></view>
-          <view class="order-metric order-metric--blue"><text class="order-metric-label">订单完成</text><text class="order-metric-value">100%</text><text class="order-metric-caption">本单白吃指数</text></view>
+          <view class="order-metric order-metric--mint"><text class="order-metric-label">模拟口径</text><text class="order-metric-value">{{ page.data.value.savedCaloriesKcal }} kcal</text><text class="order-metric-caption">本单模拟热量</text></view>
+          <view class="order-metric order-metric--peach"><text class="order-metric-label">本单汇总</text><text class="order-metric-value">¥{{ money.toFixed(0) }}</text><text class="order-metric-caption">模拟订单金额</text></view>
+          <view class="order-metric order-metric--yellow"><text class="order-metric-label">换算展示</text><text class="order-metric-value">{{ equivalentSteps }} 步</text><text class="order-metric-caption">模拟热量步数换算</text></view>
+          <view class="order-metric order-metric--blue"><text class="order-metric-label">模拟完成</text><text class="order-metric-value">100%</text><text class="order-metric-caption">虚拟配送进度</text></view>
         </view>
 
-        <view class="order-quote"><text class="order-quote-label">今日白吃宣言</text><text class="order-quote-body">下单了，但没吃。</text><text class="order-quote-body">今天这顿，算我赢。</text><text class="order-quote-from">— 来自「这顿白吃」订单战报</text></view>
+        <view class="order-quote"><text class="order-quote-label">今日虚拟点单宣言</text><text class="order-quote-body">菜单认真选，配送全模拟。</text><text class="order-quote-body">今天这顿，游戏里见。</text><text class="order-quote-from">— 来自「这顿白吃」虚拟订单战报</text></view>
       </view>
     </template>
     <view v-else class="gacha-empty">这张订单战报找不到了。</view>
+    <view class="gacha-funds-notice">{{ VIRTUAL_FUNDS_NOTICE }}</view>
 
     <view v-if="page.sharing.value && page.data.value?.active" class="order-share-actions"><button class="order-save-button" :loading="saving" @tap="savePoster">保存分享图</button><button class="order-share-button" open-type="share" @tap="shareOnWeb">分享订单战报</button></view>
-    <view v-else-if="page.data.value" class="order-visitor-actions"><text>这顿没吃，也是一份值得分享的战绩。</text><button class="order-share-button" @tap="page.enterApp">进入这顿白吃</button></view>
+    <view v-else-if="page.data.value" class="order-visitor-actions"><text>这份虚拟订单战报，也值得分享。</text><button class="order-share-button" @tap="page.enterApp">进入这顿白吃</button></view>
     <canvas canvas-id="orderPoster" class="gacha-canvas" />
   </view>
 </template>
