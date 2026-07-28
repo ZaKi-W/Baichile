@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowLeft, Plus, Search, Switch } from '@element-plus/icons-vue';
+import ListFeedback from '../components/ListFeedback.vue';
 import { adminApi, type MenuItemRecord, type StoreRecord } from '../api/admin';
 import { centsToYuan, yuanToCents } from '../utils';
 import { useAuthStore } from '../stores/auth';
@@ -14,6 +15,7 @@ const storeId = String(route.params.storeId);
 const activeTab = ref('store');
 const storeLoading = ref(false);
 const menuLoading = ref(false);
+const menuError = ref('');
 const store = ref<StoreRecord | null>(null);
 const storeForm = reactive<any>({});
 const items = ref<MenuItemRecord[]>([]);
@@ -94,12 +96,15 @@ function blankItem(): MenuItemRecord {
 
 async function loadMenuItems() {
   menuLoading.value = true;
+  menuError.value = '';
   try {
     const result = await adminApi.listMenuItems(storeId, filters);
     items.value = result.items;
     total.value = result.total;
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '菜品加载失败');
+    items.value = [];
+    total.value = 0;
+    menuError.value = error instanceof Error ? error.message : '菜品加载失败';
   } finally {
     menuLoading.value = false;
   }
@@ -196,7 +201,7 @@ onMounted(async () => {
     <el-tabs v-model="activeTab">
       <el-tab-pane label="商家资料" name="store">
         <div v-loading="storeLoading" class="store-detail-pane">
-          <el-form v-if="store" label-position="top">
+          <el-form v-if="store" label-position="top" :disabled="!auth.has('catalog:write')">
             <div class="dialog-form-grid">
               <el-form-item label="商家 ID"><el-input v-model="storeForm.id" disabled /></el-form-item>
               <el-form-item label="所属分类"><el-input v-model="storeForm.categoryId" /></el-form-item>
@@ -205,11 +210,11 @@ onMounted(async () => {
               <el-form-item class="wide" label="简介"><el-input v-model="storeForm.description" type="textarea" :rows="2" /></el-form-item>
               <el-form-item class="wide" label="封面 URL"><el-input v-model="storeForm.coverUrl" /></el-form-item>
               <el-form-item class="wide" label="标签（逗号分隔）"><el-input v-model="storeForm.tagsText" /></el-form-item>
-              <el-form-item label="配送费（元）"><el-input-number v-model="storeForm.deliveryFeeYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
-              <el-form-item label="包装费（元）"><el-input-number v-model="storeForm.packingFeeYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
-              <el-form-item label="起送金额（元）"><el-input-number v-model="storeForm.minimumOrderYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
+              <el-form-item label="虚拟配送费（元）"><el-input-number v-model="storeForm.deliveryFeeYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
+              <el-form-item label="虚拟包装费（元）"><el-input-number v-model="storeForm.packingFeeYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
+              <el-form-item label="虚拟起送金额（元）"><el-input-number v-model="storeForm.minimumOrderYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
               <el-form-item label="虚拟配送分钟"><el-input-number v-model="storeForm.virtualDeliveryMinutes" :min="1" style="width:100%" /></el-form-item>
-              <el-form-item label="月销量"><el-input-number v-model="storeForm.monthlySales" :min="0" style="width:100%" /></el-form-item>
+              <el-form-item label="模拟热度"><el-input-number v-model="storeForm.monthlySales" :min="0" style="width:100%" /></el-form-item>
               <el-form-item label="距离（km）"><el-input-number v-model="storeForm.distanceKm" :min="0" :precision="2" style="width:100%" /></el-form-item>
               <el-form-item label="评分"><el-input-number v-model="storeForm.rating" :min="0" :max="5" :precision="1" style="width:100%" /></el-form-item>
               <el-form-item label="排序"><el-input-number v-model="storeForm.sortOrder" :min="0" style="width:100%" /></el-form-item>
@@ -231,17 +236,18 @@ onMounted(async () => {
           <el-table v-loading="menuLoading" :data="items">
             <el-table-column prop="name" label="菜品" min-width="180" />
             <el-table-column prop="categoryId" label="分类" width="120" />
-            <el-table-column label="价格" width="100"><template #default="{ row }">¥{{ centsToYuan(row.basePriceCents) }}</template></el-table-column>
+            <el-table-column label="虚拟价格" width="140"><template #default="{ row }">虚拟 ¥{{ centsToYuan(row.basePriceCents) }}</template></el-table-column>
             <el-table-column prop="caloriesKcal" label="热量(kcal)" width="110" />
-            <el-table-column prop="monthlySales" label="月销量" width="95" />
+            <el-table-column prop="monthlySales" label="模拟热度" width="95" />
             <el-table-column label="状态" width="85"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'info'" effect="plain">{{ row.status === 'active' ? '上架' : '下架' }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="220" fixed="right"><template #default="{ row }">
-              <el-button link type="primary" @click="openItem(row)">编辑</el-button>
+              <el-button v-if="auth.has('catalog:write')" link type="primary" @click="openItem(row)">编辑</el-button>
               <el-button v-if="auth.has('catalog:write')" link :icon="Switch" @click="openTransfer(row)">迁移</el-button>
               <el-button v-if="auth.has('catalog:write')" link :type="row.status === 'active' ? 'danger' : 'success'" @click="toggleItem(row)">{{ row.status === 'active' ? '下架' : '上架' }}</el-button>
             </template></el-table-column>
+            <template #empty><ListFeedback :error="menuError" empty-text="当前商家暂无菜品" @retry="loadMenuItems" /></template>
           </el-table>
-          <div class="pagination"><el-pagination v-model:current-page="filters.page" :page-size="filters.pageSize" layout="total, prev, pager, next" :total="total" @current-change="loadMenuItems" /></div>
+          <div class="pagination"><el-pagination v-model:current-page="filters.page" v-model:page-size="filters.pageSize" :page-sizes="[10,20,50]" layout="total, sizes, prev, pager, next" :total="total" @current-change="loadMenuItems" @size-change="filters.page=1;loadMenuItems()" /></div>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -256,11 +262,11 @@ onMounted(async () => {
         <el-form-item label="分类 ID"><el-input v-model="itemForm.categoryId" /></el-form-item>
         <el-form-item label="子分类 ID"><el-input v-model="itemForm.subCategoryId" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="itemForm.status" style="width:100%"><el-option label="上架" value="active" /><el-option label="下架" value="inactive" /></el-select></el-form-item>
-        <el-form-item label="基础价格（元）"><el-input-number v-model="itemForm.priceYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
+        <el-form-item label="虚拟基础价格（元）"><el-input-number v-model="itemForm.priceYuan" :min="0" :precision="2" style="width:100%" /></el-form-item>
         <el-form-item class="wide" label="副标题"><el-input v-model="itemForm.subtitle" /></el-form-item>
         <el-form-item class="wide" label="图片 URL"><el-input v-model="itemForm.imageUrl" /></el-form-item>
         <el-form-item label="热量（kcal）"><el-input-number v-model="itemForm.caloriesKcal" :min="0" style="width:100%" /></el-form-item>
-        <el-form-item label="月销量"><el-input-number v-model="itemForm.monthlySales" :min="0" style="width:100%" /></el-form-item>
+        <el-form-item label="模拟热度"><el-input-number v-model="itemForm.monthlySales" :min="0" style="width:100%" /></el-form-item>
         <el-form-item label="排序"><el-input-number v-model="itemForm.sortOrder" :min="0" style="width:100%" /></el-form-item>
         <el-form-item class="wide" label="规格组 JSON"><el-input v-model="itemForm.specText" type="textarea" :rows="7" /></el-form-item>
         <el-form-item class="wide" label="热量来源 JSON"><el-input v-model="itemForm.calorieSourceText" type="textarea" :rows="4" /></el-form-item>

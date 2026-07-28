@@ -5,8 +5,12 @@ import { suggestPlaces } from '../../services/location';
 import { exchangeWechatPhoneCode, wechatPhoneFailureMessage } from '../../services/wechat-phone';
 import { useAddressStore } from '../../stores/address';
 import { placeSelection } from './location-state';
+import { trackEvent } from '../../services/analytics';
+import { useAuthStore } from '../../stores/auth';
 
 const addressStore = useAddressStore();
+const auth = useAuthStore();
+const ADDRESS_PRIVACY_ACK_KEY = 'baichile:address-privacy-ack:v1';
 
 const name = ref('');
 const phone = ref('');
@@ -29,6 +33,7 @@ const showResults = ref(false);
 const searchError = ref('');
 const currentCity = ref('');
 let timer: ReturnType<typeof setTimeout>;
+let searchRequestId = 0;
 let internalAddressValue: string | null = null;
 
 let selectedLat = 31.2304;
@@ -71,6 +76,7 @@ async function pickOnMap() {
 /* ── keyword search ── */
 watch(addressText, (val) => {
   clearTimeout(timer);
+  const requestId = ++searchRequestId;
   searchError.value = '';
   if (internalAddressValue !== null) {
     const isInternalUpdate = val === internalAddressValue;
@@ -86,12 +92,15 @@ watch(addressText, (val) => {
   showResults.value = true;
   timer = setTimeout(async () => {
     try {
-      searchResults.value = await suggestPlaces(val.trim(), currentCity.value || undefined);
+      const results = await suggestPlaces(val.trim(), currentCity.value || undefined);
+      if (requestId !== searchRequestId) return;
+      searchResults.value = results;
     } catch (error) {
+      if (requestId !== searchRequestId) return;
       searchResults.value = [];
       searchError.value = errorMessage(error, '地点搜索失败，请稍后重试');
     } finally {
-      searching.value = false;
+      if (requestId === searchRequestId) searching.value = false;
     }
   }, 400);
 });
@@ -160,6 +169,7 @@ async function save() {
     uni.showToast({ title: error, icon: 'none' });
     return;
   }
+  if (!await ensureAddressPrivacyConsent()) return;
   saving.value = true;
   try {
     const id = `addr_${Date.now()}`;
@@ -174,11 +184,36 @@ async function save() {
       lng: selectedLng,
       isDefault: isDefault.value,
     });
+    void trackEvent('address.saved', { isDefault: isDefault.value }, auth.accessToken);
     uni.showToast({ title: '已保存', icon: 'success' });
     setTimeout(() => uni.navigateBack(), 600);
+  } catch (cause) {
+    uni.showToast({ title: errorMessage(cause, '地址保存失败，请重试'), icon: 'none' });
   } finally {
     saving.value = false;
   }
+}
+
+function privacyModal(): Promise<boolean> {
+  return new Promise((resolve) => {
+    uni.showModal({
+      title: '保存地址前请确认',
+      content: '联系人、手机号和地址仅用于模拟订单展示与虚拟路线计算，并会保存到云端账号数据。不会产生真实配送。',
+      confirmText: '同意并保存',
+      cancelText: '暂不保存',
+      success: ({ confirm }) => resolve(confirm),
+      fail: () => resolve(false),
+    });
+  });
+}
+
+async function ensureAddressPrivacyConsent(): Promise<boolean> {
+  if (uni.getStorageSync(ADDRESS_PRIVACY_ACK_KEY)) return true;
+  const confirmed = await privacyModal();
+  if (!confirmed) return false;
+  uni.setStorageSync(ADDRESS_PRIVACY_ACK_KEY, true);
+  void trackEvent('address.privacy_confirmed', {}, auth.accessToken);
+  return true;
 }
 
 </script>

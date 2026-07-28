@@ -1,5 +1,19 @@
-const CLOUDBASE_HTTP_API_URL = import.meta.env.VITE_CLOUDBASE_HTTP_API_URL
-  ?? 'https://cloud1-d8g7o18ula3c12f10.service.tcloudbase.com/admin-api';
+function resolveAdminApiBaseUrl(): string {
+  const explicit = import.meta.env.VITE_ADMIN_API_BASE_URL?.trim()
+    || import.meta.env.VITE_CLOUDBASE_HTTP_API_URL?.trim();
+  if (explicit) return explicit;
+
+  const envId = import.meta.env.VITE_CLOUDBASE_ENV_ID?.trim();
+  if (envId) {
+    if (!/^[a-zA-Z0-9-]+$/.test(envId)) {
+      throw new Error('VITE_CLOUDBASE_ENV_ID 格式不正确');
+    }
+    return `https://${envId}.service.tcloudbase.com/admin-api`;
+  }
+  return import.meta.env.DEV ? '/' : '';
+}
+
+const ADMIN_API_BASE_URL = resolveAdminApiBaseUrl();
 const TOKEN_KEY = 'baichile_admin_token';
 
 export class ApiRequestError extends Error {
@@ -33,8 +47,12 @@ export function toQuery(
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  if (CLOUDBASE_HTTP_API_URL) return cloudbaseApi<T>(path, init);
-  throw new ApiRequestError(500, 'CLOUDBASE_API_MISSING', '缺少 VITE_CLOUDBASE_HTTP_API_URL');
+  if (ADMIN_API_BASE_URL) return cloudbaseApi<T>(path, init);
+  throw new ApiRequestError(
+    500,
+    'CLOUDBASE_API_MISSING',
+    '缺少 VITE_ADMIN_API_BASE_URL 或 VITE_CLOUDBASE_ENV_ID',
+  );
 }
 
 async function cloudbaseApi<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -42,7 +60,7 @@ async function cloudbaseApi<T>(path: string, init: RequestInit = {}): Promise<T>
   const method = (init.method ?? 'GET').toUpperCase();
   const url = new URL(path, 'https://example.invalid');
   const query = Object.fromEntries(url.searchParams.entries());
-  const response = await fetch(CLOUDBASE_HTTP_API_URL, {
+  const response = await fetch(ADMIN_API_BASE_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({

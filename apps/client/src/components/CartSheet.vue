@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { CartLine } from '../stores/cart';
+import { MAX_CART_QUANTITY, type CartLine } from '../stores/cart';
 
 defineProps<{
   visible: boolean;
   lines: CartLine[];
   storeName?: string;
   totalCents: number;
+  deliveryFeeCents?: number;
+  packingFeeCents?: number;
+  storeDiscountCents?: number;
   checkoutDisabled?: boolean;
   checkoutText: string;
 }>();
@@ -81,7 +84,7 @@ const markImageFailed = (itemId: string) => {
             <view class="quantity-control">
               <button class="qty-button minus" @tap="$emit('decrease', line.key)">−</button>
               <text class="quantity">{{ line.quantity }}</text>
-              <button class="qty-button plus" @tap="$emit('increase', line.key)">＋</button>
+              <button class="qty-button plus" :disabled="line.quantity >= MAX_CART_QUANTITY" @tap="$emit('increase', line.key)">＋</button>
             </view>
             <button class="remove-button" @tap="$emit('remove', line.key)">删除</button>
           </view>
@@ -89,8 +92,13 @@ const markImageFailed = (itemId: string) => {
       </scroll-view>
 
       <view class="footer">
+        <view class="fee-summary">
+          <text>模拟配送费 {{ formatMoney(deliveryFeeCents ?? 0) }}</text>
+          <text>模拟包装费 {{ formatMoney(packingFeeCents ?? 0) }}</text>
+          <text v-if="storeDiscountCents">店铺满减 -{{ formatMoney(storeDiscountCents) }}</text>
+        </view>
         <view class="total-block">
-          <text class="footer-label">共 {{ lines.length }} 种 · 合计</text>
+          <text class="footer-label">共 {{ lines.length }} 种 · 活动预估</text>
           <text class="footer-price">{{ formatMoney(totalCents) }}</text>
         </view>
         <button class="checkout-button" :disabled="checkoutDisabled" @tap="$emit('checkout')">{{ checkoutText }}</button>
@@ -151,7 +159,8 @@ const markImageFailed = (itemId: string) => {
 .qty-button.plus { color: #171714; background: #ffd400; }
 .quantity { min-width: 46rpx; color: #24231f; font-size: 23rpx; font-weight: 800; text-align: center; }
 .remove-button { margin: 8rpx 0 0; padding: 0 2rpx; color: #aaa397; background: transparent; font-size: 19rpx; line-height: 28rpx; }
-.footer { display: flex; align-items: center; justify-content: space-between; gap: 22rpx; margin-top: 8rpx; padding: 22rpx 4rpx 0; border-top: 1rpx solid #e8e4da; background: #fffdf8; }
+.footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14rpx 22rpx; margin-top: 8rpx; padding: 22rpx 4rpx 0; border-top: 1rpx solid #e8e4da; background: #fffdf8; }
+.fee-summary { width: 100%; display: flex; flex-wrap: wrap; gap: 8rpx 16rpx; color: #8b877f; font-size: 18rpx; }
 .total-block { min-width: 0; }
 .footer-label { display: block; color: #8d877b; font-size: 20rpx; }
 .footer-price { display: block; margin-top: 4rpx; color: #171714; font-size: 38rpx; line-height: 1; font-weight: 900; }

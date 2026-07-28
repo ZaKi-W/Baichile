@@ -4,7 +4,7 @@ import { validateAdminPassword } from './admin-security';
 import { AdminAuthService } from './admin-services';
 import { collections } from './collections';
 import { MemoryDatabase } from './database';
-import type { AccountDoc, AdminSessionDoc } from './models';
+import type { AccountDoc, AddressDoc, AdminSessionDoc, VisitorSessionDoc } from './models';
 import { BaichileRouter } from './router';
 import { BaichileCloudServices } from './services';
 import { PersistentRateLimiter } from './rate-limit';
@@ -26,6 +26,202 @@ describe('identity security', () => {
 
     await expect(services.auth.resolvePersistedIdentity(guest.accessToken)).resolves.toEqual({ visitorId: guest.visitorId });
     await expect(services.auth.resolvePersistedIdentity('guest.00000000-0000-4000-8000-000000000000')).resolves.toEqual({});
+  });
+
+  it('uses a valid guest bearer when the Mini Program OPENID has no account yet', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    const guest = await services.auth.createGuest();
+
+    await expect(services.auth.resolvePersistedIdentity(
+      `Bearer ${guest.accessToken}`,
+      'unbound-mini-program-openid',
+    )).resolves.toEqual({ visitorId: guest.visitorId });
+
+    const router = new BaichileRouter(db);
+    const quoteResult = await router.handle({
+      method: 'POST',
+      path: '/v1/checkouts/quote',
+      headers: { authorization: `Bearer ${guest.accessToken}` },
+      data: { stores: [] },
+    }, { OPENID: 'unbound-mini-program-openid' });
+    expect(quoteResult).toMatchObject({ ok: false, status: 400, code: 'INVALID_CHECKOUT' });
+
+    const createResult = await router.handle({
+      method: 'POST',
+      path: '/v1/orders/virtual',
+      headers: { authorization: `Bearer ${guest.accessToken}` },
+      data: {},
+    }, { OPENID: 'unbound-mini-program-openid' });
+    expect(createResult).toMatchObject({ ok: false, status: 400, code: 'BAD_REQUEST' });
+  });
+
+  it('keeps an explicit valid guest session separate from an existing OPENID account', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    const account = await services.auth.loginWechatMini({
+      code: 'existing-account',
+      profile: { avatarUrl: 'https://example.com/avatar.png', nickname: '已登录用户' },
+    }, 'existing-openid');
+    const guest = await services.auth.createGuest();
+
+    await expect(services.auth.resolvePersistedIdentity(
+      `Bearer ${guest.accessToken}`,
+      'existing-openid',
+    )).resolves.toEqual({ visitorId: guest.visitorId });
+    await expect(services.auth.resolvePersistedIdentity('', 'existing-openid'))
+      .resolves.toEqual({ accountId: account.accountId });
+  });
+
+  it('rotates hashed guest tokens and rejects derivable legacy bearer sessions', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    const guest = await services.auth.createGuest();
+
+    const rotated = await services.auth.rotateGuest(guest.refreshToken);
+
+    await expect(services.auth.resolvePersistedIdentity(guest.accessToken)).resolves.toEqual({});
+    await expect(services.auth.resolvePersistedIdentity(rotated.accessToken))
+      .resolves.toEqual({ visitorId: guest.visitorId });
+    const legacyUuid = '00000000-0000-4000-8000-000000000001';
+    const legacyVisitorId = `visitor_${legacyUuid}`;
+    await db.collection<VisitorSessionDoc>(collections.visitorSessions).insert({
+      _id: legacyVisitorId,
+      id: legacyVisitorId,
+      visitorId: legacyVisitorId,
+      accountId: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    await expect(services.auth.resolvePersistedIdentity(`guest.${legacyUuid}`)).resolves.toEqual({});
+    await expect(services.auth.rotateGuest('', `Bearer guest.${legacyUuid}`))
+      .rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+  });
+
+  it('deletes personal identifiers and sessions without reviving the old account', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+    const session = await services.auth.loginWechatMini({
+      code: 'wechat-code',
+      profile: { avatarUrl: 'https://example.com/avatar.png', nickname: '待注销用户' },
+    }, 'delete-openid');
+    const guest = await services.auth.createGuest();
+    await services.auth.linkVisitorToAccount(guest.visitorId, session.accountId);
+    await db.collection<AddressDoc>(collections.addresses).insert({
+      _id: 'addr_delete',
+      id: 'addr_delete',
+      visitorId: null,
+      accountId: session.accountId,
+      name: '王同学',
+      phone: '13800138000',
+      address: '上海市测试路',
+      detail: '101',
+      tag: '家',
+      lat: 31.2,
+      lng: 121.4,
+      isDefault: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await db.collection<Record<string, any>>(collections.virtualOrders).insert({
+      _id: 'order_delete',
+      id: 'order_delete',
+      accountId: session.accountId,
+      destinationId: 'home_precise',
+      deliveryAddress: {
+        name: '王同学',
+        phone: '13800138000',
+        address: '上海市测试路',
+        detail: '101',
+        tag: '家',
+      },
+      route: {
+        id: 'route_precise',
+        cityCode: '310100',
+        origin: { lat: 31.2, lng: 121.4, coordSystem: 'gcj02' },
+        destination: { lat: 31.21, lng: 121.41, coordSystem: 'gcj02' },
+        polyline: [{ lat: 31.2, lng: 121.4, coordSystem: 'gcj02' }],
+        routeSource: 'generated',
+        label: '虚拟配送路线',
+      },
+      updatedAt: new Date().toISOString(),
+    });
+    await db.collection<Record<string, any>>(collections.checkoutSessions).insert({
+      _id: 'checkout_delete',
+      id: 'checkout_delete',
+      subjectKey: `account:${session.accountId}`,
+      accountId: session.accountId,
+      request: {
+        deliveryAddressSnapshot: {
+          name: '王同学',
+          phone: '13800138000',
+          address: '上海市测试路',
+          detail: '101',
+          tag: '家',
+        },
+      },
+    });
+    await db.collection<Record<string, any>>(collections.shareInvites).insert({
+      _id: 'share_delete',
+      id: 'share_delete',
+      token: 'share_delete',
+      inviterAccountId: session.accountId,
+      snapshot: {
+        identity: {
+          nickname: '待注销用户',
+          avatarUrl: 'https://example.com/avatar.png',
+        },
+      },
+    });
+
+    await expect(services.auth.deleteAccount(session.accountId, 'WRONG'))
+      .rejects.toMatchObject({ code: 'DELETE_CONFIRMATION_REQUIRED' });
+    await expect(services.auth.deleteAccount(session.accountId, 'DELETE'))
+      .resolves.toEqual({ deleted: true });
+
+    expect(await db.collection<AccountDoc>(collections.accounts).get(session.accountId)).toMatchObject({
+      status: 'deleted',
+      wechatOpenIdHash: null,
+      phoneHash: null,
+      phoneNumber: null,
+      nickname: '已注销用户',
+      avatarUrl: null,
+    });
+    expect(await db.collection<AddressDoc>(collections.addresses).count({ accountId: session.accountId })).toBe(0);
+    expect(await db.collection<VisitorSessionDoc>(collections.visitorSessions).count({ accountId: session.accountId })).toBe(0);
+    expect(await db.collection(collections.checkoutSessions).count({ accountId: session.accountId })).toBe(0);
+    expect(await db.collection<Record<string, any>>(collections.virtualOrders).get('order_delete'))
+      .toMatchObject({
+        destinationId: 'deleted-account-destination',
+        deliveryAddress: {
+          name: '已注销用户',
+          phone: '',
+          address: '',
+          detail: '',
+          tag: '',
+        },
+        route: {
+          id: 'deleted-account-route',
+          origin: { lat: 0, lng: 0 },
+          destination: { lat: 0, lng: 0 },
+          polyline: [],
+        },
+      });
+    expect(await db.collection<Record<string, any>>(collections.shareInvites).get('share_delete'))
+      .toMatchObject({
+        snapshot: {
+          identity: {
+            nickname: '已注销用户',
+            avatarUrl: '',
+          },
+        },
+      });
+
+    const replacement = await services.auth.loginWechatMini({
+      code: 'wechat-code-2',
+      profile: { avatarUrl: 'https://example.com/new.png', nickname: '新用户' },
+    }, 'delete-openid');
+    expect(replacement.accountId).not.toBe(session.accountId);
   });
 
   it('binds an existing legacy account to the current WeChat identity during login', async () => {
@@ -86,6 +282,15 @@ describe('identity security', () => {
     await expect(db.collection(collections.visitorSessions).get(staleVisitorId)).resolves.toBeNull();
   });
 
+  it('does not create a tokenless session for an unknown visitor during merge', async () => {
+    const db = new MemoryDatabase();
+    const services = new BaichileCloudServices(db);
+
+    await services.auth.linkVisitorToAccount('visitor_stale', 'account_target');
+
+    await expect(db.collection(collections.visitorSessions).count()).resolves.toBe(0);
+  });
+
   it('disables the unauthenticated visitor merge endpoint', async () => {
     const router = new BaichileRouter(new MemoryDatabase());
     const result = await router.handle({
@@ -124,7 +329,7 @@ describe('identity security', () => {
     const accountId = verified.ok && 'data' in verified
       ? (verified.data as { accountId: string }).accountId
       : '';
-    expect(await db.collection(collections.visitorSessions).get(guest.visitorId))
+    expect(await db.collection(collections.visitorSessions).findOne({ visitorId: guest.visitorId }))
       .toMatchObject({ accountId });
 
     const restored = await router.handle({

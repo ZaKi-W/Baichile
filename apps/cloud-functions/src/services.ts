@@ -1,23 +1,32 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type {
+  AccountGameStats,
   AccountMergeSummary,
   AccountSavings,
   AccountSession,
   Address,
   AdministrativeArea,
+  CheckoutQuote,
+  CheckoutQuoteRequest,
+  CheckoutStoreQuote,
+  CursorPage,
   FlashSaleItem,
   HomeResponse,
   MenuItem,
   OrderEasterEgg,
+  OrderCreateRequest,
   OrderDeliveryAddressSnapshot,
   OrderQuote,
   PlaceSuggestion,
+  PromotionCampaign,
+  PromotionSnapshot,
   QuoteRequest,
   ShareCard,
   ShareCreateRequest,
   ShareLanding,
   ShareRewardConfig,
   ShareRewardResult,
+  StorePromotion,
   StoreDetail,
   StoreSummary,
   UserProfile,
@@ -35,6 +44,8 @@ import {
   calculateOrderTotal,
   findDeliveryIncident,
   getDeliveryIncidentPhase,
+  MAX_ORDER_QUANTITY,
+  MIN_ORDER_QUANTITY,
   selectDeliveryIncident,
   validateSelections,
 } from '@baichile/domain';
@@ -42,13 +53,19 @@ import type { DeliveryStatus, GeoPoint, VirtualRoute } from '@baichile/map-core'
 import { resolveCatalogImageUrl } from './catalog-images';
 import { buildStoreSearchText, normalizeCatalogSearchText } from './catalog-search';
 import { collections } from './collections';
+import { GameplayService, PromotionService } from './commerce';
 import type { CollectionStore, Database, ListOptions } from './database';
-import { badRequest, conflict, notFound, unauthorized } from './errors';
+import { badRequest, conflict, isCloudApiError, notFound, serviceUnavailable, unauthorized } from './errors';
 import type {
   AccountDoc,
   AddressDoc,
+  AnalyticsEventDoc,
   CategoryDoc,
+  CheckoutSessionDoc,
+  GameplayConfigDoc,
   MenuItemDoc,
+  PromotionCampaignDoc,
+  ShareRewardDailyDoc,
   ShareConfigDoc,
   ShareInviteDoc,
   StoreDoc,
@@ -60,16 +77,8 @@ import type {
 import { buildSharePath, chooseShareTitle, DEFAULT_SHARE_REWARD_CONFIG, parseShareRewardConfig, sharePagePath } from './share-domain';
 import { classifyPersona, selectMilestone, selectOrderEasterEgg } from './share-insights';
 import { createShareMiniProgramCode, removeCloudFiles, resolveCloudFileUrls, uploadValidatedAvatar } from './storage';
-
-interface AnalyticsEventDoc {
-  _id: string;
-  id: string;
-  visitorId?: string | null;
-  accountId?: string | null;
-  eventName: string;
-  payload: Record<string, unknown>;
-  createdAt: string;
-}
+import { sanitizeForAuditLog } from './redaction';
+import { shanghaiBusinessDate } from './business-time';
 
 const INITIAL_GRANT_CENTS = 300_000;
 const DAILY_CHECKIN_CENTS = 50_000;
@@ -81,6 +90,9 @@ const MIN_DELIVERY_DURATION_MS = 45_000;
 const MAX_DELIVERY_DURATION_MS = 90_000;
 const PAYMENT_METHOD: VirtualOrder['paymentMethod'] = 'virtual_balance';
 const DEFAULT_PHONE_AVATAR = '/static/tabbar/profile.svg';
+const VIRTUAL_FUNDS_NOTICE = '仅为虚拟余额模拟，不可充值、提现或兑换真实货币。';
+const GUEST_ACCESS_TOKEN_MS = 24 * 60 * 60 * 1000;
+const GUEST_REFRESH_TOKEN_MS = 30 * 24 * 60 * 60 * 1000;
 
 async function listAll<T extends Record<string, any>>(
   collection: CollectionStore<T>,
@@ -115,13 +127,17 @@ export class BaichileCloudServices {
   readonly shares: ShareService;
   readonly analytics: AnalyticsService;
   readonly map: MapService;
+  readonly gameplay: GameplayService;
+  readonly promotions: PromotionService;
 
   constructor(readonly db: Database) {
     this.auth = new AuthService(db, this);
     this.catalog = new CatalogService(db);
     this.addresses = new AddressService(db);
     this.wallet = new WalletService(db);
-    this.orders = new OrderService(db, this.catalog, this.wallet);
+    this.gameplay = new GameplayService(db);
+    this.promotions = new PromotionService(db);
+    this.orders = new OrderService(db, this.catalog, this.wallet, this.promotions, this.gameplay);
     this.shares = new ShareService(db, this.wallet);
     this.analytics = new AnalyticsService(db, this.auth);
     this.map = new MapService();
@@ -134,12 +150,8 @@ export class AuthService {
 
   constructor(private readonly db: Database, private readonly services: BaichileCloudServices) {}
 
-  private resolveGuestIdentity(authorization?: string): { visitorId?: string } {
-    const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? authorization;
-    if (!token) return {};
-    const subject = token.match(/^guest\.([0-9a-f-]{36})$/i)?.[1];
-    if (subject) return { visitorId: `visitor_${subject}` };
-    return {};
+  private bearerToken(authorization?: string): string {
+    return (authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? authorization ?? '').trim();
   }
 
   async resolvePersistedIdentity(
@@ -147,25 +159,40 @@ export class AuthService {
     openId?: string,
     webUid?: string,
   ): Promise<{ visitorId?: string; accountId?: string }> {
+    const token = this.bearerToken(authorization);
+    const guestSession = token ? await this.findGuestSessionByAccessToken(token) : null;
+    const validGuestSession = guestSession
+      && !guestSession.revokedAt
+      && (!guestSession.expiresAt || Date.parse(guestSession.expiresAt) > Date.now())
+      && guestSession.accessTokenHash === sha256(token)
+      ? guestSession
+      : null;
+    let openIdAccount: AccountDoc | null = null;
     if (openId) {
       const digest = sha256(openId);
-      const account = await this.db.collection<AccountDoc>(collections.accounts).findOne({ wechatOpenIdHash: digest });
-      if (!account) return {};
-      if (account.status === 'disabled') unauthorized('账号已被禁用', 'ACCOUNT_DISABLED');
-      return { accountId: account.id };
-    }
-    if (webUid) {
-      const account = await this.db.collection<AccountDoc>(collections.accounts)
-        .findOne({ webAuthUidHash: sha256(webUid) });
-      if (account) {
-        if (account.status === 'disabled') unauthorized('账号已被禁用', 'ACCOUNT_DISABLED');
-        return { accountId: account.id };
+      openIdAccount = await this.db.collection<AccountDoc>(collections.accounts).findOne({ wechatOpenIdHash: digest });
+      if (openIdAccount && openIdAccount.status !== 'active') {
+        unauthorized(
+          openIdAccount.status === 'deleted' ? '账号已注销' : '账号已被禁用',
+          openIdAccount.status === 'deleted' ? 'ACCOUNT_DELETED' : 'ACCOUNT_DISABLED',
+        );
       }
     }
-    const identity = this.resolveGuestIdentity(authorization);
-    if (!identity.visitorId) return {};
-    const session = await this.db.collection<VisitorSessionDoc>(collections.visitorSessions).get(identity.visitorId);
-    return session?.visitorId === identity.visitorId ? { visitorId: identity.visitorId } : {};
+    let webAccount: AccountDoc | null = null;
+    if (webUid) {
+      webAccount = await this.db.collection<AccountDoc>(collections.accounts)
+        .findOne({ webAuthUidHash: sha256(webUid) });
+      if (webAccount && webAccount.status !== 'active') {
+        unauthorized(
+          webAccount.status === 'deleted' ? '账号已注销' : '账号已被禁用',
+          webAccount.status === 'deleted' ? 'ACCOUNT_DELETED' : 'ACCOUNT_DISABLED',
+        );
+      }
+    }
+    if (validGuestSession) return { visitorId: validGuestSession.visitorId };
+    if (openIdAccount) return { accountId: openIdAccount.id };
+    if (webAccount) return { accountId: webAccount.id };
+    return {};
   }
 
   async ensureAccount(accountId: string, patch: Partial<AccountDoc> = {}): Promise<AccountDoc> {
@@ -195,21 +222,143 @@ export class AuthService {
   }
 
   async createGuest() {
-    const id = randomUUID();
-    const session = {
-      visitorId: `visitor_${id}`,
-      accessToken: `guest.${id}`,
-      refreshToken: `refresh.${randomUUID()}`,
-    };
-    const now = this.db.now().toISOString();
+    const session = this.newGuestSession();
     await this.db.collection<VisitorSessionDoc>(collections.visitorSessions).insert({
-      _id: session.visitorId,
-      id: session.visitorId,
+      _id: guestSessionId(session.accessToken),
+      id: guestSessionId(session.accessToken),
       visitorId: session.visitorId,
       accountId: null,
-      createdAt: now,
+      accessTokenHash: sha256(session.accessToken),
+      refreshTokenHash: sha256(session.refreshToken),
+      expiresAt: session.expiresAt,
+      refreshExpiresAt: session.refreshExpiresAt,
+      revokedAt: null,
+      rotatedFromId: null,
+      createdAt: this.db.now().toISOString(),
+      updatedAt: this.db.now().toISOString(),
     });
     return session;
+  }
+
+  async rotateGuest(refreshToken: string, authorization?: string) {
+    const raw = refreshToken.trim();
+    const sessions = this.db.collection<VisitorSessionDoc>(collections.visitorSessions);
+    const current = raw
+      ? await sessions.findOne({ refreshTokenHash: sha256(raw) })
+      : await this.findGuestSessionByAccessToken(this.bearerToken(authorization));
+    const refreshExpired = raw && (!current?.refreshExpiresAt
+      || Date.parse(current.refreshExpiresAt) <= Date.now());
+    if (!current || current.revokedAt || refreshExpired) {
+      unauthorized('游客刷新凭证已失效', 'INVALID_REFRESH_TOKEN');
+    }
+    const next = this.newGuestSession(current.visitorId);
+    await this.db.transaction(async (tx) => {
+      const txSessions = tx.collection<VisitorSessionDoc>(collections.visitorSessions);
+      const latest = await txSessions.get(current.id);
+      if (!latest || latest.revokedAt) unauthorized('游客刷新凭证已失效', 'INVALID_REFRESH_TOKEN');
+      // visitorId has an existing unique index, so rotation replaces the old
+      // token document atomically. Absence of the old hash revokes it.
+      await txSessions.remove(current.id);
+      await txSessions.insert({
+        _id: guestSessionId(next.accessToken),
+        id: guestSessionId(next.accessToken),
+        visitorId: next.visitorId,
+        accountId: current.accountId ?? null,
+        accessTokenHash: sha256(next.accessToken),
+        refreshTokenHash: sha256(next.refreshToken),
+        expiresAt: next.expiresAt,
+        refreshExpiresAt: next.refreshExpiresAt,
+        revokedAt: null,
+        rotatedFromId: current.id,
+        createdAt: current.createdAt,
+        updatedAt: tx.now().toISOString(),
+      });
+    });
+    return next;
+  }
+
+  private async findGuestSessionByAccessToken(token: string): Promise<VisitorSessionDoc | null> {
+    if (!token) return null;
+    const sessions = this.db.collection<VisitorSessionDoc>(collections.visitorSessions);
+    return sessions.get(guestSessionId(token));
+  }
+
+  async deleteAccount(accountId: string, confirmation: unknown): Promise<{ deleted: true }> {
+    if (confirmation !== 'DELETE') badRequest('请输入 DELETE 确认注销', 'DELETE_CONFIRMATION_REQUIRED');
+    let avatarFileId: string | null = null;
+    await this.db.transaction(async (tx) => {
+      const accounts = tx.collection<AccountDoc>(collections.accounts);
+      const account = await accounts.get(accountId);
+      if (!account || account.status === 'deleted') unauthorized('账号已注销', 'ACCOUNT_DELETED');
+      avatarFileId = account.avatarUrl ?? null;
+      const now = tx.now().toISOString();
+      await accounts.update(accountId, {
+        wechatOpenIdHash: null,
+        webAuthUidHash: null,
+        phoneHash: null,
+        phoneNumber: null,
+        mergedIntoAccountId: null,
+        nickname: '已注销用户',
+        avatarUrl: null,
+        status: 'deleted',
+        deletedAt: now,
+        updatedAt: now,
+      });
+      const addresses = tx.collection<AddressDoc>(collections.addresses);
+      for (const row of await listAll(addresses, { where: { accountId } })) {
+        await addresses.remove(row.id);
+      }
+      const sessions = tx.collection<VisitorSessionDoc>(collections.visitorSessions);
+      for (const row of await listAll(sessions, { where: { accountId } })) {
+        await sessions.remove(row.id);
+      }
+      const checkouts = tx.collection<CheckoutSessionDoc>(collections.checkoutSessions);
+      for (const row of await listAll(checkouts, {
+        where: {
+          $or: [
+            { accountId },
+            { subjectKey: `account:${accountId}` },
+          ],
+        },
+      })) {
+        await checkouts.remove(row.id);
+      }
+      const orders = tx.collection<VirtualOrderDoc>(collections.virtualOrders);
+      for (const row of await listAll(orders, { where: { accountId } })) {
+        await orders.update(row.id, {
+          deliveryAddress: anonymizedDeliveryAddress(row.deliveryAddress),
+          destinationId: 'deleted-account-destination',
+          route: anonymizedVirtualRoute(),
+          updatedAt: now,
+        });
+      }
+      const shares = tx.collection<ShareInviteDoc>(collections.shareInvites);
+      for (const row of await listAll(shares, { where: { inviterAccountId: accountId } })) {
+        if (!row.snapshot.identity) continue;
+        await shares.update(row.token, {
+          snapshot: {
+            ...row.snapshot,
+            identity: {
+              nickname: '已注销用户',
+              avatarUrl: '',
+            },
+          },
+        });
+      }
+    });
+    await removeCloudFiles([avatarFileId]);
+    return { deleted: true };
+  }
+
+  private newGuestSession(visitorId = `visitor_${randomUUID()}`) {
+    const now = this.db.now().getTime();
+    return {
+      visitorId,
+      accessToken: `guest.${randomUUID()}`,
+      refreshToken: `refresh.${randomUUID()}`,
+      expiresAt: new Date(now + GUEST_ACCESS_TOKEN_MS).toISOString(),
+      refreshExpiresAt: new Date(now + GUEST_REFRESH_TOKEN_MS).toISOString(),
+    };
   }
 
   async loginWechatMini(input: WechatMiniLoginRequest, openId?: string): Promise<AccountSession> {
@@ -220,7 +369,17 @@ export class AuthService {
     const digest = sha256(resolvedOpenId);
     const accounts = this.db.collection<AccountDoc>(collections.accounts);
     const existing = await accounts.findOne({ wechatOpenIdHash: digest });
-    const accountId = existing?.id ?? `account_${digest.slice(0, 24)}`;
+    if (existing && existing.status !== 'active') unauthorized(
+      existing.status === 'deleted' ? '账号已注销' : '账号已被禁用',
+      existing.status === 'deleted' ? 'ACCOUNT_DELETED' : 'ACCOUNT_DISABLED',
+    );
+    const baseAccountId = `account_${digest.slice(0, 24)}`;
+    const baseAccount = existing ? null : await accounts.get(baseAccountId);
+    const accountId = existing?.id ?? (
+      baseAccount?.status === 'deleted'
+        ? `${baseAccountId}_${sha256(randomUUID()).slice(0, 8)}`
+        : baseAccountId
+    );
     await this.db.transaction(async (tx) => {
       const now = tx.now().toISOString();
       const txAccounts = tx.collection<AccountDoc>(collections.accounts);
@@ -249,10 +408,7 @@ export class AuthService {
           updatedAt: now,
         });
       }
-      if (input.visitorId) {
-        await tx.collection<VisitorSessionDoc>(collections.visitorSessions)
-          .upsert(input.visitorId, { id: input.visitorId, visitorId: input.visitorId, accountId, createdAt: now });
-      }
+      if (input.visitorId) await this.linkVisitorToAccount(input.visitorId, accountId, tx);
       await this.services.wallet.initializeAccount(accountId, tx);
     });
     if (!existing) await this.services.shares.completeReferral(accountId, input.referralToken);
@@ -279,9 +435,18 @@ export class AuthService {
     if (account?.status === 'disabled' && account.mergedIntoAccountId) {
       account = await accounts.get(account.mergedIntoAccountId);
     }
-    if (account?.status === 'disabled') unauthorized('账号已被禁用', 'ACCOUNT_DISABLED');
+    if (account && account.status !== 'active') unauthorized(
+      account.status === 'deleted' ? '账号已注销' : '账号已被禁用',
+      account.status === 'deleted' ? 'ACCOUNT_DELETED' : 'ACCOUNT_DISABLED',
+    );
 
-    const accountId = account?.id ?? `account_phone_${phoneHash.slice(0, 24)}`;
+    const baseAccountId = `account_phone_${phoneHash.slice(0, 24)}`;
+    const baseAccount = account ? null : await accounts.get(baseAccountId);
+    const accountId = account?.id ?? (
+      baseAccount?.status === 'deleted'
+        ? `${baseAccountId}_${sha256(randomUUID()).slice(0, 8)}`
+        : baseAccountId
+    );
     await this.db.transaction(async (tx) => {
       const txAccounts = tx.collection<AccountDoc>(collections.accounts);
       const now = tx.now().toISOString();
@@ -392,13 +557,14 @@ export class AuthService {
   async getWechatPhoneNumber(code: string): Promise<WechatPhoneResult> {
     if (!code?.trim()) badRequest('手机号授权凭证不能为空');
     const accessToken = await this.getWechatAccessToken();
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${encodeURIComponent(accessToken)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: code.trim() }),
       },
+      { label: '微信手机号服务', timeoutMs: 4_000 },
     );
     const body = await response.json() as { errcode?: number; phone_info?: WechatPhoneResult };
     if (!response.ok || body.errcode || !body.phone_info?.phoneNumber) {
@@ -416,12 +582,12 @@ export class AuthService {
   }
 
   async linkVisitorToAccount(visitorId: string, accountId: string, db = this.db): Promise<void> {
-    await db.collection<VisitorSessionDoc>(collections.visitorSessions).upsert(visitorId, {
-      id: visitorId,
-      visitorId,
-      accountId,
-      createdAt: db.now().toISOString(),
-    });
+    const sessions = db.collection<VisitorSessionDoc>(collections.visitorSessions);
+    const existing = await sessions.findOne({ visitorId });
+    if (existing) {
+      const now = db.now().toISOString();
+      await sessions.update(existing.id, { accountId, revokedAt: now, updatedAt: now });
+    }
   }
 
   private async mergeAccountInto(
@@ -515,7 +681,11 @@ export class AuthService {
       return `dev_${code}_${randomUUID()}`;
     }
     const query = new URLSearchParams({ appid: appId, secret: appSecret, js_code: code, grant_type: 'authorization_code' });
-    const response = await fetch(`https://api.weixin.qq.com/sns/jscode2session?${query}`);
+    const response = await fetchWithTimeout(
+      `https://api.weixin.qq.com/sns/jscode2session?${query}`,
+      {},
+      { label: '微信登录服务', timeoutMs: 4_000, retries: 1 },
+    );
     const session = await response.json() as { openid?: string; errcode?: number };
     if (!response.ok || !session.openid || session.errcode) badRequest('微信登录凭证无效');
     return session.openid;
@@ -526,11 +696,15 @@ export class AuthService {
     const appId = process.env.WECHAT_MINI_APP_ID;
     const appSecret = process.env.WECHAT_MINI_APP_SECRET;
     if (!appId || !appSecret) badRequest('微信手机号能力配置缺失', 'WECHAT_CONFIG_MISSING');
-    const response = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grant_type: 'client_credential', appid: appId, secret: appSecret, force_refresh: false }),
-    });
+    const response = await fetchWithTimeout(
+      'https://api.weixin.qq.com/cgi-bin/stable_token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grant_type: 'client_credential', appid: appId, secret: appSecret, force_refresh: false }),
+      },
+      { label: '微信令牌服务', timeoutMs: 4_000, retries: 1 },
+    );
     const body = await response.json() as { access_token?: string; expires_in?: number; errcode?: number };
     if (!response.ok || body.errcode || !body.access_token) badRequest('微信手机号服务暂不可用', 'WECHAT_PHONE_UNAVAILABLE');
     this.wechatAccessToken = body.access_token;
@@ -566,30 +740,64 @@ export class CatalogService {
   }
 
   private async loadHome(): Promise<HomeResponse> {
-    const [categories, storeRows, menuItems] = await Promise.all([
+    const now = this.db.now().toISOString();
+    const [categories, storeRows, publishedPromotions] = await Promise.all([
       listAll(this.db.collection<CategoryDoc>(collections.categories), { orderBy: [['sortOrder', 'asc']] }),
       listAll(this.db.collection<StoreDoc>(collections.stores), {
         where: { status: 'active' },
         orderBy: [['sortOrder', 'asc']],
       }),
-      this.db.collection<MenuItemDoc>(collections.menuItems).list({
-        where: { status: 'active' },
-        orderBy: [['sortOrder', 'asc']],
-        limit: 3,
+      this.db.collection<PromotionCampaignDoc>(collections.promotionCampaigns).list({
+        where: { lifecycleStatus: 'published' },
+        orderBy: [['startsAt', 'asc']],
       }),
     ]);
+    const flashPromotions = publishedPromotions
+      .filter((promotion) => (
+        promotion.type === 'item_flash'
+        && promotion.startsAt <= now
+        && promotion.endsAt > now
+        && promotion.menuItemId
+        && promotion.flashPriceCents !== undefined
+      ));
+    const activeStoreIds = new Set(storeRows.map((store) => store.id));
+    const storePromotions: StorePromotion[] = publishedPromotions
+      .filter((promotion) => (
+        promotion.type === 'store_threshold'
+        && promotion.startsAt <= now
+        && promotion.endsAt > now
+        && activeStoreIds.has(promotion.storeId)
+        && promotion.tiers?.length
+      ))
+      .map((promotion) => ({
+        promotionId: promotion.id,
+        storeId: promotion.storeId,
+        name: promotion.name,
+        tiers: promotion.tiers!,
+        startsAt: promotion.startsAt,
+        endsAt: promotion.endsAt,
+      }));
+    const menuItems = (await Promise.all(flashPromotions.map((promotion) => (
+      this.db.collection<MenuItemDoc>(collections.menuItems).get(promotion.menuItemId!)
+    )))).filter((item): item is MenuItemDoc => Boolean(item?.status === 'active'));
+    const menuItemsById = new Map(menuItems.map((item) => [item.id, item]));
     const imageUrls = await resolveCloudFileUrls([
       ...storeRows.map((row) => row.coverUrl),
       ...menuItems.map((item) => item.imageUrl),
     ]);
     const stores = storeRows.map((row) => toStoreSummary(row, imageUrls));
     const storesById = new Map(storeRows.map((store) => [store.id, store]));
-    const flashSaleItems: FlashSaleItem[] = menuItems
-      .filter((item) => storesById.has(item.storeId) && Boolean(item.imageUrl))
+    const flashSaleItems: FlashSaleItem[] = flashPromotions
+      .filter((promotion) => {
+        const item = promotion.menuItemId ? menuItemsById.get(promotion.menuItemId) : undefined;
+        return Boolean(item && storesById.has(item.storeId));
+      })
       .slice(0, 3)
-      .map((item) => {
+      .map((promotion) => {
+        const item = menuItemsById.get(promotion.menuItemId!)!;
         const store = storesById.get(item.storeId)!;
         return {
+          promotionId: promotion.id,
           menuItemId: item.id,
           storeId: item.storeId,
           subCategoryId: item.subCategoryId ?? undefined,
@@ -597,13 +805,16 @@ export class CatalogService {
           name: item.name,
           imageUrl: resolveImageUrl(item.imageUrl, imageUrls),
           originalPriceCents: item.basePriceCents,
-          flashPriceCents: Math.max(100, Math.floor(item.basePriceCents * 0.78 / 100) * 100),
+          flashPriceCents: promotion.flashPriceCents!,
+          startsAt: promotion.startsAt,
+          endsAt: promotion.endsAt,
         };
       });
     return {
       categories: categories.map(({ id, name, icon }) => ({ id, name, icon })),
       featured: stores.slice(0, 3),
       flashSaleItems,
+      storePromotions,
       stores,
       nextCursor: null,
     };
@@ -642,7 +853,45 @@ export class CatalogService {
   async find(storeId: string): Promise<StoreDetail> {
     const store = await this.db.collection<StoreDoc>(collections.stores).get(storeId);
     if (!store || store.status !== 'active') notFound('店铺不存在', 'STORE_NOT_FOUND');
-    return (await this.assemble([store]))[0];
+    const [detail, activePromotions] = await Promise.all([
+      this.assemble([store]).then((rows) => rows[0]),
+      new PromotionService(this.db).activeForStore(storeId),
+    ]);
+    const menuById = new Map(detail.menu.map((item) => [item.id, item]));
+    const flashSaleItems: FlashSaleItem[] = activePromotions
+      .filter((promotion) => (
+        promotion.type === 'item_flash'
+        && promotion.menuItemId
+        && promotion.flashPriceCents !== undefined
+        && menuById.has(promotion.menuItemId)
+      ))
+      .map((promotion) => {
+        const item = menuById.get(promotion.menuItemId!)!;
+        return {
+          promotionId: promotion.id,
+          menuItemId: item.id,
+          storeId,
+          subCategoryId: item.subCategoryId,
+          storeName: store.name,
+          name: item.name,
+          imageUrl: item.imageUrl,
+          originalPriceCents: item.basePriceCents,
+          flashPriceCents: promotion.flashPriceCents!,
+          startsAt: promotion.startsAt,
+          endsAt: promotion.endsAt,
+        };
+      });
+    const storePromotions: StorePromotion[] = activePromotions
+      .filter((promotion) => promotion.type === 'store_threshold' && promotion.tiers?.length)
+      .map((promotion) => ({
+        promotionId: promotion.id,
+        storeId,
+        name: promotion.name,
+        tiers: promotion.tiers!,
+        startsAt: promotion.startsAt,
+        endsAt: promotion.endsAt,
+      }));
+    return { ...detail, flashSaleItems, storePromotions };
   }
 
   private async assemble(rows: StoreDoc[]): Promise<StoreDetail[]> {
@@ -706,7 +955,11 @@ export class WalletService {
     await this.initializeAccount(accountId);
     const account = await this.db.collection<AccountDoc>(collections.accounts).get(accountId);
     if (!account) notFound('用户不存在', 'ACCOUNT_NOT_FOUND');
-    return { balanceCents: account.balanceCents, checkedInToday: await this.hasCheckedIn(accountId) };
+    return {
+      balanceCents: account.balanceCents,
+      checkedInToday: await this.hasCheckedIn(accountId),
+      notice: VIRTUAL_FUNDS_NOTICE,
+    };
   }
 
   async listTransactions(accountId: string): Promise<WalletTransaction[]> {
@@ -738,11 +991,18 @@ export class WalletService {
         id: transactionId,
         businessDate,
       }));
-      return { balanceCents, checkedInToday: true };
+      return { balanceCents, checkedInToday: true, notice: VIRTUAL_FUNDS_NOTICE };
     });
   }
 
-  async credit(accountId: string, amountCents: number, type: WalletTransactionDoc['type'], description: string, db = this.db): Promise<WalletSummary> {
+  async credit(
+    accountId: string,
+    amountCents: number,
+    type: WalletTransactionDoc['type'],
+    description: string,
+    db = this.db,
+    transactionExtras: Partial<WalletTransactionDoc> = {},
+  ): Promise<WalletSummary> {
     return db.transaction(async (tx) => {
       const accounts = tx.collection<AccountDoc>(collections.accounts);
       const account = await accounts.get(accountId);
@@ -751,8 +1011,12 @@ export class WalletService {
       if (balanceCents < 0) conflict('余额不足', 'INSUFFICIENT_BALANCE');
       await accounts.update(accountId, { balanceCents, updatedAt: tx.now().toISOString() });
       await tx.collection<WalletTransactionDoc>(collections.walletTransactions)
-        .insert(walletTx(tx, accountId, type, amountCents, balanceCents, description));
-      return { balanceCents, checkedInToday: await this.hasCheckedIn(accountId, tx) };
+        .insert(walletTx(tx, accountId, type, amountCents, balanceCents, description, transactionExtras));
+      return {
+        balanceCents,
+        checkedInToday: await this.hasCheckedIn(accountId, tx),
+        notice: VIRTUAL_FUNDS_NOTICE,
+      };
     });
   }
 
@@ -764,7 +1028,15 @@ export class WalletService {
     const balanceCents = account.balanceCents - amountCents;
     await accounts.update(accountId, { balanceCents, updatedAt: db.now().toISOString() });
     await db.collection<WalletTransactionDoc>(collections.walletTransactions)
-      .insert(walletTx(db, accountId, 'order_payment', -amountCents, balanceCents, '外卖消费', { orderId }));
+      .insert(walletTx(
+        db,
+        accountId,
+        'order_payment',
+        -amountCents,
+        balanceCents,
+        '模拟订单扣款（虚拟余额）',
+        { orderId },
+      ));
   }
 
   async hasCheckedIn(accountId: string, db = this.db): Promise<boolean> {
@@ -774,13 +1046,26 @@ export class WalletService {
 }
 
 export class OrderService {
-  constructor(private readonly db: Database, private readonly catalog: CatalogService, private readonly wallet: WalletService) {}
+  constructor(
+    private readonly db: Database,
+    private readonly catalog: CatalogService,
+    private readonly wallet: WalletService,
+    private readonly promotions: PromotionService,
+    private readonly gameplay: GameplayService,
+  ) {}
 
-  async quote(request: QuoteRequest): Promise<OrderQuote> {
+  private async baseQuote(request: QuoteRequest): Promise<{ quote: OrderQuote; store: StoreDetail }> {
     if (!request.lines?.length) badRequest('购物车不能为空');
     if (request.lines.length > 50) badRequest('单个订单最多包含 50 项商品', 'ORDER_TOO_LARGE');
-    if (request.lines.some((line) => !Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 99)) {
-      badRequest('单项商品数量必须在 1 到 99 之间', 'INVALID_QUANTITY');
+    if (request.lines.some((line) => (
+      !Number.isInteger(line.quantity)
+      || line.quantity < MIN_ORDER_QUANTITY
+      || line.quantity > MAX_ORDER_QUANTITY
+    ))) {
+      badRequest(
+        `单项商品数量必须在 ${MIN_ORDER_QUANTITY} 到 ${MAX_ORDER_QUANTITY} 之间`,
+        'INVALID_QUANTITY',
+      );
     }
     const store = await this.catalog.find(request.storeId);
     const lines = request.lines.map((input) => {
@@ -809,42 +1094,273 @@ export class OrderService {
       badRequest('订单金额超出允许范围', 'INVALID_ORDER_TOTAL');
     }
     return {
-      storeId: store.id,
-      lines,
-      itemsTotalCents,
-      deliveryFeeCents: store.deliveryFeeCents,
-      packingFeeCents: 0,
-      totalCents: calculateOrderTotal(lines.map((line) => line.totalCents), store.deliveryFeeCents),
-      itemsTotalCaloriesKcal,
+      store,
+      quote: {
+        storeId: store.id,
+        lines,
+        itemsTotalCents,
+        deliveryFeeCents: store.deliveryFeeCents,
+        packingFeeCents: store.packingFeeCents,
+        totalCents: calculateOrderTotal(
+          lines.map((line) => line.totalCents),
+          store.deliveryFeeCents + store.packingFeeCents,
+        ),
+        itemsTotalCaloriesKcal,
+      },
     };
   }
 
+  async quote(request: QuoteRequest): Promise<OrderQuote> {
+    const { quote, store } = await this.baseQuote(request);
+    if (quote.itemsTotalCents < store.minimumOrderCents) {
+      conflict(`未达到起送金额 ¥${(store.minimumOrderCents / 100).toFixed(2)}`, 'MINIMUM_ORDER_NOT_MET');
+    }
+    return quote;
+  }
+
+  async quoteCheckout(
+    request: CheckoutQuoteRequest,
+    identity: { visitorId?: string; accountId?: string },
+  ): Promise<CheckoutQuote> {
+    if (!identity.accountId && !identity.visitorId) unauthorized();
+    if (!Array.isArray(request?.stores) || !request.stores.length || request.stores.length > 20) {
+      badRequest('结算需包含 1 到 20 个商家', 'INVALID_CHECKOUT');
+    }
+    const storeIds = request.stores.map((store) => store?.storeId);
+    if (storeIds.some((id) => typeof id !== 'string') || new Set(storeIds).size !== storeIds.length) {
+      badRequest('同一结算中的商家不能重复', 'INVALID_CHECKOUT');
+    }
+    if (!request.virtualDestinationId?.trim()) badRequest('请选择配送地址', 'INVALID_CHECKOUT');
+    normalizeDeliveryAddressSnapshot(request.deliveryAddressSnapshot);
+    const subjectKey = identitySubject(identity);
+    const sessions = this.db.collection<CheckoutSessionDoc>(collections.checkoutSessions);
+    if (request.checkoutId) validateCheckoutIdentifier(request.checkoutId, 'checkoutId');
+    const requestedSession = request.checkoutId ? await sessions.get(request.checkoutId) : null;
+    if (request.checkoutId && (!requestedSession || requestedSession.subjectKey !== subjectKey)) {
+      badRequest('结算会话不匹配', 'QUOTE_MISMATCH');
+    }
+    if (requestedSession && Date.parse(requestedSession.checkoutExpiresAt) <= this.db.now().getTime()) {
+      conflict('结算已过期，请重新开始', 'CHECKOUT_EXPIRED');
+    }
+
+    const quotedAt = this.db.now();
+    const quoteStores = await Promise.all(request.stores.map((store) => this.quoteStoreWithPromotions({
+      storeId: store.storeId,
+      lines: store.lines,
+      virtualDestinationId: request.virtualDestinationId,
+      virtualDestinationPoint: request.virtualDestinationPoint,
+      deliveryAddressSnapshot: request.deliveryAddressSnapshot,
+    }, quotedAt.toISOString())));
+    let checkoutId = requestedSession?.id ?? `checkout_${randomUUID()}`;
+    const quoteId = `quote_${randomUUID()}`;
+    const expiresAt = new Date(quotedAt.getTime() + 5 * 60_000).toISOString();
+    const checkoutExpiresAt = requestedSession?.checkoutExpiresAt
+      ?? new Date(quotedAt.getTime() + 30 * 60_000).toISOString();
+    const quote: CheckoutQuote = {
+      checkoutId,
+      quoteId,
+      quotedAt: quotedAt.toISOString(),
+      expiresAt,
+      checkoutExpiresAt,
+      stores: quoteStores,
+      originalItemsTotalCents: quoteStores.reduce((sum, store) => sum + store.originalItemsTotalCents, 0),
+      itemsTotalCents: quoteStores.reduce((sum, store) => sum + store.itemsTotalCents, 0),
+      deliveryFeeCents: quoteStores.reduce((sum, store) => sum + store.deliveryFeeCents, 0),
+      packingFeeCents: quoteStores.reduce((sum, store) => sum + store.packingFeeCents, 0),
+      minimumOrderShortfallCents: quoteStores.reduce((sum, store) => sum + store.minimumOrderShortfallCents, 0),
+      flashDiscountCents: quoteStores.reduce((sum, store) => sum + store.flashDiscountCents, 0),
+      storeDiscountCents: quoteStores.reduce((sum, store) => sum + store.storeDiscountCents, 0),
+      promotionDiscountCents: quoteStores.reduce((sum, store) => sum + store.promotionDiscountCents, 0),
+      totalCents: quoteStores.reduce((sum, store) => sum + store.totalCents, 0),
+    };
+    await this.db.transaction(async (tx) => {
+      const txSessions = tx.collection<CheckoutSessionDoc>(collections.checkoutSessions);
+      if (requestedSession) {
+        const current = await txSessions.get(requestedSession.id);
+        if (!current || current.subjectKey !== subjectKey) {
+          badRequest('结算会话不匹配', 'QUOTE_MISMATCH');
+        }
+        if (Date.parse(current.checkoutExpiresAt) <= tx.now().getTime()) {
+          conflict('结算已过期，请重新开始', 'CHECKOUT_EXPIRED');
+        }
+        quote.checkoutId = current.id;
+        quote.checkoutExpiresAt = current.checkoutExpiresAt;
+        await txSessions.update(current.id, {
+          quoteId,
+          request,
+          quote,
+          quotedAt: quote.quotedAt,
+          expiresAt,
+          updatedAt: quote.quotedAt,
+        });
+        return;
+      }
+      const existingSubjectSession = await txSessions.findOne({ subjectKey });
+      if (identity.visitorId && existingSubjectSession) {
+        unauthorized('游客仅可创建一次结算，请登录后继续', 'LOGIN_REQUIRED');
+      }
+      const previousOrders = await tx.collection<VirtualOrderDoc>(collections.virtualOrders).count(
+        identity.accountId ? { accountId: identity.accountId } : { visitorId: identity.visitorId },
+      );
+      const reservationId = `checkout_first_${sha256(subjectKey).slice(0, 40)}`;
+      const reservation = await txSessions.get(reservationId);
+      const firstCheckout = previousOrders === 0 && !existingSubjectSession && !reservation;
+      checkoutId = firstCheckout || identity.visitorId ? reservationId : checkoutId;
+      quote.checkoutId = checkoutId;
+      await txSessions.insert({
+        _id: checkoutId,
+        id: checkoutId,
+        quoteId,
+        subjectKey,
+        visitorId: identity.visitorId ?? null,
+        accountId: identity.accountId ?? null,
+        request,
+        quote,
+        quotedAt: quote.quotedAt,
+        expiresAt,
+        checkoutExpiresAt,
+        firstCheckout,
+        createdOrderIds: [],
+        createdStoreIds: [],
+        createdAt: quote.quotedAt,
+        updatedAt: quote.quotedAt,
+      });
+    });
+    return quote;
+  }
+
   async create(
-    request: QuoteRequest,
+    request: OrderCreateRequest,
     subject: string | { visitorId?: string; accountId?: string },
   ): Promise<VirtualOrder> {
     const identity = typeof subject === 'string' ? { accountId: subject } : subject;
     if (!identity.accountId && !identity.visitorId) unauthorized();
     if (identity.accountId) await this.wallet.initializeAccount(identity.accountId);
-    const quote = await this.quote(request);
-    const store = await this.catalog.find(request.storeId);
-    const id = randomUUID();
+
+    const metadata = [request.checkoutId, request.quoteId, request.idempotencyKey];
+    const metadataCount = metadata.filter((value) => typeof value === 'string' && value.trim()).length;
+    if (metadataCount > 0 && metadataCount < metadata.length) {
+      badRequest('checkoutId、quoteId 与 idempotencyKey 必须同时提供', 'INVALID_CHECKOUT');
+    }
+    const legacyCreate = metadataCount === 0;
+    const subjectKey = identitySubject(identity);
+    let idempotencyKey = '';
+    let id = '';
+    let effectiveRequest: QuoteRequest = request;
+    let quote: OrderQuote | CheckoutStoreQuote;
+    let checkout: CheckoutSessionDoc | null = null;
+    let firstCheckout = false;
+
+    if (!legacyCreate) {
+      validateCheckoutIdentifier(request.checkoutId!, 'checkoutId');
+      validateCheckoutIdentifier(request.quoteId!, 'quoteId');
+      validateIdempotencyKey(request.idempotencyKey!);
+      idempotencyKey = request.idempotencyKey!;
+      id = `order_${sha256(`${subjectKey}:${idempotencyKey}`).slice(0, 48)}`;
+      const existing = await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).get(id);
+      if (existing) {
+        assertOrderRetryMatches(existing, request, identity);
+        return this.toOrder(existing);
+      }
+      checkout = await this.db.collection<CheckoutSessionDoc>(collections.checkoutSessions).get(request.checkoutId!);
+      if (!checkout || checkout.quoteId !== request.quoteId || checkout.subjectKey !== subjectKey) {
+        badRequest('结算报价不匹配', 'QUOTE_MISMATCH');
+      }
+      if (checkout.createdStoreIds.includes(request.storeId)) {
+        const createdOrders = await Promise.all(checkout.createdOrderIds.map((orderId) => (
+          this.db.collection<VirtualOrderDoc>(collections.virtualOrders).get(orderId)
+        )));
+        const existingStoreOrder = createdOrders.find((order) => (
+          order?.storeId === request.storeId
+          && order.idempotencyKey === request.idempotencyKey
+          && order.accountId === (identity.accountId ?? null)
+          && order.visitorId === (identity.visitorId ?? null)
+        ));
+        if (existingStoreOrder) {
+          assertOrderRetryMatches(existingStoreOrder, request, identity);
+          return this.toOrder(existingStoreOrder);
+        }
+        conflict('该商家订单已创建', 'STORE_ORDER_EXISTS');
+      }
+      const now = this.db.now().getTime();
+      if (Date.parse(checkout.checkoutExpiresAt) <= now) conflict('结算已过期，请重新下单', 'CHECKOUT_EXPIRED');
+      if (Date.parse(checkout.expiresAt) <= now) {
+        conflict('报价已过期，请重新获取', 'QUOTE_EXPIRED');
+      }
+      const quotedStore = checkout.quote.stores.find((store) => store.storeId === request.storeId);
+      const requestedStore = checkout.request.stores.find((store) => store.storeId === request.storeId);
+      if (!quotedStore || !requestedStore || orderLinesFingerprint(request.lines) !== orderLinesFingerprint(requestedStore.lines)) {
+        badRequest('订单商品与报价不一致', 'QUOTE_MISMATCH');
+      }
+      quote = quotedStore;
+      effectiveRequest = {
+        storeId: request.storeId,
+        lines: requestedStore.lines,
+        virtualDestinationId: checkout.request.virtualDestinationId,
+        virtualDestinationPoint: checkout.request.virtualDestinationPoint,
+        deliveryAddressSnapshot: checkout.request.deliveryAddressSnapshot,
+      };
+      if (quotedStore.minimumOrderShortfallCents > 0) {
+        conflict('未达到起送金额，请补充商品', 'MINIMUM_ORDER_NOT_MET');
+      }
+      const currentQuote = await this.quoteStoreWithPromotions(
+        effectiveRequest,
+        this.db.now().toISOString(),
+      );
+      if (storePricingFingerprint(currentQuote) !== storePricingFingerprint(quotedStore)) {
+        conflict('商品价格或优惠已变化，请重新获取报价', 'QUOTE_CHANGED');
+      }
+      firstCheckout = checkout.firstCheckout;
+    } else {
+      if (identity.visitorId && await this.db.collection<VirtualOrderDoc>(collections.virtualOrders)
+        .findOne({ visitorId: identity.visitorId })) {
+        unauthorized('游客仅可创建一次结算，请登录后继续', 'LOGIN_REQUIRED');
+      }
+      quote = await this.quote(request);
+      firstCheckout = await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).count(
+        identity.accountId ? { accountId: identity.accountId } : { visitorId: identity.visitorId },
+      ) === 0;
+      idempotencyKey = `legacy_${randomUUID()}`;
+      id = `order_${sha256(`${subjectKey}:${idempotencyKey}`).slice(0, 48)}`;
+    }
+
+    const store = await this.catalog.find(effectiveRequest.storeId);
+    const gameplay = await this.gameplay.get();
     const startedAt = this.db.now();
-    const incident = selectDeliveryIncident(id.slice(0, 8), store.virtualDeliveryMinutes, startedAt.getTime());
-    const route = this.route(id, request.virtualDestinationPoint);
-    const deliveryAddress = normalizeDeliveryAddressSnapshot(request.deliveryAddressSnapshot);
+    const incident = selectDeliveryIncident(
+      id.slice(-12),
+      store.virtualDeliveryMinutes,
+      startedAt.getTime(),
+      {
+        rate: gameplay.deliveryIncidentRate,
+        forceSuccess: gameplay.firstCheckoutGuaranteed && firstCheckout,
+      },
+    );
+    const route = this.route(id, effectiveRequest.virtualDestinationPoint);
+    const deliveryAddress = normalizeDeliveryAddressSnapshot(effectiveRequest.deliveryAddressSnapshot);
     const createdAt = startedAt.toISOString();
     const durationMs = virtualDeliveryDurationMs(store.virtualDeliveryMinutes, id);
     const completedAt = new Date(startedAt.getTime() + DELIVERY_START_MS + durationMs).toISOString();
-    const easterEgg = incident ? undefined : selectOrderEasterEgg(id, id.slice(0, 8), completedAt);
+    const easterEgg = incident
+      ? undefined
+      : selectOrderEasterEgg(id, id.slice(-12), completedAt, gameplay.successEggRate);
+    const promotionDiscountCents = 'promotionDiscountCents' in quote
+      ? quote.promotionDiscountCents
+      : 0;
+    const promotionSnapshots = 'promotionSnapshots' in quote
+      ? quote.promotionSnapshots
+      : [];
     const order: VirtualOrder = {
       ...quote,
       id,
       isVirtual: true,
+      checkoutId: request.checkoutId ?? `legacy_checkout_${id.slice(6)}`,
+      quoteId: request.quoteId ?? `legacy_quote_${id.slice(6)}`,
+      idempotencyKey,
       visitorId: identity.visitorId,
       accountId: identity.accountId,
       settlementMode: identity.accountId ? 'virtual_balance' : 'guest_simulation',
-      virtualDestinationId: request.virtualDestinationId,
+      virtualDestinationId: effectiveRequest.virtualDestinationId,
       storeName: store.name,
       deliveryAddress,
       paymentMethod: identity.accountId ? PAYMENT_METHOD : undefined,
@@ -852,18 +1368,48 @@ export class OrderService {
       startedAt: createdAt,
       createdAt,
       durationMs,
-      seed: id.slice(0, 8),
+      seed: id.slice(-12),
       route,
       incident,
       failedAt: incident?.failedAt,
       refundStatus: incident && identity.accountId ? 'pending' : undefined,
+      promotionDiscountCents,
+      promotionSnapshots,
+      fundsNotice: VIRTUAL_FUNDS_NOTICE,
       easterEgg,
     };
-    await this.db.transaction(async (tx) => {
+    const saved = await this.db.transaction(async (tx) => {
+      const orders = tx.collection<VirtualOrderDoc>(collections.virtualOrders);
+      const duplicate = await orders.get(id);
+      if (duplicate) {
+        assertOrderRetryMatches(duplicate, request, identity);
+        return duplicate;
+      }
       const now = tx.now().toISOString();
-      await tx.collection<VirtualOrderDoc>(collections.virtualOrders).insert({
+      let persistedCheckout: CheckoutSessionDoc | null = null;
+      if (checkout) {
+        const currentCheckout = await tx.collection<CheckoutSessionDoc>(collections.checkoutSessions).get(checkout.id);
+        if (!currentCheckout || currentCheckout.quoteId !== checkout.quoteId
+          || Date.parse(currentCheckout.checkoutExpiresAt) <= tx.now().getTime()) {
+          conflict('结算已过期，请重新下单', 'CHECKOUT_EXPIRED');
+        }
+        if (Date.parse(currentCheckout.expiresAt) <= tx.now().getTime()) {
+          conflict('报价已过期，请重新获取', 'QUOTE_EXPIRED');
+        }
+        if (currentCheckout.createdStoreIds.includes(order.storeId)) {
+          conflict('该商家订单已创建', 'STORE_ORDER_EXISTS');
+        }
+        persistedCheckout = currentCheckout;
+      }
+      const row = await orders.insert({
         _id: id,
         id,
+        checkoutId: order.checkoutId ?? null,
+        quoteId: order.quoteId ?? null,
+        idempotencyKey,
+        subjectKey,
+        requestFingerprint: orderCreateFingerprint(request),
+        legacyCreate,
         visitorId: identity.visitorId ?? null,
         accountId: identity.accountId ?? null,
         settlementMode: order.settlementMode,
@@ -881,6 +1427,8 @@ export class OrderService {
         packingFeeCents: order.packingFeeCents,
         totalCents: order.totalCents,
         itemsTotalCaloriesKcal: order.itemsTotalCaloriesKcal,
+        promotionDiscountCents,
+        promotionSnapshots,
         lines: order.lines,
         route: order.route,
         incidentKey: incident?.key ?? null,
@@ -896,8 +1444,94 @@ export class OrderService {
       if (identity.accountId) {
         await this.wallet.debitOrder(tx, identity.accountId, order.totalCents, id);
       }
+      if (checkout && persistedCheckout) {
+        await tx.collection<CheckoutSessionDoc>(collections.checkoutSessions).update(checkout.id, {
+          createdOrderIds: [...persistedCheckout.createdOrderIds, id],
+          createdStoreIds: [...persistedCheckout.createdStoreIds, order.storeId],
+          updatedAt: now,
+        });
+      } else {
+        const eventId = `legacy_order_create_${id}`;
+        await tx.collection<AnalyticsEventDoc>(collections.analyticsEvents).insert({
+          _id: eventId,
+          id: eventId,
+          visitorId: identity.visitorId ?? null,
+          accountId: identity.accountId ?? null,
+          eventName: 'legacy.order_create',
+          payload: { orderId: id, storeId: order.storeId },
+          createdAt: now,
+        });
+      }
+      return row;
     });
-    return order;
+    return this.toOrder(saved);
+  }
+
+  private async quoteStoreWithPromotions(
+    request: QuoteRequest,
+    quotedAt: string,
+  ): Promise<CheckoutStoreQuote> {
+    const [base, activePromotions] = await Promise.all([
+      this.baseQuote(request),
+      this.promotions.activeForStore(request.storeId, quotedAt),
+    ]);
+    const { quote: baseQuote, store } = base;
+    const lines = baseQuote.lines.map((line) => ({ ...line }));
+    const snapshots: PromotionSnapshot[] = [];
+    let flashDiscountCents = 0;
+
+    for (const promotion of activePromotions.filter((row) => row.type === 'item_flash')) {
+      const line = lines.find((candidate) => candidate.menuItemId === promotion.menuItemId);
+      const item = store.menu.find((candidate) => candidate.id === promotion.menuItemId);
+      if (!line || !item || promotion.flashPriceCents === undefined) continue;
+      const optionPriceCents = line.unitPriceCents - item.basePriceCents;
+      const appliedPriceCents = Math.max(0, promotion.flashPriceCents + optionPriceCents);
+      if (appliedPriceCents >= line.unitPriceCents) continue;
+      const originalPriceCents = line.unitPriceCents;
+      const discountCents = (originalPriceCents - appliedPriceCents) * line.quantity;
+      line.unitPriceCents = appliedPriceCents;
+      line.totalCents = appliedPriceCents * line.quantity;
+      flashDiscountCents += discountCents;
+      snapshots.push({
+        promotionId: promotion.id,
+        name: promotion.name,
+        type: promotion.type,
+        storeId: promotion.storeId,
+        menuItemId: promotion.menuItemId,
+        originalPriceCents,
+        appliedPriceCents,
+        discountCents,
+        startsAt: promotion.startsAt,
+        endsAt: promotion.endsAt,
+      });
+    }
+
+    const itemsTotalCents = lines.reduce((sum, line) => sum + line.totalCents, 0);
+    const minimumOrderShortfallCents = Math.max(0, store.minimumOrderCents - baseQuote.itemsTotalCents);
+    const threshold = bestThresholdDiscount(activePromotions, itemsTotalCents);
+    if (threshold) snapshots.push(threshold.snapshot);
+    const promotionDiscountCents = flashDiscountCents + (threshold?.discountCents ?? 0);
+    const totalCents = Math.max(
+      0,
+      itemsTotalCents + store.deliveryFeeCents + store.packingFeeCents - (threshold?.discountCents ?? 0),
+    );
+    return {
+      storeId: store.id,
+      storeName: store.name,
+      lines,
+      originalItemsTotalCents: baseQuote.itemsTotalCents,
+      itemsTotalCents,
+      deliveryFeeCents: store.deliveryFeeCents,
+      packingFeeCents: store.packingFeeCents,
+      minimumOrderCents: store.minimumOrderCents,
+      minimumOrderShortfallCents,
+      flashDiscountCents,
+      storeDiscountCents: threshold?.discountCents ?? 0,
+      promotionDiscountCents,
+      promotionSnapshots: snapshots,
+      totalCents,
+      itemsTotalCaloriesKcal: baseQuote.itemsTotalCaloriesKcal,
+    };
   }
 
   async find(id: string, identity: { visitorId?: string; accountId?: string } = {}): Promise<VirtualOrder> {
@@ -920,49 +1554,174 @@ export class OrderService {
     return rows.map((row) => this.toOrder(row));
   }
 
+  async listPage(
+    visitorId?: string,
+    accountId?: string,
+    rawLimit?: string,
+    rawCursor?: string,
+  ): Promise<CursorPage<VirtualOrder>> {
+    if (!visitorId && !accountId) return { items: [], nextCursor: null };
+    const limit = Math.min(50, Math.max(1, Number.parseInt(rawLimit ?? '', 10) || 20));
+    const subjectKey = identitySubject({ visitorId, accountId });
+    const cursor = decodeOrderCursor(rawCursor, subjectKey);
+    const identityWhere = accountId ? { accountId } : { visitorId };
+    const rows = await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).list({
+      where: cursor
+        ? {
+          ...identityWhere,
+          $or: [
+            { createdAt: { $lt: cursor.createdAt } },
+            { createdAt: cursor.createdAt, id: { $lt: cursor.id } },
+          ],
+        }
+        : identityWhere,
+      orderBy: [['createdAt', 'desc'], ['id', 'desc']],
+      limit: limit + 1,
+    });
+    const hasMore = rows.length > limit;
+    const visibleRows: VirtualOrderDoc[] = [];
+    for (const row of rows.slice(0, limit)) {
+      if (isRefundDue(row)) await this.refundFailedOrder(row.id);
+      visibleRows.push((await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).get(row.id)) ?? row);
+    }
+    return {
+      items: visibleRows.map((row) => this.toOrder(row)),
+      nextCursor: hasMore && visibleRows.length
+        ? encodeOrderCursor(visibleRows.at(-1)!, subjectKey)
+        : null,
+    };
+  }
+
   async merge(visitorId: string, accountId: string, db = this.db): Promise<{ merged: number }> {
     const orders = db.collection<VirtualOrderDoc>(collections.virtualOrders);
     const rows = await orders.list({ where: { visitorId } });
     await Promise.all(rows.map((row) => orders.update(row.id, { visitorId: null, accountId, updatedAt: db.now().toISOString() })));
-    return { merged: rows.length };
+    const checkoutSessions = db.collection<CheckoutSessionDoc>(collections.checkoutSessions);
+    const sessions = await checkoutSessions.list({ where: { visitorId } });
+    await Promise.all(sessions.map((session) => checkoutSessions.update(session.id, {
+      visitorId: null,
+      accountId,
+      subjectKey: `account:${accountId}`,
+      updatedAt: db.now().toISOString(),
+    })));
+    return { merged: rows.length + sessions.length };
   }
 
   async savings(accountId?: string): Promise<AccountSavings> {
-    if (!accountId) return { savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0 };
+    const stats = await this.gameStats(accountId);
+    return {
+      savedMoneyCents: stats.simulatedOrderAmountCents,
+      savedCaloriesKcal: stats.simulatedCaloriesKcal,
+      completedOrderCount: stats.completedOrderCount,
+      deprecated: true,
+      replacement: '/v1/accounts/me/game-stats',
+    };
+  }
+
+  async gameStats(accountId?: string): Promise<AccountGameStats> {
+    if (!accountId) {
+      return {
+        totalOrderCount: 0,
+        completedOrderCount: 0,
+        failedOrderCount: 0,
+        simulatedOrderAmountCents: 0,
+        simulatedCaloriesKcal: 0,
+      };
+    }
     await this.settleFailedOrders(accountId);
-    const rows = await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).list({ where: { accountId } });
-    return rows.reduce<AccountSavings>((summary, row) => {
-      if (this.currentStatus(row) !== 'completed') return summary;
-      if (this.settlementMode(row) === 'virtual_balance') summary.savedMoneyCents += row.totalCents;
-      summary.savedCaloriesKcal += row.itemsTotalCaloriesKcal;
-      summary.completedOrderCount += 1;
-      return summary;
-    }, { savedMoneyCents: 0, savedCaloriesKcal: 0, completedOrderCount: 0 });
+    const rows = await listAll(
+      this.db.collection<VirtualOrderDoc>(collections.virtualOrders),
+      { where: { accountId }, orderBy: [['createdAt', 'asc']] },
+    );
+    const completed = rows.filter((row) => this.currentStatus(row) === 'completed');
+    const failed = rows.filter((row) => this.currentStatus(row) === 'failed');
+    return {
+      totalOrderCount: rows.length,
+      completedOrderCount: completed.length,
+      failedOrderCount: failed.length,
+      simulatedOrderAmountCents: completed.reduce((sum, row) => sum + row.totalCents, 0),
+      simulatedCaloriesKcal: completed.reduce((sum, row) => sum + row.itemsTotalCaloriesKcal, 0),
+      firstOrderAt: rows[0]?.createdAt,
+      lastOrderAt: rows.at(-1)?.createdAt,
+    };
   }
 
   async settleFailedOrders(accountId?: string, orderId?: string): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    if (orderId) {
+      await this.refundFailedOrder(orderId);
+      return;
+    }
+    const rows = await listAll(this.db.collection<VirtualOrderDoc>(collections.virtualOrders), {
+      where: accountId ? { accountId } : {},
+      orderBy: [['failedAt', 'desc']],
+    });
+    for (const order of rows.filter(isRefundDue)) await this.refundFailedOrder(order.id);
+  }
+
+  async settleFailedOrdersBatch(limit = 100): Promise<{ processed: number; refunded: number; hasMore: boolean }> {
+    const safeLimit = Math.min(200, Math.max(1, Math.trunc(limit)));
+    const candidates: VirtualOrderDoc[] = [];
+    const orders = this.db.collection<VirtualOrderDoc>(collections.virtualOrders);
+    const pageSize = 100;
+    let skip = 0;
+    let reachedEnd = false;
+    while (candidates.length <= safeLimit && !reachedEnd) {
+      const page = await orders.list({
+        orderBy: [['failedAt', 'desc']],
+        skip,
+        limit: pageSize,
+      });
+      candidates.push(...page.filter(isRefundDue));
+      reachedEnd = page.length < pageSize;
+      skip += pageSize;
+    }
+    const batch = candidates.slice(0, safeLimit);
+    let refunded = 0;
+    for (const order of batch) {
+      if (await this.refundFailedOrder(order.id)) refunded += 1;
+    }
+    return {
+      processed: batch.length,
+      refunded,
+      hasMore: candidates.length > safeLimit || !reachedEnd,
+    };
+  }
+
+  private async refundFailedOrder(orderId: string): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
       const orders = tx.collection<VirtualOrderDoc>(collections.virtualOrders);
-      const rows = await orders.list({ where: accountId ? { accountId } : {} });
-      const due = rows.filter((row) => row.failedAt && !row.refundedAt
-        && new Date(row.failedAt).getTime() <= Date.now()
-        && (!orderId || row.id === orderId));
-      for (const order of due) {
-        if (!order.accountId) continue;
-        const account = await tx.collection<AccountDoc>(collections.accounts).get(order.accountId);
-        if (!account) continue;
-        const refunds = tx.collection<WalletTransactionDoc>(collections.walletTransactions);
-        const refundId = `order_refund_${order.id}`;
-        if (await refunds.get(refundId) || await refunds.findOne({ orderId: order.id, type: 'order_refund' })) continue;
-        const balanceCents = account.balanceCents + order.totalCents;
-        await tx.collection<AccountDoc>(collections.accounts).update(account.id, { balanceCents, updatedAt: tx.now().toISOString() });
-        await refunds.insert(walletTx(tx, account.id, 'order_refund', order.totalCents, balanceCents, '配送失败退款', {
-          _id: refundId,
-          id: refundId,
-          orderId: order.id,
-        }));
-        await orders.update(order.id, { status: 'failed', refundedAt: tx.now().toISOString(), updatedAt: tx.now().toISOString() });
+      const order = await orders.get(orderId);
+      if (!order || !isRefundDue(order) || !order.accountId) return false;
+      const account = await tx.collection<AccountDoc>(collections.accounts).get(order.accountId);
+      if (!account) return false;
+      const refunds = tx.collection<WalletTransactionDoc>(collections.walletTransactions);
+      const refundId = `order_refund_${order.id}`;
+      if (await refunds.get(refundId)) {
+        if (!order.refundedAt) {
+          await orders.update(order.id, {
+            status: 'failed',
+            refundedAt: tx.now().toISOString(),
+            updatedAt: tx.now().toISOString(),
+          });
+        }
+        return false;
       }
+      const balanceCents = account.balanceCents + order.totalCents;
+      await tx.collection<AccountDoc>(collections.accounts).update(account.id, {
+        balanceCents,
+        updatedAt: tx.now().toISOString(),
+      });
+      await refunds.insert(walletTx(tx, account.id, 'order_refund', order.totalCents, balanceCents, '虚拟配送失败退款', {
+        _id: refundId,
+        id: refundId,
+        orderId: order.id,
+      }));
+      await orders.update(order.id, {
+        status: 'failed',
+        refundedAt: tx.now().toISOString(),
+        updatedAt: tx.now().toISOString(),
+      });
+      return true;
     });
   }
 
@@ -975,6 +1734,9 @@ export class OrderService {
     return {
       id: row.id,
       isVirtual: true,
+      checkoutId: row.checkoutId ?? undefined,
+      quoteId: row.quoteId ?? undefined,
+      idempotencyKey: row.idempotencyKey ?? undefined,
       visitorId: row.visitorId ?? undefined,
       accountId: row.accountId ?? undefined,
       settlementMode: this.settlementMode(row),
@@ -993,6 +1755,9 @@ export class OrderService {
       packingFeeCents: row.packingFeeCents,
       totalCents: row.totalCents,
       itemsTotalCaloriesKcal: row.itemsTotalCaloriesKcal,
+      promotionDiscountCents: row.promotionDiscountCents ?? 0,
+      promotionSnapshots: row.promotionSnapshots ?? [],
+      fundsNotice: VIRTUAL_FUNDS_NOTICE,
       lines: row.lines as VirtualOrder['lines'],
       route: row.route as VirtualRoute,
       incident,
@@ -1182,15 +1947,51 @@ export class ShareService {
       if (!config.enabled || !invite || !isRewardShare(invite.kind) || invite.inviterAccountId !== accountId || invite.initiatedRewardGranted || new Date(invite.expiresAt).getTime() <= Date.now()) {
         return { granted: false, amountCents: 0, balanceCents: account.balanceCents };
       }
-      const todayStart = `${shanghaiBusinessDate()}T00:00:00+08:00`;
-      const grants = (await tx.collection<ShareInviteDoc>(collections.shareInvites).list({ where: { inviterAccountId: accountId } }))
-        .filter((row) => row.initiatedRewardGranted && row.createdAt >= todayStart);
-      if (grants.length >= config.dailyInitiatedLimit || config.initiatedRewardCents <= 0) {
+      const rewardedAt = tx.now().toISOString();
+      const businessDate = shanghaiBusinessDate(tx.now());
+      const dailyId = `share_reward_daily_${sha256(`${accountId}:${businessDate}`).slice(0, 40)}`;
+      const dailyRewards = tx.collection<ShareRewardDailyDoc>(collections.shareRewardDaily);
+      const daily = await dailyRewards.get(dailyId);
+      if ((daily?.grantedCount ?? 0) >= config.dailyInitiatedLimit || config.initiatedRewardCents <= 0) {
         return { granted: false, amountCents: 0, balanceCents: account.balanceCents };
       }
-      const summary = await this.wallet.credit(accountId, config.initiatedRewardCents, 'share_initiated', '朋友圈分享奖励（虚拟饭钱，不可提现）', tx);
-      await tx.collection<ShareInviteDoc>(collections.shareInvites).update(token, { initiatedRewardGranted: true });
-      return { granted: true, amountCents: config.initiatedRewardCents, balanceCents: summary.balanceCents };
+      const transactionId = `share_initiated_${sha256(`${accountId}:${token}`).slice(0, 40)}`;
+      const summary = await this.wallet.credit(
+        accountId,
+        config.initiatedRewardCents,
+        'share_initiated',
+        '朋友圈分享奖励（虚拟饭钱，不可提现）',
+        tx,
+        {
+          _id: transactionId,
+          id: transactionId,
+          businessDate,
+        },
+      );
+      const nextDaily: ShareRewardDailyDoc = {
+        _id: dailyId,
+        id: dailyId,
+        accountId,
+        businessDate,
+        grantedCount: (daily?.grantedCount ?? 0) + 1,
+        totalAmountCents: (daily?.totalAmountCents ?? 0) + config.initiatedRewardCents,
+        updatedAt: rewardedAt,
+      };
+      if (daily) await dailyRewards.update(dailyId, nextDaily);
+      else await dailyRewards.insert(nextDaily);
+      await tx.collection<ShareInviteDoc>(collections.shareInvites).update(token, {
+        initiatedRewardGranted: true,
+        initiatedRewardGrantedAt: rewardedAt,
+        rewardedAt,
+        rewardBusinessDate: businessDate,
+      });
+      return {
+        granted: true,
+        amountCents: config.initiatedRewardCents,
+        balanceCents: summary.balanceCents,
+        rewardedAt,
+        businessDate,
+      };
     });
   }
 
@@ -1273,7 +2074,9 @@ export class ShareService {
         storeName: order.storeName || '神秘小馆',
         orderLines: order.lines as VirtualOrder['lines'],
         dishNames: (order.lines as VirtualOrder['lines']).map((line) => line.name),
-        savedMoneyCents: order.settlementMode === 'guest_simulation' ? 0 : order.totalCents,
+        // Compatibility field name: share clients now present this value as
+        // simulated order amount, regardless of guest/account settlement.
+        savedMoneyCents: order.totalCents,
         savedCaloriesKcal: order.itemsTotalCaloriesKcal,
         completedOrderCount: 1,
         ...(input.kind === 'order_egg' ? { easterEgg } : {}),
@@ -1283,9 +2086,7 @@ export class ShareService {
     const rows = (await orders.list({ where: { accountId } })).filter((order) => (
       order.status !== 'failed' && Date.now() >= new Date(order.startedAt).getTime() + DELIVERY_START_MS + order.durationMs
     ));
-    const savedMoneyCents = rows.reduce((sum, order) => (
-      sum + (order.settlementMode === 'guest_simulation' ? 0 : order.totalCents)
-    ), 0);
+    const savedMoneyCents = rows.reduce((sum, order) => sum + order.totalCents, 0);
     const savedCaloriesKcal = rows.reduce((sum, order) => sum + order.itemsTotalCaloriesKcal, 0);
     const completedOrderCount = rows.length;
     const allLines = rows.flatMap((order) => order.lines as VirtualOrder['lines']);
@@ -1340,6 +2141,183 @@ function virtualDeliveryDurationMs(minutes: number, seed: string): number {
   return Math.min(MAX_DELIVERY_DURATION_MS, base + jitter);
 }
 
+function identitySubject(identity: { visitorId?: string; accountId?: string }): string {
+  if (identity.accountId) return `account:${identity.accountId}`;
+  if (identity.visitorId) return `visitor:${identity.visitorId}`;
+  unauthorized();
+}
+
+function validateCheckoutIdentifier(value: string, name: string): void {
+  if (!/^[a-zA-Z0-9:_-]{8,120}$/.test(value)) badRequest(`${name} 格式不正确`, 'INVALID_CHECKOUT');
+}
+
+function anonymizedDeliveryAddress(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return {
+    ...(value as Record<string, unknown>),
+    name: '已注销用户',
+    phone: '',
+    address: '',
+    detail: '',
+    tag: '',
+  };
+}
+
+function anonymizedVirtualRoute(): VirtualRoute {
+  const point: GeoPoint = { lat: 0, lng: 0, coordSystem: 'gcj02' };
+  return {
+    id: 'deleted-account-route',
+    cityCode: '',
+    origin: point,
+    destination: point,
+    polyline: [],
+    routeSource: 'generated',
+    label: '虚拟配送路线',
+  };
+}
+
+function validateIdempotencyKey(value: string): void {
+  if (!/^[a-zA-Z0-9._:-]{8,120}$/.test(value)) badRequest('idempotencyKey 格式不正确', 'INVALID_IDEMPOTENCY_KEY');
+}
+
+function encodeOrderCursor(order: Pick<VirtualOrderDoc, 'createdAt' | 'id'>, subjectKey: string): string {
+  return Buffer.from(JSON.stringify({
+    createdAt: order.createdAt,
+    id: order.id,
+    subject: sha256(subjectKey).slice(0, 16),
+  })).toString('base64url');
+}
+
+function decodeOrderCursor(
+  cursor: string | undefined,
+  subjectKey: string,
+): Pick<VirtualOrderDoc, 'createdAt' | 'id'> | null {
+  if (!cursor) return null;
+  try {
+    const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+      createdAt?: unknown;
+      id?: unknown;
+      subject?: unknown;
+    };
+    if (typeof value.createdAt !== 'string'
+      || !Number.isFinite(Date.parse(value.createdAt))
+      || typeof value.id !== 'string'
+      || !value.id
+      || value.subject !== sha256(subjectKey).slice(0, 16)) {
+      badRequest('订单游标无效', 'INVALID_CURSOR');
+    }
+    return { createdAt: value.createdAt, id: value.id };
+  } catch (error) {
+    if (isCloudApiError(error)) throw error;
+    badRequest('订单游标无效', 'INVALID_CURSOR');
+  }
+}
+
+function orderLinesFingerprint(lines: QuoteRequest['lines']): string {
+  if (!Array.isArray(lines)) return '';
+  return JSON.stringify(lines.map((line) => ({
+    menuItemId: line.menuItemId,
+    optionIds: [...(line.optionIds ?? [])].sort(),
+    quantity: line.quantity,
+  })).sort((left, right) => (
+    left.menuItemId.localeCompare(right.menuItemId)
+    || JSON.stringify(left.optionIds).localeCompare(JSON.stringify(right.optionIds))
+  )));
+}
+
+function storePricingFingerprint(quote: CheckoutStoreQuote): string {
+  return JSON.stringify({
+    storeId: quote.storeId,
+    lines: quote.lines.map((line) => ({
+      menuItemId: line.menuItemId,
+      optionNames: line.optionNames,
+      quantity: line.quantity,
+      unitPriceCents: line.unitPriceCents,
+      totalCents: line.totalCents,
+      unitCaloriesKcal: line.unitCaloriesKcal,
+      totalCaloriesKcal: line.totalCaloriesKcal,
+    })),
+    originalItemsTotalCents: quote.originalItemsTotalCents,
+    itemsTotalCents: quote.itemsTotalCents,
+    deliveryFeeCents: quote.deliveryFeeCents,
+    packingFeeCents: quote.packingFeeCents,
+    minimumOrderCents: quote.minimumOrderCents,
+    minimumOrderShortfallCents: quote.minimumOrderShortfallCents,
+    flashDiscountCents: quote.flashDiscountCents,
+    storeDiscountCents: quote.storeDiscountCents,
+    promotionSnapshots: quote.promotionSnapshots,
+    totalCents: quote.totalCents,
+  });
+}
+
+function assertOrderRetryMatches(
+  order: VirtualOrderDoc,
+  request: OrderCreateRequest,
+  identity: { visitorId?: string; accountId?: string },
+): void {
+  if (order.accountId !== (identity.accountId ?? null)
+    || order.visitorId !== (identity.visitorId ?? null)
+    || order.checkoutId !== (request.checkoutId ?? null)
+    || order.quoteId !== (request.quoteId ?? null)
+    || order.storeId !== request.storeId
+    || order.idempotencyKey !== (request.idempotencyKey ?? null)
+    || (order.requestFingerprint !== undefined
+      && order.requestFingerprint !== null
+      && order.requestFingerprint !== orderCreateFingerprint(request))) {
+    conflict('幂等键已用于其他订单请求', 'IDEMPOTENCY_CONFLICT');
+  }
+}
+
+function orderCreateFingerprint(request: OrderCreateRequest): string {
+  return sha256(JSON.stringify({
+    checkoutId: request.checkoutId ?? null,
+    quoteId: request.quoteId ?? null,
+    storeId: request.storeId,
+    lines: orderLinesFingerprint(request.lines),
+    virtualDestinationId: request.virtualDestinationId,
+    virtualDestinationPoint: request.virtualDestinationPoint ?? null,
+    deliveryAddressSnapshot: request.deliveryAddressSnapshot ?? null,
+  }));
+}
+
+function bestThresholdDiscount(
+  promotions: PromotionCampaign[],
+  itemsTotalCents: number,
+): { discountCents: number; snapshot: PromotionSnapshot } | undefined {
+  const candidates = promotions
+    .filter((promotion) => promotion.type === 'store_threshold')
+    .flatMap((promotion) => (promotion.tiers ?? [])
+      .filter((tier) => tier.thresholdCents <= itemsTotalCents)
+      .map((tier) => ({ promotion, tier })))
+    .sort((left, right) => (
+      right.tier.thresholdCents - left.tier.thresholdCents
+      || right.tier.discountCents - left.tier.discountCents
+    ));
+  const selected = candidates[0];
+  if (!selected) return undefined;
+  return {
+    discountCents: selected.tier.discountCents,
+    snapshot: {
+      promotionId: selected.promotion.id,
+      name: selected.promotion.name,
+      type: selected.promotion.type,
+      storeId: selected.promotion.storeId,
+      thresholdCents: selected.tier.thresholdCents,
+      discountCents: selected.tier.discountCents,
+      startsAt: selected.promotion.startsAt,
+      endsAt: selected.promotion.endsAt,
+    },
+  };
+}
+
+function isRefundDue(order: VirtualOrderDoc): boolean {
+  return Boolean(
+    order.failedAt
+    && !order.refundedAt
+    && Date.parse(order.failedAt) <= Date.now(),
+  );
+}
+
 export class AnalyticsService {
   constructor(private readonly db: Database, private readonly auth: AuthService) {}
 
@@ -1349,15 +2327,21 @@ export class AnalyticsService {
     if (!eventName || eventName.length > 64 || !/^[a-zA-Z0-9._-]+$/.test(eventName)) badRequest('eventName 格式不正确');
     const payload = input.payload && typeof input.payload === 'object' ? input.payload as Record<string, unknown> : {};
     if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > 8_192) badRequest('埋点数据过大', 'PAYLOAD_TOO_LARGE');
+    const sanitizedPayload = sanitizeForAuditLog(payload) as Record<string, unknown>;
     const identity = await this.auth.resolvePersistedIdentity(authorization, openId, webUid);
-    const id = randomUUID();
+    const eventId = typeof input.eventId === 'string' ? input.eventId.trim() : '';
+    if (eventId && !/^[a-zA-Z0-9._:-]{8,120}$/.test(eventId)) badRequest('eventId 格式不正确');
+    const id = eventId || `event_${randomUUID()}`;
+    if (await this.db.collection<AnalyticsEventDoc>(collections.analyticsEvents).get(id)) {
+      return { recorded: true, deduplicated: true };
+    }
     await this.db.collection<AnalyticsEventDoc>(collections.analyticsEvents).insert({
       _id: id,
       id,
       visitorId: identity.visitorId ?? null,
       accountId: identity.accountId ?? null,
       eventName,
-      payload,
+      payload: sanitizedPayload,
       createdAt: this.db.now().toISOString(),
     });
     return { recorded: true };
@@ -1401,10 +2385,6 @@ function validateCoordinates(lat: number, lng: number): void {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     badRequest('经纬度参数不正确');
   }
-}
-
-export function shanghaiBusinessDate(now = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
 
 function walletTx(
@@ -1614,6 +2594,10 @@ function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function guestSessionId(accessToken: string): string {
+  return `guest_session_${sha256(accessToken)}`;
+}
+
 function validateProfile(profile: UserProfile | undefined, code: string) {
   const avatarUrl = profile?.avatarUrl?.trim();
   const nickname = profile?.nickname?.trim();
@@ -1659,10 +2643,38 @@ function requireTencentMapKey(): string {
 }
 
 async function mapGet<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(
+    url,
+    {},
+    { label: '地图服务', timeoutMs: 4_000, retries: 1 },
+  );
   const body = await response.json() as T & { message?: string };
   if (!response.ok) badRequest(mapErrorMessage(body));
   return body;
+}
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  options: { label: string; timeoutMs: number; retries?: number },
+): Promise<Response> {
+  const attempts = Math.max(1, (options.retries ?? 0) + 1);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
+    try {
+      const response = await fetch(input, { ...init, signal: controller.signal });
+      if (response.status >= 500 && attempt + 1 < attempts) continue;
+      return response;
+    } catch {
+      if (attempt + 1 >= attempts) {
+        serviceUnavailable(`${options.label}暂不可用，请稍后重试`, 'UPSTREAM_UNAVAILABLE');
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  serviceUnavailable(`${options.label}暂不可用，请稍后重试`, 'UPSTREAM_UNAVAILABLE');
 }
 
 async function mapPlaces(url: string): Promise<PlaceSuggestion[]> {

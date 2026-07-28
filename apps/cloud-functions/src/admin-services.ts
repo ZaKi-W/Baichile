@@ -7,19 +7,28 @@ import type {
   AdminUserStatus,
   ManagedContentStatus,
 } from '@baichile/api-contract';
+import type { DeliveryIncidentKey } from '@baichile/domain';
+import { getDeliveryIncidentPhase } from '@baichile/domain';
+import type { DeliveryStatus } from '@baichile/map-core';
 import { collections } from './collections';
 import { CatalogImportService } from './catalog-import';
 import { refreshStoreSearchText } from './catalog-search';
-import type { Database } from './database';
+import type { CollectionStore, Database, Query } from './database';
 import { badRequest, conflict, forbidden, notFound, unauthorized } from './errors';
 import type {
   AccountDoc,
   AdminAuditLogDoc,
   AdminSessionDoc,
   AdminUserDoc,
+  AnalyticsEventDoc,
+  CheckoutSessionDoc,
   MenuItemDoc,
+  PromotionCampaignDoc,
+  ShareConfigDoc,
+  ShareRewardDailyDoc,
   StoreDoc,
   VirtualOrderDoc,
+  VisitorSessionDoc,
   WalletTransactionDoc,
 } from './models';
 import {
@@ -32,9 +41,20 @@ import {
   type AuthenticatedAdmin,
 } from './admin-security';
 import type { PageQuery } from './types';
-import { shanghaiBusinessDate } from './services';
+import { shanghaiBusinessDate } from './business-time';
+import { sanitizeForAuditLog } from './redaction';
 
 const SESSION_MS = 8 * 60 * 60 * 1000;
+const ORDER_STEP_TIMES = [0, 2_000, 5_000, 9_000, 14_000, 18_000] as const;
+const ORDER_STEP_STATUSES = [
+  'created',
+  'merchant_accepted',
+  'preparing',
+  'rider_assigned',
+  'picked_up',
+  'delivering',
+] as const satisfies readonly DeliveryStatus[];
+const DELIVERY_START_MS = ORDER_STEP_TIMES.at(-1)!;
 
 export class AdminCloudServices {
   readonly auth: AdminAuthService;
@@ -171,8 +191,8 @@ export class AdminAuditService {
       action: input.action,
       resourceType: input.resourceType,
       resourceId: input.resourceId ?? null,
-      beforeData: input.beforeData,
-      afterData: input.afterData,
+      beforeData: sanitizeForAuditLog(input.beforeData),
+      afterData: sanitizeForAuditLog(input.afterData),
       ipAddress: input.ipAddress ?? null,
       createdAt: db.now().toISOString(),
     });
@@ -191,13 +211,44 @@ export class AdminQueryService {
       accounts,
       orders,
       walletTransactions,
+      checkoutSessions,
+      visitorSessions,
+      rewardDaily,
+      shareConfig,
+      promotionImpressions,
     ] = await Promise.all([
       this.db.collection<StoreDoc>(collections.stores).list(),
       this.db.collection<MenuItemDoc>(collections.menuItems).list(),
       this.db.collection<AccountDoc>(collections.accounts).list(),
       this.db.collection<VirtualOrderDoc>(collections.virtualOrders).list(),
       this.db.collection<WalletTransactionDoc>(collections.walletTransactions).list(),
+      this.db.collection<CheckoutSessionDoc>(collections.checkoutSessions).list(),
+      this.db.collection<VisitorSessionDoc>(collections.visitorSessions).list(),
+      this.db.collection<ShareRewardDailyDoc>(collections.shareRewardDaily).list(),
+      this.db.collection<ShareConfigDoc>(collections.shareRewardConfigs).get('default'),
+      this.db.collection<AnalyticsEventDoc>(collections.analyticsEvents).list({
+        where: { eventName: 'promotion.impression' },
+        orderBy: [['createdAt', 'desc']],
+      }),
     ]);
+    const firstCheckouts = checkoutSessions.filter((checkout) => checkout.firstCheckout);
+    const accountOrders = new Map<string, VirtualOrderDoc[]>();
+    for (const order of orders) {
+      if (!order.accountId) continue;
+      const rows = accountOrders.get(order.accountId) ?? [];
+      rows.push(order);
+      accountOrders.set(order.accountId, rows);
+    }
+    const productMetrics = calculateProductMetrics({
+      accountOrders,
+      firstCheckouts,
+      visitorSessions,
+      orders,
+      rewardDaily,
+      shareConfig,
+      promotionImpressions,
+      asOf: this.db.now(),
+    });
     return {
       stores: { total: stores.length, active: stores.filter((row) => row.status === 'active').length },
       menuItems: { total: menuItems.length, active: menuItems.filter((row) => row.status === 'active').length },
@@ -213,10 +264,19 @@ export class AdminQueryService {
           .filter((row) => new Date(row.createdAt) >= today)
           .reduce((sum, row) => sum + row.amountCents, 0),
       },
+      productMetrics,
     };
   }
 
   async listStores(query: PageQuery) {
+    if (!needsMemoryPaging(query)) {
+      return databasePage(
+        this.db.collection<StoreDoc>(collections.stores),
+        query,
+        compactQuery({ status: query.status, categoryId: query.categoryId }),
+        [['sortOrder', 'asc'], ['name', 'asc']],
+      );
+    }
     const rows = await this.db.collection<StoreDoc>(collections.stores).list({ orderBy: [['sortOrder', 'asc'], ['name', 'asc']] });
     return page(filterRows(rows, query, ['name'], ['status', 'categoryId']), query);
   }
@@ -229,24 +289,54 @@ export class AdminQueryService {
 
   async listMenuItems(storeId: string, query: PageQuery) {
     await this.store(storeId);
+    if (!needsMemoryPaging(query)) {
+      return databasePage(
+        this.db.collection<MenuItemDoc>(collections.menuItems),
+        query,
+        compactQuery({ storeId, status: query.status, categoryId: query.categoryId }),
+        [['sortOrder', 'asc'], ['name', 'asc']],
+      );
+    }
     const rows = await this.db.collection<MenuItemDoc>(collections.menuItems).list({ where: { storeId }, orderBy: [['sortOrder', 'asc'], ['name', 'asc']] });
     return page(filterRows(rows, query, ['name'], ['status', 'categoryId']), query);
   }
 
   async listAccounts(query: PageQuery) {
+    if (!needsMemoryPaging(query)) {
+      const result = await databasePage(
+        this.db.collection<AccountDoc>(collections.accounts),
+        query,
+        compactQuery({ status: query.status }),
+        [['createdAt', 'desc']],
+      );
+      return { ...result, items: result.items.map(maskAccountForAdmin) };
+    }
     const rows = await this.db.collection<AccountDoc>(collections.accounts).list({ orderBy: [['createdAt', 'desc']] });
-    return page(filterRows(rows, query, ['id', 'nickname'], ['status']), query);
+    return page(
+      filterRows(rows, query, ['id', 'nickname', 'phoneNumber'], ['status'])
+        .map(maskAccountForAdmin),
+      query,
+    );
   }
 
   async account(id: string) {
     const row = await this.db.collection<AccountDoc>(collections.accounts).get(id);
     if (!row) notFound('用户不存在', 'ACCOUNT_NOT_FOUND');
     const orderCount = await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).count({ accountId: id });
-    return { ...row, orderCount };
+    return { ...maskAccountForAdmin(row), orderCount };
   }
 
   async wallet(accountId: string, query: PageQuery) {
     const account = await this.account(accountId);
+    if (!needsMemoryPaging(query)) {
+      const transactions = await databasePage(
+        this.db.collection<WalletTransactionDoc>(collections.walletTransactions),
+        query,
+        compactQuery({ accountId, type: query.type }),
+        [['createdAt', 'desc']],
+      );
+      return { account, transactions };
+    }
     const rows = await this.db.collection<WalletTransactionDoc>(collections.walletTransactions).list({
       where: { accountId },
       orderBy: [['createdAt', 'desc']],
@@ -255,8 +345,36 @@ export class AdminQueryService {
   }
 
   async listOrders(query: PageQuery) {
+    const now = Date.now();
+    if (!needsMemoryPaging(query) && !query.status) {
+      const result = await databasePage(
+        this.db.collection<VirtualOrderDoc>(collections.virtualOrders),
+        query,
+        compactQuery({
+          accountId: query.accountId,
+          storeId: query.storeId,
+          adminStatus: query.adminStatus,
+        }),
+        [['createdAt', 'desc']],
+      );
+      return {
+        ...result,
+        items: result.items.map((order) => maskOrderForAdmin(order, now)),
+      };
+    }
+    // Omitting a limit deliberately asks the database adapter to page through
+    // the complete collection. Public order status is time-derived, so a
+    // persisted `created` filter would miss completed or in-flight orders.
     const rows = await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).list({ orderBy: [['createdAt', 'desc']] });
-    return page(filterRows(rows, query, ['id', 'accountId'], ['accountId', 'storeId', 'status', 'adminStatus']), query);
+    return page(
+      filterRows(
+        rows.map((order) => maskOrderForAdmin(order, now)),
+        query,
+        ['id', 'accountId'],
+        ['accountId', 'storeId', 'status', 'adminStatus'],
+      ),
+      query,
+    );
   }
 
   async order(id: string) {
@@ -266,10 +384,26 @@ export class AdminQueryService {
       order.accountId ? this.db.collection<AccountDoc>(collections.accounts).get(order.accountId) : null,
       this.db.collection<StoreDoc>(collections.stores).get(order.storeId),
     ]);
-    return { ...order, account, store };
+    return {
+      ...maskOrderForAdmin(order, Date.now()),
+      account: account ? maskAccountForAdmin(account) : null,
+      store,
+    };
   }
 
   async listAdminUsers(query: PageQuery) {
+    if (!needsMemoryPaging(query)) {
+      const result = await databasePage(
+        this.db.collection<AdminUserDoc>(collections.adminUsers),
+        query,
+        compactQuery({ status: query.status }),
+        [['createdAt', 'desc']],
+      );
+      return {
+        ...result,
+        items: result.items.map(({ passwordHash: _, ...row }) => row),
+      };
+    }
     const rows = await this.db.collection<AdminUserDoc>(collections.adminUsers).list({ orderBy: [['createdAt', 'desc']] });
     const items = filterRows(rows, query, ['username', 'displayName'], ['status'])
       .map(({ passwordHash: _, ...row }) => row);
@@ -277,8 +411,54 @@ export class AdminQueryService {
   }
 
   async listAuditLogs(query: PageQuery) {
+    if (!needsMemoryPaging(query)) {
+      const result = await databasePage(
+        this.db.collection<AdminAuditLogDoc>(collections.adminAuditLogs),
+        query,
+        compactQuery({ action: query.action, resourceType: query.resourceType }),
+        [['createdAt', 'desc']],
+      );
+      return {
+        ...result,
+        items: result.items.map((row) => ({
+          ...row,
+          beforeData: sanitizeForAuditLog(row.beforeData),
+          afterData: sanitizeForAuditLog(row.afterData),
+        })),
+      };
+    }
     const rows = await this.db.collection<AdminAuditLogDoc>(collections.adminAuditLogs).list({ orderBy: [['createdAt', 'desc']] });
-    return page(filterRows(rows, query, ['action', 'resourceType', 'resourceId'], ['action', 'resourceType']), query);
+    return page(
+      filterRows(rows, query, ['action', 'resourceType', 'resourceId'], ['action', 'resourceType'])
+        .map((row) => ({
+          ...row,
+          beforeData: sanitizeForAuditLog(row.beforeData),
+          afterData: sanitizeForAuditLog(row.afterData),
+        })),
+      query,
+    );
+  }
+
+  async listPromotions(query: PageQuery) {
+    if (!needsMemoryPaging(query)) {
+      return databasePage(
+        this.db.collection<PromotionCampaignDoc>(collections.promotionCampaigns),
+        query,
+        compactQuery({
+          storeId: query.storeId,
+          type: query.type,
+          lifecycleStatus: query.lifecycleStatus,
+        }),
+        [['createdAt', 'desc']],
+      );
+    }
+    const rows = await this.db.collection<PromotionCampaignDoc>(collections.promotionCampaigns).list({
+      orderBy: [['createdAt', 'desc']],
+    });
+    return page(
+      filterRows(rows, query, ['id', 'name'], ['storeId', 'type', 'lifecycleStatus']),
+      query,
+    );
   }
 }
 
@@ -344,7 +524,7 @@ export class AdminMutationService {
     const patch = parseAccountUpdate(value);
     const saved = await this.db.collection<AccountDoc>(collections.accounts).update(id, { ...patch, updatedAt: this.db.now().toISOString() });
     await this.audit.record(actor, { action: 'account.update', resourceType: 'account', resourceId: id, beforeData: row, afterData: saved, ipAddress });
-    return saved;
+    return maskAccountForAdmin(saved);
   }
 
   async adjustWallet(accountId: string, value: unknown, actor: AuthenticatedAdmin, ipAddress?: string | null) {
@@ -380,7 +560,7 @@ export class AdminMutationService {
     const patch = parseOrderUpdate(value);
     const saved = await this.db.collection<VirtualOrderDoc>(collections.virtualOrders).update(id, { ...patch, updatedAt: this.db.now().toISOString() });
     await this.audit.record(actor, { action: 'order.update', resourceType: 'order', resourceId: id, beforeData: { adminStatus: row.adminStatus, adminNote: row.adminNote }, afterData: patch, ipAddress });
-    return saved;
+    return maskOrderForAdmin(saved);
   }
 
   async createAdmin(value: unknown, actor: AuthenticatedAdmin, ipAddress?: string | null) {
@@ -448,12 +628,45 @@ function toAdmin(user: AdminUserDoc): AuthenticatedAdmin {
 }
 
 function page<T>(rows: T[], query: PageQuery): AdminPage<T> {
-  const rawPage = Number.parseInt(query.page ?? '', 10);
-  const rawSize = Number.parseInt(query.pageSize ?? '', 10);
-  const pageNumber = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
-  const pageSize = Math.min(100, Number.isFinite(rawSize) && rawSize > 0 ? rawSize : 20);
+  const { pageNumber, pageSize } = pagination(query);
   const start = (pageNumber - 1) * pageSize;
   return { items: rows.slice(start, start + pageSize), total: rows.length, page: pageNumber, pageSize };
+}
+
+async function databasePage<T extends Record<string, any>>(
+  collection: CollectionStore<T>,
+  query: PageQuery,
+  where: Query,
+  orderBy: Array<[string, 'asc' | 'desc']>,
+): Promise<AdminPage<T>> {
+  const { pageNumber, pageSize } = pagination(query);
+  const [total, items] = await Promise.all([
+    collection.count(where),
+    collection.list({
+      where,
+      orderBy,
+      skip: (pageNumber - 1) * pageSize,
+      limit: pageSize,
+    }),
+  ]);
+  return { items, total, page: pageNumber, pageSize };
+}
+
+function pagination(query: PageQuery): { pageNumber: number; pageSize: number } {
+  const rawPage = Number.parseInt(query.page ?? '', 10);
+  const rawSize = Number.parseInt(query.pageSize ?? '', 10);
+  return {
+    pageNumber: Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1,
+    pageSize: Math.min(100, Number.isFinite(rawSize) && rawSize > 0 ? rawSize : 20),
+  };
+}
+
+function needsMemoryPaging(query: PageQuery): boolean {
+  return Boolean(query.keyword?.trim() || query.dateFrom || query.dateTo);
+}
+
+function compactQuery(query: Query): Query {
+  return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined && value !== ''));
 }
 
 function filterRows<T extends Record<string, any>>(
@@ -483,6 +696,120 @@ function groupCount<T extends Record<string, any>>(rows: T[], field: string): Re
     result[key] = (result[key] ?? 0) + 1;
     return result;
   }, {});
+}
+
+function ratio(numerator: number, denominator: number): number {
+  return denominator > 0 ? Number((numerator / denominator).toFixed(4)) : 0;
+}
+
+export function calculateProductMetrics(input: {
+  accountOrders: Map<string, VirtualOrderDoc[]>;
+  firstCheckouts: CheckoutSessionDoc[];
+  visitorSessions: VisitorSessionDoc[];
+  orders: VirtualOrderDoc[];
+  rewardDaily: ShareRewardDailyDoc[];
+  shareConfig: ShareConfigDoc | null;
+  promotionImpressions: AnalyticsEventDoc[];
+  asOf?: Date;
+}) {
+  const asOf = input.asOf ?? new Date();
+  const completedAccountOrders = new Map<string, VirtualOrderDoc[]>();
+  for (const [accountId, rows] of input.accountOrders) {
+    const completed = rows.filter((order) => isCompletedMetricOrder(order, asOf));
+    if (completed.length) completedAccountOrders.set(accountId, completed);
+  }
+  const promotionConvertedOrderCount = input.orders.filter((order) => (
+    (order.promotionDiscountCents ?? 0) > 0 && isCompletedMetricOrder(order, asOf)
+  )).length;
+  const promotionImpressionEventCount = input.promotionImpressions.length;
+  const d1 = d1Reorder(completedAccountOrders, asOf);
+  return {
+    firstCheckoutCompletionRate: ratio(
+      input.firstCheckouts.filter((checkout) => checkout.createdOrderIds.length > 0).length,
+      input.firstCheckouts.length,
+    ),
+    guestToLoginRate: ratio(
+      input.visitorSessions.filter((session) => Boolean(session.accountId)).length,
+      input.visitorSessions.length,
+    ),
+    d1ReorderRate: d1.rate,
+    d1EligibleAccountCount: d1.eligible,
+    d1ReorderedAccountCount: d1.reordered,
+    d7ReorderRate: reorderWithinMs(completedAccountOrders, 7 * 24 * 60 * 60 * 1000),
+    promotionConversionRate: ratio(promotionConvertedOrderCount, promotionImpressionEventCount),
+    promotionConvertedOrderCount,
+    promotionImpressionEventCount,
+    promotionConversionDefinition: '已完成优惠订单数 / promotion.impression 曝光事件数',
+    deliveryFailureRate: ratio(
+      input.orders.filter((order) => Boolean(order.failedAt)).length,
+      input.orders.length,
+    ),
+    rewardAnomalyRate: ratio(
+      input.rewardDaily.filter((daily) => (
+        daily.grantedCount > (input.shareConfig?.config.dailyInitiatedLimit ?? Number.MAX_SAFE_INTEGER)
+      )).length,
+      input.rewardDaily.length,
+    ),
+  };
+}
+
+function d1Reorder(
+  accountOrders: Map<string, VirtualOrderDoc[]>,
+  asOf: Date,
+): { rate: number; eligible: number; reordered: number } {
+  let eligible = 0;
+  let reordered = 0;
+  const currentBusinessDate = shanghaiBusinessDate(asOf);
+  for (const rows of accountOrders.values()) {
+    const timestamps = orderTimestamps(rows);
+    const first = timestamps[0];
+    if (first === undefined) continue;
+    const nextBusinessDate = addBusinessDays(shanghaiBusinessDate(new Date(first)), 1);
+    // Use completed observation windows only so today's partial D1 cohort does
+    // not depress the metric.
+    if (nextBusinessDate >= currentBusinessDate) continue;
+    eligible += 1;
+    if (timestamps.slice(1).some((time) => (
+      shanghaiBusinessDate(new Date(time)) === nextBusinessDate
+    ))) {
+      reordered += 1;
+    }
+  }
+  return { rate: ratio(reordered, eligible), eligible, reordered };
+}
+
+function reorderWithinMs(accountOrders: Map<string, VirtualOrderDoc[]>, windowMs: number): number {
+  let reordered = 0;
+  for (const rows of accountOrders.values()) {
+    const timestamps = orderTimestamps(rows);
+    const first = timestamps[0];
+    if (first !== undefined && timestamps.slice(1).some((time) => time - first <= windowMs)) {
+      reordered += 1;
+    }
+  }
+  return ratio(reordered, accountOrders.size);
+}
+
+function orderTimestamps(rows: VirtualOrderDoc[]): number[] {
+  return rows
+    .map((order) => Date.parse(order.createdAt))
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right);
+}
+
+function isCompletedMetricOrder(order: VirtualOrderDoc, asOf: Date): boolean {
+  if (order.failedAt || order.status === 'failed') return false;
+  if (order.status === 'completed') return true;
+  const startedAt = Date.parse(order.startedAt);
+  return Number.isFinite(startedAt)
+    && Number.isFinite(order.durationMs)
+    && startedAt + 18_000 + order.durationMs <= asOf.getTime();
+}
+
+function addBusinessDays(value: string, days: number): string {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -613,4 +940,93 @@ function safeStructuredValue(value: unknown, name: string, maxBytes: number): un
     badRequest(`${name}格式不正确或内容过大`, 'INVALID_INPUT');
   }
   return JSON.parse(serialized) as unknown;
+}
+
+export function redactAuditValue(value: unknown, key = ''): unknown {
+  return sanitizeForAuditLog(value, key);
+}
+
+function maskAccountForAdmin(account: AccountDoc) {
+  const {
+    wechatOpenIdHash: _wechatOpenIdHash,
+    webAuthUidHash: _webAuthUidHash,
+    phoneHash: _phoneHash,
+    ...safe
+  } = account;
+  return {
+    ...safe,
+    phoneNumber: maskPhone(account.phoneNumber),
+    nickname: maskName(account.nickname),
+    avatarUrl: null,
+  };
+}
+
+function maskDeliveryAddress(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const address = value as Record<string, unknown>;
+  return {
+    ...address,
+    name: maskName(typeof address.name === 'string' ? address.name : null),
+    phone: maskPhone(typeof address.phone === 'string' ? address.phone : null),
+    address: maskLocation(typeof address.address === 'string' ? address.address : null),
+    detail: maskLocation(typeof address.detail === 'string' ? address.detail : null),
+  };
+}
+
+function maskOrderForAdmin(order: VirtualOrderDoc, now = Date.now()): VirtualOrderDoc {
+  return {
+    ...order,
+    status: currentOrderStatus(order, now),
+    destinationId: '[REDACTED]',
+    deliveryAddress: maskDeliveryAddress(order.deliveryAddress),
+    route: maskRouteForAdmin(order.route),
+  };
+}
+
+function currentOrderStatus(order: VirtualOrderDoc, now: number): DeliveryStatus {
+  if (order.incidentKey && order.incidentStartedAt && order.failedAt) {
+    const phase = getDeliveryIncidentPhase({
+      key: order.incidentKey as DeliveryIncidentKey,
+      startedAt: order.incidentStartedAt,
+      failedAt: order.failedAt,
+    }, now);
+    if (phase === 'incident' || phase === 'failed') return phase;
+  }
+  const elapsed = now - Date.parse(order.startedAt);
+  if (elapsed >= DELIVERY_START_MS + order.durationMs) return 'completed';
+  for (let index = ORDER_STEP_TIMES.length - 1; index >= 0; index -= 1) {
+    if (elapsed >= ORDER_STEP_TIMES[index]) return ORDER_STEP_STATUSES[index];
+  }
+  return 'created';
+}
+
+const PRECISE_ROUTE_FIELD = /^(?:origin|destination|polyline|waypoints?|coordinates?|lat|lng|latitude|longitude)$/i;
+
+function maskRouteForAdmin(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(maskRouteForAdmin);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !PRECISE_ROUTE_FIELD.test(key))
+      .map(([key, nestedValue]) => [key, maskRouteForAdmin(nestedValue)]),
+  );
+}
+
+function maskPhone(value?: string | null): string | null {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 7) return '***';
+  return `${digits.slice(0, 3)}****${digits.slice(-4)}`;
+}
+
+function maskName(value?: string | null): string | null {
+  if (!value) return null;
+  const characters = Array.from(value);
+  return characters.length === 1 ? `${characters[0]}*` : `${characters[0]}${'*'.repeat(Math.min(3, characters.length - 1))}`;
+}
+
+function maskLocation(value?: string | null): string | null {
+  if (!value) return null;
+  const characters = Array.from(value);
+  return `${characters.slice(0, Math.min(6, characters.length)).join('')}***`;
 }

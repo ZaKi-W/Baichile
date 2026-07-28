@@ -33,16 +33,26 @@ describe('profile page cross-platform login', () => {
     expect(source).toContain('v-if="auth.accountId"');
   });
 
-  it('shows completed-order money and calorie savings for the account', () => {
+  it('shows explicit simulated game stats for the account', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
-    expect(source).toContain('orders.savings.savedMoneyCents');
-    expect(source).toContain('orders.savings.savedCaloriesKcal');
-    expect(source).toContain('orders.savings.completedOrderCount');
-    expect(source).toContain('累计实付');
-    expect(source).toContain('约省卡路里');
+    expect(source).toContain('orders.gameStats.simulatedOrderAmountCents');
+    expect(source).toContain('orders.gameStats.simulatedCaloriesKcal');
+    expect(source).toContain('orders.gameStats.completedOrderCount');
+    expect(source).toContain('模拟订单金额');
+    expect(source).toContain('模拟热量');
     expect(source).toContain('min-height: 52rpx');
     expect(source).not.toContain('money-value');
+  });
+
+  it('separates login success from refresh failure and supports resumable checkout and deletion', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('登录成功，数据刷新失败，可稍后重试');
+    expect(source).toContain('submitPendingCheckout(pending)');
+    expect(source).toContain('isPendingCheckoutExpired(pending)');
+    expect(source).toContain('永久注销');
+    expect(source).toContain('await auth.deleteAccount()');
   });
 
   it('shows the wallet balance and daily check-in controls without test credit', () => {

@@ -9,7 +9,7 @@ describe('cart tab page', () => {
     expect(source).toContain('购物车');
     expect(source).toContain('const groups = computed(() => cart.groups)');
     expect(source).toContain('v-for="group in groups"');
-    expect(source).toContain('合并结算');
+    expect(source).toContain('预估结算');
     expect(source).toContain('cart.allTotalCents');
     expect(source).toContain('cart.allCount');
     expect(source).toContain('cart.updateQuantity');

@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_CLOUDBASE_REGION?: string;
   readonly VITE_CLOUDBASE_ACCESS_KEY?: string;
   readonly VITE_TENCENT_MAP_KEY?: string;
+  readonly VITE_STATIC_CDN_BASE_URL?: string;
 }
 
 interface WxCloudCallFunctionResult {

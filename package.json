@@ -13,6 +13,7 @@
     "cloudbase:seed": "pnpm --filter @baichile/cloud-functions seed:catalog",
     "cloudbase:backfill-search": "pnpm --filter @baichile/cloud-functions backfill:catalog-search",
     "cloudbase:import": "pnpm --filter @baichile/cloud-functions import:cloudbase",
+    "cloudbase:apply-schema": "pnpm --filter @baichile/cloud-functions apply:schema",
     "cloudbase:verify": "pnpm --filter @baichile/cloud-functions verify:cloudbase",
     "catalog-images:migrate": "pnpm --filter @baichile/cloud-functions migrate:catalog-images",
     "dev": "pnpm --filter @baichile/client dev:mp-weixin",

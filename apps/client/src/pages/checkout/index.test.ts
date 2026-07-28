@@ -2,19 +2,27 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('checkout wallet payment', () => {
-  it('keeps Mini Program login gating while allowing H5 guest simulation', () => {
+  it('quotes the whole checkout and keeps a resumable per-store submission', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
 
-    expect(source).toContain('if (!auth.accountId && !isWebPlatform())');
-    expect(source).toContain('savePendingOrder(requests.value)');
-    expect(source).toContain('for (const group of checkoutGroups.value)');
-    expect(source).toContain('completedStoreIds.push(group.store.id)');
-    expect(source).toContain('已生成${created.length}个订单');
-    expect(source).toContain('登录后将自动提交订单');
+    expect(source).not.toContain('if (!auth.accountId && !isWebPlatform())');
+    expect(source).toContain('await auth.ensureGuest()');
+    expect(source).toContain('checkoutService.quote(requests.value, {');
+    expect(source).toContain('readActiveCheckoutId(checkoutSubject())');
+    expect(source).toContain('createPendingCheckout(quote, checkoutSubject())');
+    expect(source).toContain('submitPendingCheckout(pending)');
+    expect(source).toContain('result.loginRequired');
+    expect(source).toContain('登录后可继续，不会重复下单');
+    expect(source).toContain('activeQuoteIsReusable(fingerprint)');
+    expect(source).toContain('!activeQuoteSessionIsReusable()');
+    expect(source).toContain('报价已更新，请确认金额后再次提交');
+    expect(source).toContain('minimumGapCents');
+    expect(source).toContain('eligibleStoreCount');
+    expect(source).toContain('未达起送仍在购物车');
     expect(source).toContain("error.code === 'INSUFFICIENT_BALANCE'");
-    expect(source).toContain('余额不足');
-    expect(source).toContain('仅扣除应用内虚拟余额，不涉及真实支付');
-    expect(source).toContain('游客试玩不会扣除虚拟余额');
+    expect(source).toContain('虚拟余额不足');
+    expect(source).toContain('不产生真实支付或配送');
+    expect(source).toContain('游客模拟下单不扣余额');
     expect(source).toContain('新用户已安排默认收货点，点此可换成自己的');
   });
 });

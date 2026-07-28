@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { staticAssetUrl } from '../config/static-cdn';
 import { shareCoverPath } from '../utils/share-poster-canvas';
 
 const order = readFileSync(new URL('./share-order/index.vue', import.meta.url), 'utf8');
@@ -16,17 +17,20 @@ describe('gacha share pages', () => {
     for (const source of sources) {
       expect(source).toContain('share-gacha');
       expect(source).toContain("@use '../../styles/share-gacha.scss' as *;");
+      expect(source).toContain('VIRTUAL_FUNDS_NOTICE');
+      expect(source).toContain('gacha-funds-notice');
       expect(source).not.toContain('share-editorial');
       expect(source).not.toContain('食堂编辑部');
     }
     expect(shared).toContain('--gacha-yellow: #ffd400');
     expect(shared).toContain('--gacha-mint: #36bfa1');
+    expect(shared).toContain('.gacha-funds-notice');
     expect(shared).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
   it('gives every content type a distinct subject and full poster action', () => {
     expect(order).toContain('class="order-report"');
-    expect(order).toContain('这顿吃了什么');
+    expect(order).toContain('这顿模拟点了什么');
     expect(order).toContain('catalogService.search(storeName)');
     expect(order).toContain('order-store-mark--image');
     expect(order).toContain("kind: 'order'");
@@ -48,7 +52,7 @@ describe('gacha share pages', () => {
     expect(landing).toContain('legacyShareTarget');
     expect(landing).toContain("...(rewardCents.value ? [`reward=${rewardCents.value}`] : [])");
     for (const kind of ['order', 'order_egg', 'persona', 'achievement', 'reward'] as const) {
-      expect(shareCoverPath(kind)).toBe(`https://cloud1-d8g7o18ula3c12f10-1318253748.tcloudbaseapp.com/baichile-home/share/gacha-${kind}-cover.png`);
+      expect(shareCoverPath(kind)).toBe(staticAssetUrl(`share/gacha-${kind}-cover.png`));
     }
   });
 

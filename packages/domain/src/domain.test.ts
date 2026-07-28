@@ -5,6 +5,8 @@ import {
   calculateLineTotal,
   calculateOrderTotal,
   getDeliveryIncidentPhase,
+  MAX_ORDER_QUANTITY,
+  MIN_ORDER_QUANTITY,
   selectDeliveryIncident,
   validateSelections,
 } from './index';
@@ -12,6 +14,15 @@ import {
 describe('order pricing', () => {
   it('uses integer cents for item options and quantity', () => {
     expect(calculateLineTotal(1800, [200, 300], 2)).toBe(4600);
+  });
+
+  it('enforces the shared 1–99 order quantity boundary', () => {
+    expect(MIN_ORDER_QUANTITY).toBe(1);
+    expect(MAX_ORDER_QUANTITY).toBe(99);
+    expect(calculateLineTotal(100, [], MAX_ORDER_QUANTITY)).toBe(9900);
+    expect(() => calculateLineTotal(100, [], 0)).toThrow('商品数量必须在 1 到 99 之间');
+    expect(() => calculateLineTotal(100, [], 100)).toThrow('商品数量必须在 1 到 99 之间');
+    expect(() => calculateLineCalories(100, [], 100)).toThrow('商品数量必须在 1 到 99 之间');
   });
 
   it('adds only the delivery fee to dish totals', () => {
@@ -51,14 +62,28 @@ describe('SKU validation', () => {
 });
 
 describe('delivery incidents', () => {
-  it('selects one stable incident for every hash bucket during QA', () => {
+  it('uses a stable configurable incident rate instead of the old 100% QA override', () => {
     const orderStartedAt = Date.parse('2026-07-02T00:00:00.000Z');
-    const incident = selectDeliveryIncident('seed-0', 20, orderStartedAt);
-    expect(incident).toEqual(selectDeliveryIncident('seed-0', 20, orderStartedAt));
+    const samples = Array.from(
+      { length: 1_000 },
+      (_, index) => selectDeliveryIncident(`seed-${index}`, 20, orderStartedAt, { rate: 0.1 }),
+    );
+    const incidentIndex = samples.findIndex(Boolean);
+    const incident = samples[incidentIndex];
+    expect(incident).toEqual(selectDeliveryIncident(
+      `seed-${incidentIndex}`,
+      20,
+      orderStartedAt,
+      { rate: 0.1 },
+    ));
     expect(incident?.startedAt).toBe('2026-07-02T00:00:30.000Z');
     expect(incident?.failedAt).toBe('2026-07-02T00:00:45.000Z');
-    expect(Array.from({ length: 100 }, (_, index) => selectDeliveryIncident(`seed-${index}`, 20))
-      .filter(Boolean)).toHaveLength(100);
+    expect(samples.filter(Boolean).length).toBeGreaterThan(50);
+    expect(samples.filter(Boolean).length).toBeLessThan(150);
+    expect(selectDeliveryIncident('forced-success', 20, orderStartedAt, {
+      forceSuccess: true,
+      rate: 1,
+    })).toBeUndefined();
     expect(DELIVERY_INCIDENTS).toHaveLength(8);
   });
 

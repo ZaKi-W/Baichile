@@ -1,11 +1,11 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
-import type { AdminPermission } from '@baichile/api-contract';
+import type { AdminConsolePermission } from './api/admin';
 import { useAuthStore } from './stores/auth';
 
 declare module 'vue-router' {
   interface RouteMeta {
     title?: string;
-    permission?: AdminPermission;
+    permission?: AdminConsolePermission;
   }
 }
 
@@ -25,6 +25,8 @@ export const router = createRouter({
         { path: 'accounts/:id', name: 'account-detail', component: () => import('./pages/AccountDetailPage.vue'), meta: { title: '用户详情', permission: 'accounts:read' } },
         { path: 'orders', name: 'orders', component: () => import('./pages/OrdersPage.vue'), meta: { title: '订单管理', permission: 'orders:read' } },
         { path: 'orders/:id', name: 'order-detail', component: () => import('./pages/OrderDetailPage.vue'), meta: { title: '订单详情', permission: 'orders:read' } },
+        { path: 'promotions', name: 'promotions', component: () => import('./pages/PromotionsPage.vue'), meta: { title: '促销中心', permission: 'promotions:read' } },
+        { path: 'gameplay', name: 'gameplay', component: () => import('./pages/GameplayConfigPage.vue'), meta: { title: '玩法配置', permission: 'promotions:read' } },
         { path: 'share-rewards', name: 'share-rewards', component: () => import('./pages/ShareRewardsPage.vue'), meta: { title: '分享奖励', permission: 'wallet:read' } },
         { path: 'admins', name: 'admins', component: () => import('./pages/AdminUsersPage.vue'), meta: { title: '管理员', permission: 'admins:manage' } },
         { path: 'audit', name: 'audit', component: () => import('./pages/AuditLogsPage.vue'), meta: { title: '审计日志', permission: 'audit:read' } },

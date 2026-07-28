@@ -15,12 +15,25 @@ export interface SpecGroup {
   options: SpecOption[];
 }
 
+export const MIN_ORDER_QUANTITY = 1;
+export const MAX_ORDER_QUANTITY = 99;
+
+function assertOrderQuantity(quantity: number): void {
+  if (
+    !Number.isInteger(quantity)
+    || quantity < MIN_ORDER_QUANTITY
+    || quantity > MAX_ORDER_QUANTITY
+  ) {
+    throw new Error(`商品数量必须在 ${MIN_ORDER_QUANTITY} 到 ${MAX_ORDER_QUANTITY} 之间`);
+  }
+}
+
 export function calculateLineTotal(
   basePriceCents: number,
   optionPriceDeltas: number[],
   quantity: number,
 ): number {
-  if (!Number.isInteger(quantity) || quantity < 1) throw new Error('商品数量必须是正整数');
+  assertOrderQuantity(quantity);
   return (basePriceCents + optionPriceDeltas.reduce((sum, price) => sum + price, 0)) * quantity;
 }
 
@@ -36,7 +49,7 @@ export function calculateLineCalories(
   optionCalorieDeltas: number[],
   quantity: number,
 ): number {
-  if (!Number.isInteger(quantity) || quantity < 1) throw new Error('商品数量必须是正整数');
+  assertOrderQuantity(quantity);
   const unitCalories = baseCaloriesKcal
     + optionCalorieDeltas.reduce((sum, calories) => sum + calories, 0);
   if (unitCalories < 0) throw new Error('卡路里不能小于 0');
@@ -78,6 +91,11 @@ export interface DeliveryIncidentAssignment {
   failedAt: string;
 }
 
+export interface DeliveryIncidentOptions {
+  rate?: number;
+  forceSuccess?: boolean;
+}
+
 export function stableHash(value: string): number {
   return value.split('').reduce((hash, character) => (
     ((hash << 5) - hash + character.charCodeAt(0)) | 0
@@ -88,10 +106,11 @@ export function selectDeliveryIncident(
   seed: string,
   _deliveryDurationMinutes: number,
   orderStartedAt = Date.now(),
+  options: DeliveryIncidentOptions = {},
 ): DeliveryIncidentAssignment | undefined {
   const hash = stableHash(seed);
-  // Temporary QA override: keep every new order on the delivery-incident path.
-  if (hash % 10 >= 10) return undefined;
+  const rate = Math.min(1, Math.max(0, options.rate ?? 0.1));
+  if (options.forceSuccess || hash % 10_000 >= Math.round(rate * 10_000)) return undefined;
   const startedAt = orderStartedAt + 30_000;
   return {
     key: DELIVERY_INCIDENTS[Math.floor(hash / 10) % DELIVERY_INCIDENTS.length].key,

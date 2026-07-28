@@ -2,11 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { classifyPersona, selectMilestone, selectOrderEasterEgg } from './share-insights';
 
 describe('share insights', () => {
-  it('keeps easter egg selection deterministic and at one hundred percent during QA', () => {
-    const results = Array.from({ length: 10_000 }, (_, index) => selectOrderEasterEgg(`order-${index}`, `seed-${index}`, '2026-01-01T00:00:00.000Z'));
+  it('keeps easter egg selection deterministic at the configured success rate', () => {
+    const results = Array.from(
+      { length: 10_000 },
+      (_, index) => selectOrderEasterEgg(
+        `order-${index}`,
+        `seed-${index}`,
+        '2026-01-01T00:00:00.000Z',
+        0.1,
+      ),
+    );
     const hits = results.filter(Boolean).length;
-    expect(hits).toBe(10_000);
-    expect(selectOrderEasterEgg('same', 'seed', 'time')).toEqual(selectOrderEasterEgg('same', 'seed', 'time'));
+    expect(hits).toBeGreaterThan(800);
+    expect(hits).toBeLessThan(1_200);
+    expect(results.find((egg) => egg?.rarity === 'legendary')).toBeTruthy();
+    expect(selectOrderEasterEgg('same', 'seed', 'time', 0.1))
+      .toEqual(selectOrderEasterEgg('same', 'seed', 'time', 0.1));
+    expect(selectOrderEasterEgg('disabled', 'seed', 'time', 0)).toBeUndefined();
   });
 
   it('classifies data-backed persona and milestones', () => {

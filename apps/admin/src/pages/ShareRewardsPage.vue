@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import type { ShareRewardConfig } from '@baichile/api-contract';
 import { ElMessage } from 'element-plus';
 import { adminApi } from '../api/admin';
+import { useAuthStore } from '../stores/auth';
 
+const auth = useAuthStore();
 const loading = ref(false);
 const saving = ref(false);
+const canEdit = computed(() => auth.has('wallet:adjust'));
 const form = reactive<ShareRewardConfig>({
   enabled: true,
   initiatedRewardCents: 100_000,
@@ -35,6 +38,7 @@ async function load() {
 }
 
 async function save() {
+  if (!canEdit.value) return;
   saving.value = true;
   try {
     Object.assign(form, await adminApi.updateShareRewardConfig({ ...form }));
@@ -52,14 +56,14 @@ onMounted(load);
     <template #header>
       <div class="section-title">
         <div><h2>朋友圈分享奖励</h2><p>所有金额均为应用内虚拟货币，不可充值或提现。</p></div>
-        <el-switch v-model="form.enabled" active-text="活动开启" inactive-text="活动关闭" />
+        <div><el-tag v-if="!canEdit" type="info" effect="plain">只读</el-tag><el-switch v-else v-model="form.enabled" active-text="活动开启" inactive-text="活动关闭" /></div>
       </div>
     </template>
-    <el-form label-position="top">
+    <el-form label-position="top" :disabled="!canEdit">
       <el-row :gutter="18">
-        <el-col :span="6"><el-form-item label="发起分享奖励（分）"><el-input-number v-model="form.initiatedRewardCents" :min="0" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="邀请人奖励（分）"><el-input-number v-model="form.inviterRewardCents" :min="0" /></el-form-item></el-col>
-        <el-col :span="6"><el-form-item label="新用户奖励（分）"><el-input-number v-model="form.inviteeRewardCents" :min="0" /></el-form-item></el-col>
+        <el-col :span="6"><el-form-item label="发起分享奖励（虚拟分）"><el-input-number v-model="form.initiatedRewardCents" :min="0" /></el-form-item></el-col>
+        <el-col :span="6"><el-form-item label="邀请人奖励（虚拟分）"><el-input-number v-model="form.inviterRewardCents" :min="0" /></el-form-item></el-col>
+        <el-col :span="6"><el-form-item label="新用户奖励（虚拟分）"><el-input-number v-model="form.inviteeRewardCents" :min="0" /></el-form-item></el-col>
         <el-col :span="6"><el-form-item label="每日发起奖励次数"><el-input-number v-model="form.dailyInitiatedLimit" :min="0" :max="20" /></el-form-item></el-col>
       </el-row>
       <el-form-item label="订单分享标题（每行一条）">
@@ -71,7 +75,7 @@ onMounted(load);
       <el-form-item label="邀请分享标题（每行一条）">
         <el-input :model-value="lines(form.invitationTitles)" type="textarea" :rows="3" @update:model-value="setLines('invitationTitles', $event)" />
       </el-form-item>
-      <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
+      <el-button v-if="canEdit" type="primary" :loading="saving" @click="save">保存配置</el-button>
     </el-form>
   </el-card>
 </template>

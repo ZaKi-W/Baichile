@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 describe('delivery page status initialization', () => {
   it('restores the current order step before waiting for store details', () => {
     const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
-    const onLoadBody = source.slice(source.indexOf('onLoad(async'));
+    const onLoadBody = source.slice(source.indexOf('async function loadOrder'));
 
     expect(onLoadBody.indexOf('startStepTimer();')).toBeLessThan(
       onLoadBody.indexOf('await resolveStoreInfo();'),
@@ -70,7 +70,7 @@ describe('delivery page status initialization', () => {
     expect(source).not.toContain('handleEggCardImageError');
     expect(source).toContain("options?.revealEgg === '1'");
     expect(source).toContain('forceEggRevealRequested.value = false');
-    expect(source).toContain('{ force: forceEggRevealRequested.value }');
+    expect(source).toContain('loadOrder(forceEggRevealRequested.value)');
     expect(source).toContain('收下彩蛋');
     expect(source).toContain('分享这枚彩蛋');
     expect(source).toContain('prepareOrderShare');
@@ -91,11 +91,13 @@ describe('delivery page status initialization', () => {
     expect(source).toContain('storeCoverUrl.value = detail.coverUrl');
     expect(source).toContain(':src="storeCoverUrl"');
     expect(source).not.toContain("order.value?.lines.find((line) => line.imageUrl)?.imageUrl");
-    expect(source).toContain('实付');
+    expect(source).toContain('模拟订单金额');
+    expect(source).toContain('虚拟配送演示 · 路线、骑手与进度均为模拟数据');
+    expect(source).toContain('模拟配送费');
     expect(source).toContain('收货地址');
-    expect(source).toContain('配送时间');
+    expect(source).toContain('虚拟配送时间');
     expect(source).toContain('下单时间');
-    expect(source).toContain('支付方式');
+    expect(source).toContain('模拟结算方式');
     expect(source).toContain('订单号');
     expect(source).toContain('复制');
     expect(source).toContain('paymentMethodText');

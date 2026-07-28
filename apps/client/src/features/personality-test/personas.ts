@@ -1,6 +1,7 @@
 import type { AxisKey, PersonalityCode, PersonalityConfig } from './types';
+import { staticAssetUrl } from '../../config/static-cdn';
 
-export const PERSONALITY_IMAGE_BASE_URL = 'https://cloud1-d8g7o18ula3c12f10-1318253748.tcloudbaseapp.com/baichile-home/personality-test';
+export const PERSONALITY_IMAGE_BASE_URL = staticAssetUrl('personality-test');
 
 export const PERSONALITY_PRIORITY: PersonalityCode[] = [
   'DAVE', 'MAYBE', 'FLEX', 'BIGG', 'SOLO', 'MATH', 'SAME', 'BETA',

@@ -11,7 +11,7 @@ describe('orders card presentation', () => {
     expect(source).not.toContain("order.lines.find((line) => line.imageUrl)");
     expect(source).toContain('storeName(order)');
     expect(source).toContain('dishSummary(order)');
-    expect(source).toContain('实付');
+    expect(source).toContain('虚拟余额金额');
     expect(source).toContain('再来一单');
     expect(source).toContain('reorderOrder(order)');
     expect(source).toContain('订单详情');
@@ -34,5 +34,14 @@ describe('orders card presentation', () => {
     expect(source).toContain('查看彩蛋');
     expect(source).toContain("revealEgg ? '&revealEgg=1' : ''");
     expect(source).toContain('@tap.stop="openEgg(order)"');
+  });
+
+  it('loads cursor pages with explicit retry states', () => {
+    const source = readFileSync(new URL('./index.vue', import.meta.url), 'utf8');
+
+    expect(source).toContain('orders.nextCursor');
+    expect(source).toContain('await orders.loadMore()');
+    expect(source).toContain('重试加载更多');
+    expect(source).toContain('重新加载');
   });
 });

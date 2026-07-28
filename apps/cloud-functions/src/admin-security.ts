@@ -15,6 +15,8 @@ export const ALL_ADMIN_PERMISSIONS: AdminPermission[] = [
   'wallet:adjust',
   'orders:read',
   'orders:write',
+  'promotions:read',
+  'promotions:write',
   'admins:manage',
   'audit:read',
 ];
@@ -29,6 +31,8 @@ export const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
     'wallet:read',
     'orders:read',
     'orders:write',
+    'promotions:read',
+    'promotions:write',
   ],
   support: [
     'dashboard:read',
@@ -38,6 +42,7 @@ export const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
     'wallet:read',
     'orders:read',
     'orders:write',
+    'promotions:read',
   ],
 };
 

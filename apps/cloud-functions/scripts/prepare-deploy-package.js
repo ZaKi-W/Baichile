@@ -44,6 +44,46 @@ function replaceInFile(file, replacements) {
   fs.writeFileSync(file, contents);
 }
 
+function replaceWorkspaceRuntimeImports(sourceDirectory, sourceRoot = sourceDirectory) {
+  for (const entry of fs.readdirSync(sourceDirectory, { withFileTypes: true })) {
+    const file = path.join(sourceDirectory, entry.name);
+    if (entry.isDirectory()) {
+      replaceWorkspaceRuntimeImports(file, sourceRoot);
+      continue;
+    }
+    if (!entry.name.endsWith('.js')) continue;
+    const domainPath = path.relative(path.dirname(file), path.join(sourceRoot, 'domain.js'))
+      .replaceAll(path.sep, '/');
+    replaceInFile(file, [
+      ['require("@baichile/domain")', `require("${domainPath.startsWith('.') ? domainPath : `./${domainPath}`}")`],
+    ]);
+    const contents = fs.readFileSync(file, 'utf8');
+    const unresolved = contents.match(/require\(["']@baichile\/[^"']+["']\)/g);
+    if (unresolved?.length) {
+      throw new Error(`Unresolved workspace runtime import in ${file}: ${unresolved.join(', ')}`);
+    }
+  }
+}
+
+function assertNoUnresolvedRuntimeImports(directory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      assertNoUnresolvedRuntimeImports(file);
+      continue;
+    }
+    if (!entry.name.endsWith('.js')) continue;
+    const contents = fs.readFileSync(file, 'utf8');
+    const unresolved = [
+      ...(contents.match(/require\(["']@baichile\/[^"']+["']\)/g) ?? []),
+      ...(contents.match(/require\(["']\.\.\/\.\.\/src\/[^"']+["']\)/g) ?? []),
+    ];
+    if (unresolved.length) {
+      throw new Error(`Unresolved deployment import in ${file}: ${unresolved.join(', ')}`);
+    }
+  }
+}
+
 fs.rmSync(deployParent, { recursive: true, force: true });
 
 for (const functionName of ['api', 'admin-api']) {
@@ -52,12 +92,11 @@ for (const functionName of ['api', 'admin-api']) {
   copyDirectory(path.join(sourceRoot, 'src'), path.join(deployRoot, 'src'));
   copyDirectory(path.join(sourceRoot, `functions/${functionName}`), deployRoot);
   fs.copyFileSync(path.join(distRoot, 'packages/domain/src/index.js'), path.join(deployRoot, 'src/domain.js'));
-  replaceInFile(path.join(deployRoot, 'src/services.js'), [
-    ['require("@baichile/domain")', 'require("./domain")'],
-  ]);
+  replaceWorkspaceRuntimeImports(path.join(deployRoot, 'src'));
   replaceInFile(path.join(deployRoot, 'index.js'), [
-    ['require("../../src/index")', 'require("./src/index")'],
+    ['require("../../src/', 'require("./src/'],
   ]);
+  assertNoUnresolvedRuntimeImports(deployRoot);
   fs.writeFileSync(path.join(deployRoot, 'package.json'), `${JSON.stringify({
     ...runtimePackage,
     name: `baichile-cloudbase-${functionName}`,

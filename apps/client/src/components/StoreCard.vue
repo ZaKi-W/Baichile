@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { StoreSummary } from '@baichile/api-contract';
+import type { StorePromotion, StoreSummary } from '@baichile/api-contract';
 
-const props = withDefaults(defineProps<{ store: StoreSummary; index?: number }>(), { index: 0 });
+const props = withDefaults(defineProps<{
+  store: StoreSummary;
+  index?: number;
+  promotion?: StorePromotion;
+}>(), { index: 0, promotion: undefined });
 defineEmits<{ open: [] }>();
 
 const money = (value: number) => {
@@ -12,6 +16,9 @@ const money = (value: number) => {
 const deliveryFee = (value: number) => value === 0 ? '免配送费' : `配送费¥${money(value)}`;
 const distance = (value: number) => value < 1 ? `${Math.round(value * 1000)}m` : `${value.toFixed(1)}km`;
 const visibleTags = () => props.store.tags.slice(0, 2);
+const promotionLabel = () => props.promotion?.tiers
+  .map((tier) => `满${money(tier.thresholdCents)}减${money(tier.discountCents)}`)
+  .join(' · ');
 const imageFailed = ref(false);
 </script>
 
@@ -31,12 +38,13 @@ const imageFailed = ref(false);
       </view>
       <view class="store-meta">
         <text class="score">评分 {{ store.rating.toFixed(1) }}</text>
-        <text>月售{{ store.monthlySales }}</text>
+        <text>模拟热度{{ store.monthlySales }}</text>
         <text class="delivery-speed">{{ store.virtualDeliveryMinutes }}分钟</text>
         <text>{{ distance(store.distanceKm) }}</text>
       </view>
       <text class="delivery-line">起送 ¥{{ money(store.minimumOrderCents) }}　{{ deliveryFee(store.deliveryFeeCents) }}</text>
       <view class="tag-row">
+        <text v-if="promotionLabel()" class="store-tag promotion-tag">{{ promotionLabel() }}</text>
         <text v-for="tag in visibleTags()" :key="tag" class="store-tag">{{ tag }}</text>
       </view>
     </view>
@@ -60,6 +68,7 @@ const imageFailed = ref(false);
 .delivery-line { display: block; overflow: hidden; margin-top: 12rpx; color: #777; font-size: 18rpx; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
 .tag-row { display: flex; flex-wrap: wrap; gap: 7rpx; margin-top: auto; padding-top: 11rpx; }
 .store-tag { padding: 6rpx 9rpx; border: 1rpx solid #ff9b8b; border-radius: 7rpx; color: #f04426; font-size: 16rpx; line-height: 1; font-weight: 600; }
+.promotion-tag { border-color: #f04426; background: #fff3ef; font-weight: 900; }
 @media (max-width: 356px) {
   .store-card { grid-template-columns: 174rpx minmax(0, 1fr); gap: 16rpx; }
   .merchant-visual { min-height: 170rpx; }

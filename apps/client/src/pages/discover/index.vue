@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { onShow } from '@dcloudio/uni-app';
+import { catalogService } from '../../services/catalog';
 import { useCartStore } from '../../stores/cart';
 import { getSafeMenuButtonRect } from '../../platform/system-ui';
 
@@ -9,7 +11,7 @@ const menuButtonRect = getSafeMenuButtonRect(systemInfo);
 const safeTopStyle = computed(() => ({ height: `${Math.max((systemInfo.statusBarHeight ?? 20) + 12, menuButtonRect.bottom + 8)}px` }));
 const groups = computed(() => cart.groups);
 const hasCart = computed(() => groups.value.length > 0);
-const checkoutText = computed(() => hasCart.value ? `合并结算 ${formatMoney(cart.allTotalCents)}` : '先去选餐');
+const checkoutText = computed(() => hasCart.value ? `预估结算 ${formatMoney(cart.allTotalCents)}` : '先去选餐');
 
 function formatMoney(cents: number): string {
   return `¥${(cents / 100).toFixed(2)}`;
@@ -30,6 +32,15 @@ function checkout() {
   }
   uni.navigateTo({ url: '/pages/checkout/index' });
 }
+
+onShow(() => {
+  void Promise.allSettled(
+    groups.value.map(async (group) => {
+      const store = await catalogService.store(group.store.id);
+      cart.refreshStoreSnapshot(store);
+    }),
+  );
+});
 </script>
 
 <template>
@@ -76,8 +87,11 @@ function checkout() {
           </view>
 
           <view class="store-summary">
-            <text>含配送/打包</text>
-            <text>{{ formatMoney(group.totalCents) }}</text>
+            <view><text>活动后商品</text><text>{{ formatMoney(group.itemsTotalCents) }}</text></view>
+            <view v-if="group.storeDiscountCents"><text>店铺满减</text><text>-{{ formatMoney(group.storeDiscountCents) }}</text></view>
+            <view><text>模拟配送费</text><text>{{ formatMoney(group.store.deliveryFeeCents) }}</text></view>
+            <view><text>模拟包装费</text><text>{{ formatMoney(group.store.packingFeeCents) }}</text></view>
+            <view class="store-summary-total"><text>本店预估</text><text>{{ formatMoney(group.totalCents) }}</text></view>
           </view>
         </view>
       </view>
@@ -92,11 +106,15 @@ function checkout() {
           <text>{{ groups.length }} 家</text>
         </view>
         <view class="summary-row">
-          <text>配送/打包</text>
-          <text>{{ formatMoney(cart.allTotalCents - cart.allItemsTotalCents) }}</text>
+          <text>店铺满减</text>
+          <text>-{{ formatMoney(cart.allStoreDiscountCents) }}</text>
+        </view>
+        <view class="summary-row">
+          <text>模拟配送/包装费</text>
+          <text>{{ formatMoney(cart.allTotalCents - cart.allItemsTotalCents + cart.allStoreDiscountCents) }}</text>
         </view>
         <view class="summary-total">
-          <text>合计</text>
+          <text>活动预估合计</text>
           <text>{{ formatMoney(cart.allTotalCents) }}</text>
         </view>
       </view>
@@ -150,8 +168,10 @@ button::after { border: 0; }
 .qty-control { display: flex; align-items: center; gap: 12rpx; flex-shrink: 0; }
 .qty-button { width: 48rpx; height: 48rpx; border-radius: 50%; color: #171717; background: #ffd400; font-size: 28rpx; font-weight: 900; line-height: 48rpx; }
 .qty-text { min-width: 34rpx; color: #1f1f1f; font-size: 25rpx; font-weight: 800; text-align: center; }
-.store-summary { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; padding: 18rpx 22rpx; color: #777; background: #fafafa; font-size: 24rpx; font-weight: 700; }
-.store-summary text:last-child { color: #171717; font-size: 27rpx; font-weight: 900; }
+.store-summary { display: grid; gap: 10rpx; padding: 18rpx 22rpx; color: #777; background: #fafafa; font-size: 22rpx; font-weight: 700; }
+.store-summary > view { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+.store-summary > view text:last-child { color: #171717; font-weight: 800; }
+.store-summary-total { margin-top: 4rpx; padding-top: 12rpx; border-top: 1rpx solid #ececec; font-size: 25rpx; }
 .summary-card { margin-top: 20rpx; padding: 24rpx; }
 .summary-row, .summary-total { display: flex; justify-content: space-between; align-items: center; gap: 20rpx; color: #777; font-size: 25rpx; line-height: 1.4; }
 .summary-row + .summary-row { margin-top: 14rpx; }
